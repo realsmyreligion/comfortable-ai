@@ -3,116 +3,1006 @@ const path = require('path');
 const { withAndroidManifest, withDangerousMod, withMainApplication } = require('@expo/config-plugins');
 
 const PACKAGE_NAME = 'com.comfortableai.torncopilot';
-const APP_JS = "import React, {useEffect, useMemo, useRef, useState} from 'react';\nimport {ActivityIndicator, Alert, AppState, NativeModules, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';\nimport {StatusBar} from 'expo-status-bar';\nimport {fetchSnapshot} from './src/tornApi';\nimport {clearApiKey, DEFAULT_SETTINGS, getApiKey, loadSettings, saveApiKey, saveSettings} from './src/storage';\nimport {prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';\nimport {makeDemo} from './src/demo';\nconst {projectBar, timeUntil, formatDuration, recommend} = require('./src/core');\nconst {ComfortableOverlay} = NativeModules;\n\nfunction cooldownRemaining(seconds, fetchedAt, nowMs = Date.now()) {\n  const elapsed = Math.max(0, Math.floor((nowMs - Number(fetchedAt || nowMs)) / 1000));\n  return Math.max(0, Number(seconds || 0) - elapsed);\n}\n\nfunction Card({label, icon, bar}) {\n  const p = projectBar(bar);\n  return <View style={styles.card}>\n    <View style={styles.cardHead}><Text style={styles.cardLabel}>{icon} {label}</Text><Text style={styles.value}>{Math.floor(p.projected)} / {p.maximum}</Text></View>\n    <View style={styles.track}><View style={[styles.fill, {width: `${p.percent}%`}]} /></View>\n    <View style={styles.row}><Text style={styles.muted}>CAPS IN</Text><Text style={styles.cap}>{p.percent >= 100 ? 'CAPPED' : timeUntil(p.capMs)}</Text></View>\n  </View>;\n}\n\nfunction Cooldown({icon, label, seconds}) {\n  return <View style={styles.cooldown}><Text style={styles.coolIcon}>{icon}</Text><View style={{flex:1}}><Text style={styles.coolLabel}>{label}</Text><Text style={[styles.coolValue, seconds === 0 && styles.ready]}>{formatDuration(seconds)}</Text></View></View>;\n}\n\nexport default function App() {\n  const [snapshot, setSnapshot] = useState(null);\n  const [apiKeyInput, setApiKeyInput] = useState('');\n  const [loading, setLoading] = useState(true);\n  const [refreshing, setRefreshing] = useState(false);\n  const [error, setError] = useState('');\n  const [settings, setSettings] = useState(DEFAULT_SETTINGS);\n  const [hudRunning, setHudRunning] = useState(false);\n  const [hudBusy, setHudBusy] = useState(false);\n  const [clock, setClock] = useState(Date.now());\n  const pendingHudStart = useRef(false);\n\n  async function sync(keyOverride, spinner=true) {\n    const key = keyOverride || await getApiKey();\n    if (!key) return;\n    if (spinner) setRefreshing(true);\n    try {\n      const snap = await fetchSnapshot(key);\n      setSnapshot(snap);\n      setError('');\n      await scheduleSnapshotAlerts(snap, settings);\n      return snap;\n    } catch (e) {\n      setError(e?.message || 'Unable to connect to Torn.');\n      throw e;\n    } finally { if (spinner) setRefreshing(false); }\n  }\n\n  async function finishPendingHudStart() {\n    if (!pendingHudStart.current || !ComfortableOverlay) return;\n    try {\n      const allowed = await ComfortableOverlay.hasPermission();\n      if (!allowed) return;\n      pendingHudStart.current = false;\n      const key = await getApiKey();\n      if (!key) return;\n      await ComfortableOverlay.startHud(key);\n      setHudRunning(true);\n    } catch (e) {\n      setError(e?.message || 'Unable to start the floating HUD.');\n    }\n  }\n\n  useEffect(() => {\n    let live = true;\n    (async () => {\n      const s = await loadSettings();\n      if (!live) return;\n      setSettings(s);\n      await prepareNotifications().catch(()=>false);\n      if (ComfortableOverlay?.isRunning) {\n        const running = await ComfortableOverlay.isRunning().catch(()=>false);\n        if (live) setHudRunning(Boolean(running));\n      }\n      const key = await getApiKey();\n      if (key) await sync(key, false).catch(()=>{});\n      if (live) setLoading(false);\n    })();\n    return () => { live = false; };\n  }, []);\n\n  useEffect(() => {\n    const sub = AppState.addEventListener('change', state => {\n      if (state !== 'active') return;\n      finishPendingHudStart().catch(()=>{});\n      if (ComfortableOverlay?.isRunning) ComfortableOverlay.isRunning().then(v => setHudRunning(Boolean(v))).catch(()=>{});\n      if (!snapshot?.demo) getApiKey().then(key => key ? sync(key, false).catch(()=>{}) : null);\n    });\n    return () => sub.remove();\n  }, [snapshot?.demo, settings]);\n\n  useEffect(() => {\n    const id = setInterval(() => setClock(Date.now()), 1000);\n    return () => clearInterval(id);\n  }, []);\n\n  useEffect(() => {\n    if (!snapshot || snapshot.demo) return;\n    const id = setInterval(() => sync(null, false).catch(()=>{}), 120000);\n    return () => clearInterval(id);\n  }, [snapshot?.demo, settings]);\n\n  const next = useMemo(() => snapshot ? recommend(snapshot, clock) : null, [snapshot, refreshing, clock]);\n\n  async function connect() {\n    const key = apiKeyInput.trim();\n    if (!key) return Alert.alert('API key needed', 'Enter your restricted Torn API key.');\n    setRefreshing(true);\n    try {\n      const snap = await fetchSnapshot(key);\n      await saveApiKey(key);\n      setSnapshot(snap);\n      setApiKeyInput('');\n      setError('');\n      await scheduleSnapshotAlerts(snap, settings);\n    } catch (e) { Alert.alert('Could not connect', e?.message || 'Check your API key and internet connection.'); }\n    finally { setRefreshing(false); setLoading(false); }\n  }\n\n  async function startHud() {\n    if (Platform.OS !== 'android' || !ComfortableOverlay) {\n      return Alert.alert('Android HUD unavailable', 'This floating HUD build is currently Android-only.');\n    }\n    const key = await getApiKey();\n    if (!key) return Alert.alert('Connect Torn first', 'Connect your restricted Torn API key before starting the HUD.');\n    setHudBusy(true);\n    try {\n      const allowed = await ComfortableOverlay.hasPermission();\n      if (!allowed) {\n        Alert.alert(\n          'Enable floating HUD',\n          'Android needs \u201cDisplay over other apps\u201d permission so Comfortable AI can stay visible while Torn is open.',\n          [\n            {text:'Not now', style:'cancel'},\n            {text:'Open settings', onPress: async () => {\n              pendingHudStart.current = true;\n              await ComfortableOverlay.requestPermission().catch(()=>{});\n            }},\n          ]\n        );\n        return;\n      }\n      await ComfortableOverlay.startHud(key);\n      setHudRunning(true);\n    } catch (e) {\n      Alert.alert('HUD could not start', e?.message || 'Check overlay permission and try again.');\n    } finally { setHudBusy(false); }\n  }\n\n  async function stopHud() {\n    if (!ComfortableOverlay) return;\n    setHudBusy(true);\n    try {\n      await ComfortableOverlay.stopHud();\n      setHudRunning(false);\n    } catch (e) {\n      Alert.alert('HUD could not stop', e?.message || 'Try again.');\n    } finally { setHudBusy(false); }\n  }\n\n  async function disconnect() {\n    await stopHud().catch(()=>{});\n    await clearApiKey();\n    setSnapshot(null);\n    setError('');\n  }\n\n  async function setWarn(kind, value) {\n    const nextSettings = {...settings, [kind]: value};\n    setSettings(nextSettings); await saveSettings(nextSettings);\n    if (snapshot && !snapshot.demo) await scheduleSnapshotAlerts(snapshot, nextSettings);\n  }\n\n  if (loading) return <SafeAreaView style={styles.center}><StatusBar style=\"light\"/><ActivityIndicator size=\"large\"/><Text style={styles.brand}>COMFORTABLE AI</Text></SafeAreaView>;\n\n  if (!snapshot) return <SafeAreaView style={styles.screen}><StatusBar style=\"light\"/><ScrollView contentContainerStyle={styles.setup} keyboardShouldPersistTaps=\"handled\">\n    <Text style={styles.eyebrow}>TORN CO-PILOT</Text><Text style={styles.title}>Comfortable AI</Text><Text style={styles.subtitle}>A live Torn HUD that stays with you instead of making you leave the game to check your bars.</Text>\n    <View style={styles.hero}><Text style={styles.heroIcon}>\u26a1</Text><Text style={styles.heroText}>FLOATING HUD READY</Text><Text style={styles.heroSub}>Connect a restricted Torn API key, then keep Energy, Nerve and cooldowns visible over other apps.</Text></View>\n    <Text style={styles.inputLabel}>TORN API KEY</Text><TextInput value={apiKeyInput} onChangeText={setApiKeyInput} secureTextEntry autoCapitalize=\"none\" autoCorrect={false} placeholder=\"Paste restricted key\" placeholderTextColor=\"#596173\" style={styles.input}/>\n    <Pressable onPress={connect} style={styles.primary}><Text style={styles.primaryText}>{refreshing ? 'CONNECTING\u2026' : 'CONNECT TO TORN'}</Text></Pressable>\n    <Pressable onPress={() => {setSnapshot(makeDemo()); setError('');}} style={styles.secondary}><Text style={styles.secondaryText}>OPEN DEMO MODE</Text></Pressable>\n    <Text style={styles.note}>v0.6 \u2022 Read-only Torn data \u2022 API key stored securely on Android</Text>\n  </ScrollView></SafeAreaView>;\n\n  const drug = cooldownRemaining(snapshot.cooldowns.drug, snapshot.fetchedAt, clock);\n  const booster = cooldownRemaining(snapshot.cooldowns.booster, snapshot.fetchedAt, clock);\n  const medical = cooldownRemaining(snapshot.cooldowns.medical, snapshot.fetchedAt, clock);\n\n  return <SafeAreaView style={styles.screen}><StatusBar style=\"light\"/><ScrollView contentContainerStyle={styles.content}>\n    <View style={styles.top}><View><Text style={styles.eyebrow}>{snapshot.demo ? 'DEMO MODE' : 'LIVE TORN DATA'}</Text><Text style={styles.dashTitle}>Mr. Comfortable</Text></View><Pressable onPress={() => snapshot.demo ? setSnapshot(makeDemo()) : sync()} style={styles.refresh}><Text style={styles.refreshText}>{refreshing ? '\u2026' : '\u21bb'}</Text></Pressable></View>\n    {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}\n\n    {!snapshot.demo ? <View style={styles.hudPanel}>\n      <View style={styles.hudHead}><View><Text style={styles.hudEyebrow}>FLOATING HUD</Text><Text style={styles.hudTitle}>{hudRunning ? 'ON SCREEN' : 'READY TO LAUNCH'}</Text></View><View style={[styles.hudDot, hudRunning && styles.hudDotOn]} /></View>\n      <Text style={styles.hudCopy}>Keep Energy + Nerve visible over Torn, Chrome, Discord or anything else. Tap the HUD to expand and drag it wherever you want.</Text>\n      <Pressable onPress={hudRunning ? stopHud : startHud} disabled={hudBusy} style={[styles.hudButton, hudRunning && styles.hudButtonOn]}><Text style={[styles.hudButtonText, hudRunning && styles.hudButtonTextOn]}>{hudBusy ? 'WORKING\u2026' : hudRunning ? 'STOP FLOATING HUD' : 'START FLOATING HUD'}</Text></Pressable>\n      <Text style={styles.hudMeta}>Live API refresh every 60s \u2022 regen and cooldowns count locally between refreshes</Text>\n    </View> : null}\n\n    <Card icon=\"\u26a1\" label=\"ENERGY\" bar={snapshot.energy}/><Card icon=\"\ud83e\udde0\" label=\"NERVE\" bar={snapshot.nerve}/>\n    <Text style={styles.section}>COOLDOWNS</Text><View style={styles.coolGrid}><Cooldown icon=\"\ud83d\udc8a\" label=\"DRUG\" seconds={drug}/><Cooldown icon=\"\ud83c\udf6c\" label=\"BOOSTER\" seconds={booster}/><Cooldown icon=\"\ud83c\udfe5\" label=\"MEDICAL\" seconds={medical}/></View>\n    <Text style={styles.section}>NEXT MOVE</Text><View style={styles.next}><Text style={styles.nextTitle}>{next.title}</Text><Text style={styles.nextDetail}>{next.detail}</Text></View>\n    <Text style={styles.section}>ALERT BUFFER</Text><View style={styles.pills}>{[10,15,20,30].map(v => <Pressable key={v} onPress={() => setWarn('energyWarningMinutes', v)} style={[styles.pill, settings.energyWarningMinutes===v && styles.pillOn]}><Text style={styles.pillText}>E {v}m</Text></Pressable>)}</View>\n    <View style={styles.pills}>{[10,15,20,30].map(v => <Pressable key={v} onPress={() => setWarn('nerveWarningMinutes', v)} style={[styles.pill, settings.nerveWarningMinutes===v && styles.pillOn]}><Text style={styles.pillText}>N {v}m</Text></Pressable>)}</View>\n    <Text style={styles.syncText}>Last sync: {new Date(snapshot.fetchedAt).toLocaleTimeString()}</Text>\n    {snapshot.demo ? <Pressable onPress={() => setSnapshot(null)} style={styles.secondary}><Text style={styles.secondaryText}>EXIT DEMO</Text></Pressable> : <Pressable onPress={disconnect} style={styles.secondary}><Text style={styles.secondaryText}>DISCONNECT API KEY</Text></Pressable>}\n  </ScrollView></SafeAreaView>;\n}\n\nconst C = {bg:'#090B10', panel:'#121722', line:'#232A39', text:'#F4F6FA', muted:'#8B94A7', gold:'#E9B653', hot:'#FF705E', green:'#5BD69A'};\nconst styles = StyleSheet.create({\n  screen:{flex:1,backgroundColor:C.bg}, center:{flex:1,backgroundColor:C.bg,alignItems:'center',justifyContent:'center'}, content:{padding:18,paddingTop:Platform.OS==='android'?42:18,paddingBottom:48}, setup:{padding:24,paddingTop:54},\n  brand:{color:C.gold,fontWeight:'900',letterSpacing:2,marginTop:16}, eyebrow:{color:C.gold,fontSize:11,fontWeight:'900',letterSpacing:1.8}, title:{color:C.text,fontSize:38,fontWeight:'900',marginTop:7}, subtitle:{color:C.muted,fontSize:16,lineHeight:23,marginTop:10,marginBottom:28},\n  hero:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:20,padding:22,alignItems:'center',marginBottom:26}, heroIcon:{fontSize:44}, heroText:{color:C.text,fontWeight:'900',letterSpacing:1.2,marginTop:10}, heroSub:{color:C.muted,textAlign:'center',lineHeight:20,marginTop:8},\n  inputLabel:{color:C.muted,fontSize:11,fontWeight:'800',letterSpacing:1.2,marginBottom:8}, input:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:14,padding:16,color:C.text,fontSize:15},\n  primary:{backgroundColor:C.gold,borderRadius:14,padding:17,alignItems:'center',marginTop:14}, primaryText:{color:'#16120A',fontWeight:'900',letterSpacing:1}, secondary:{borderWidth:1,borderColor:C.line,borderRadius:14,padding:16,alignItems:'center',marginTop:12}, secondaryText:{color:C.text,fontWeight:'800',letterSpacing:.8}, note:{color:C.muted,fontSize:12,lineHeight:18,marginTop:16,textAlign:'center'},\n  top:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:18}, dashTitle:{color:C.text,fontSize:30,fontWeight:'900',marginTop:3}, refresh:{width:44,height:44,borderRadius:22,backgroundColor:C.panel,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.line}, refreshText:{color:C.gold,fontSize:24,fontWeight:'800'},\n  error:{backgroundColor:'#2A1618',borderColor:'#5B292F',borderWidth:1,borderRadius:12,padding:12,marginBottom:12}, errorText:{color:'#FF9B9B',fontWeight:'700'},\n  hudPanel:{backgroundColor:'#11140F',borderWidth:1,borderColor:'#4B3D1E',borderRadius:20,padding:18,marginBottom:14}, hudHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}, hudEyebrow:{color:C.muted,fontSize:10,fontWeight:'900',letterSpacing:1.5}, hudTitle:{color:C.gold,fontSize:21,fontWeight:'900',marginTop:3}, hudDot:{width:12,height:12,borderRadius:6,backgroundColor:'#4C5363'}, hudDotOn:{backgroundColor:C.green}, hudCopy:{color:C.text,lineHeight:20,marginTop:10}, hudButton:{backgroundColor:C.gold,borderRadius:13,padding:14,alignItems:'center',marginTop:14}, hudButtonOn:{backgroundColor:'transparent',borderWidth:1,borderColor:C.gold}, hudButtonText:{color:'#171208',fontWeight:'900',letterSpacing:.7}, hudButtonTextOn:{color:C.gold}, hudMeta:{color:C.muted,fontSize:11,lineHeight:16,marginTop:10,textAlign:'center'},\n  card:{backgroundColor:C.panel,borderRadius:18,borderWidth:1,borderColor:C.line,padding:18,marginBottom:12}, cardHead:{flexDirection:'row',justifyContent:'space-between'}, cardLabel:{color:C.text,fontWeight:'900',letterSpacing:1.1}, value:{color:C.text,fontWeight:'900',fontSize:18}, track:{height:10,borderRadius:6,backgroundColor:'#232A35',overflow:'hidden',marginTop:16}, fill:{height:'100%',backgroundColor:C.gold,borderRadius:6}, row:{flexDirection:'row',justifyContent:'space-between',marginTop:12}, muted:{color:C.muted,fontSize:11,fontWeight:'800',letterSpacing:1}, cap:{color:C.gold,fontWeight:'900'},\n  section:{color:C.muted,fontSize:11,fontWeight:'900',letterSpacing:1.7,marginTop:16,marginBottom:9}, coolGrid:{flexDirection:'row',gap:8}, cooldown:{flex:1,backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:16,padding:13,minHeight:105}, coolIcon:{fontSize:23}, coolLabel:{color:C.muted,fontSize:10,fontWeight:'900',marginTop:8}, coolValue:{color:C.text,fontSize:15,fontWeight:'900',marginTop:3}, ready:{color:C.green},\n  next:{backgroundColor:'#17150F',borderColor:'#3F3520',borderWidth:1,borderRadius:18,padding:18}, nextTitle:{color:C.gold,fontSize:20,fontWeight:'900'}, nextDetail:{color:C.text,lineHeight:20,marginTop:7},\n  pills:{flexDirection:'row',gap:7,marginBottom:8}, pill:{flex:1,backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:12,paddingVertical:10,alignItems:'center'}, pillOn:{borderColor:C.gold,backgroundColor:'#211C12'}, pillText:{color:C.text,fontWeight:'800',fontSize:12}, syncText:{color:C.muted,fontSize:12,textAlign:'center',marginTop:17}\n});\n";
-const CORE_JS = "function clamp(value, min, max) {\n  return Math.max(min, Math.min(max, value));\n}\n\nfunction projectBar(bar, nowMs = Date.now()) {\n  if (!bar) return null;\n  const current = Number(bar.current || 0);\n  const maximum = Number(bar.maximum || 0);\n  const increment = Number(bar.increment || 0);\n  const interval = Number(bar.interval || 0);\n  const tickTimeMs = Number(bar.tick_time || 0) * 1000;\n  const fullTimeMs = Number(bar.full_time || 0) * 1000;\n\n  if (maximum <= 0) return {...bar, projected: current, percent: 0, capMs: null};\n  if (current >= maximum) return {...bar, projected: maximum, percent: 100, capMs: nowMs};\n\n  let projected = current;\n  if (interval > 0 && increment > 0 && tickTimeMs > 0 && nowMs >= tickTimeMs) {\n    const ticks = 1 + Math.floor((nowMs - tickTimeMs) / (interval * 1000));\n    projected = clamp(current + ticks * increment, current, maximum);\n  } else if (interval > 0 && increment > 0 && tickTimeMs <= 0 && fullTimeMs > nowMs) {\n    const remainingTicks = Math.ceil((fullTimeMs - nowMs) / (interval * 1000));\n    projected = clamp(maximum - remainingTicks * increment, current, maximum);\n  }\n\n  return {\n    ...bar,\n    projected,\n    percent: clamp((projected / maximum) * 100, 0, 100),\n    capMs: fullTimeMs > 0 ? fullTimeMs : null,\n  };\n}\n\nfunction formatDuration(seconds) {\n  const s = Math.max(0, Math.floor(Number(seconds) || 0));\n  if (s === 0) return 'READY';\n  const h = Math.floor(s / 3600);\n  const m = Math.floor((s % 3600) / 60);\n  const sec = s % 60;\n  if (h > 0) return `${h}h ${m}m`;\n  if (m > 0) return `${m}m ${sec}s`;\n  return `${sec}s`;\n}\n\nfunction timeUntil(ms, nowMs = Date.now()) {\n  if (!ms) return 'UNKNOWN';\n  return formatDuration(Math.max(0, Math.ceil((ms - nowMs) / 1000)));\n}\n\nfunction recommend(snapshot, nowMs = Date.now()) {\n  const energy = projectBar(snapshot.energy, nowMs);\n  const nerve = projectBar(snapshot.nerve, nowMs);\n  const elapsed = Math.max(0, Math.floor((nowMs - Number(snapshot.fetchedAt || nowMs)) / 1000));\n  const drug = Math.max(0, Number(snapshot.cooldowns?.drug || 0) - elapsed);\n\n  if (nerve && nerve.percent >= 90) return {title: 'SPEND NERVE', detail: 'Your nerve is close to capping. Use it before natural regeneration is wasted.'};\n  if (energy && energy.percent >= 90) return {title: 'SPEND ENERGY', detail: 'Your energy is close to capping. Train or use it before natural regeneration is wasted.'};\n  if (drug === 0) return {title: 'DRUG READY', detail: 'Your drug cooldown is clear. Check whether using your planned drug fits your training strategy.'};\n  if (energy && energy.percent >= 60) return {title: 'PLAN TRAINING', detail: 'You have a healthy energy bar. Consider your next gym session before it creeps toward cap.'};\n  return {title: 'REGENERATING', detail: 'Nothing urgent right now. Let your bars regenerate and Comfortable AI will keep watch.'};\n}\n\nmodule.exports = {clamp, projectBar, formatDuration, timeUntil, recommend};\n";
-const TORN_API_JS = "const BASE = 'https://api.torn.com/v2';\nconst TIMEOUT_MS = 12000;\n\nasync function getJson(path, key) {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);\n  try {\n    const response = await fetch(`${BASE}${path}?comment=ComfortableAI`, {\n      headers: {Authorization: `ApiKey ${key}`, Accept: 'application/json'},\n      signal: controller.signal,\n    });\n    const json = await response.json().catch(() => null);\n    if (!response.ok || json?.error) {\n      const msg = json?.error?.error || json?.error?.message || `Torn API error (${response.status})`;\n      throw new Error(msg);\n    }\n    return json;\n  } catch (err) {\n    if (err?.name === 'AbortError') throw new Error('Torn API timed out. Check your connection and try again.');\n    throw err;\n  } finally {\n    clearTimeout(timer);\n  }\n}\n\nfunction normalizeBar(raw, nowUnix = Math.floor(Date.now() / 1000)) {\n  if (!raw) throw new Error('Missing Torn bar data.');\n  const current = Number(raw.current);\n  const maximum = Number(raw.maximum);\n  const increment = Number(raw.increment || 0);\n  const interval = Number(raw.interval || 0);\n  const fullSeconds = Math.max(0, Number(raw.full_time || 0));\n  const tickSeconds = Math.max(0, Number(raw.tick_time || 0));\n\n  if (!Number.isFinite(current) || !Number.isFinite(maximum) || maximum <= 0) {\n    throw new Error('Invalid Torn bar data.');\n  }\n\n  return {\n    ...raw,\n    current,\n    maximum,\n    increment,\n    interval,\n    api_full_time_seconds: fullSeconds,\n    api_tick_time_seconds: tickSeconds,\n    full_time: fullSeconds > 0 ? nowUnix + fullSeconds : (current >= maximum ? nowUnix : 0),\n    tick_time: tickSeconds > 0 ? nowUnix + tickSeconds : 0,\n  };\n}\n\nfunction validateBars(payload) {\n  const energyRaw = payload?.bars?.energy;\n  const nerveRaw = payload?.bars?.nerve;\n  if (!energyRaw || !nerveRaw) throw new Error('Unexpected Torn bars response.');\n  return {\n    energy: normalizeBar(energyRaw),\n    nerve: normalizeBar(nerveRaw),\n  };\n}\n\nasync function fetchSnapshot(key) {\n  const [barsPayload, cooldownPayload] = await Promise.all([\n    getJson('/user/bars', key),\n    getJson('/user/cooldowns', key),\n  ]);\n  const {energy, nerve} = validateBars(barsPayload);\n  const cooldowns = cooldownPayload?.cooldowns;\n  if (!cooldowns || !['drug', 'medical', 'booster'].every(k => Number.isFinite(cooldowns[k]))) {\n    throw new Error('Unexpected Torn cooldown response.');\n  }\n  return {energy, nerve, cooldowns, fetchedAt: Date.now(), demo: false};\n}\n\nmodule.exports = {fetchSnapshot, normalizeBar};\n";
-const OVERLAY_MODULE_KT = "package com.comfortableai.torncopilot\n\nimport android.content.Intent\nimport android.net.Uri\nimport android.os.Build\nimport android.provider.Settings\nimport androidx.core.content.ContextCompat\nimport com.facebook.react.bridge.Promise\nimport com.facebook.react.bridge.ReactApplicationContext\nimport com.facebook.react.bridge.ReactContextBaseJavaModule\nimport com.facebook.react.bridge.ReactMethod\n\nclass ComfortableOverlayModule(private val appContext: ReactApplicationContext) : ReactContextBaseJavaModule(appContext) {\n  override fun getName(): String = \"ComfortableOverlay\"\n\n  @ReactMethod\n  fun hasPermission(promise: Promise) {\n    promise.resolve(Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(appContext))\n  }\n\n  @ReactMethod\n  fun requestPermission(promise: Promise) {\n    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(appContext)) {\n      promise.resolve(true)\n      return\n    }\n    try {\n      val intent = Intent(\n        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,\n        Uri.parse(\"package:${appContext.packageName}\")\n      ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }\n      appContext.startActivity(intent)\n      promise.resolve(false)\n    } catch (e: Exception) {\n      promise.reject(\"OVERLAY_SETTINGS\", \"Unable to open Android overlay settings.\", e)\n    }\n  }\n\n  @ReactMethod\n  fun startHud(apiKey: String, promise: Promise) {\n    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(appContext)) {\n      promise.reject(\"OVERLAY_PERMISSION\", \"Display over other apps permission is required.\")\n      return\n    }\n    if (apiKey.isBlank()) {\n      promise.reject(\"API_KEY\", \"A Torn API key is required.\")\n      return\n    }\n    try {\n      val intent = Intent(appContext, ComfortableOverlayService::class.java).apply {\n        action = ComfortableOverlayService.ACTION_START\n        putExtra(ComfortableOverlayService.EXTRA_API_KEY, apiKey)\n      }\n      ContextCompat.startForegroundService(appContext, intent)\n      promise.resolve(true)\n    } catch (e: Exception) {\n      promise.reject(\"HUD_START\", \"Unable to start Comfortable HUD.\", e)\n    }\n  }\n\n  @ReactMethod\n  fun stopHud(promise: Promise) {\n    try {\n      val intent = Intent(appContext, ComfortableOverlayService::class.java).apply {\n        action = ComfortableOverlayService.ACTION_STOP\n      }\n      appContext.startService(intent)\n      promise.resolve(true)\n    } catch (e: Exception) {\n      promise.reject(\"HUD_STOP\", \"Unable to stop Comfortable HUD.\", e)\n    }\n  }\n\n  @ReactMethod\n  fun isRunning(promise: Promise) {\n    promise.resolve(ComfortableOverlayService.isRunning)\n  }\n}\n";
-const OVERLAY_PACKAGE_KT = "package com.comfortableai.torncopilot\n\nimport com.facebook.react.ReactPackage\nimport com.facebook.react.bridge.NativeModule\nimport com.facebook.react.bridge.ReactApplicationContext\nimport com.facebook.react.uimanager.ViewManager\n\nclass ComfortableOverlayPackage : ReactPackage {\n  override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =\n    listOf(ComfortableOverlayModule(reactContext))\n\n  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =\n    emptyList()\n}\n";
-const OVERLAY_SERVICE_KT = "package com.comfortableai.torncopilot\n\nimport android.app.NotificationChannel\nimport android.app.NotificationManager\nimport android.app.PendingIntent\nimport android.app.Service\nimport android.content.Context\nimport android.content.Intent\nimport android.content.pm.ServiceInfo\nimport android.graphics.Color\nimport android.graphics.PixelFormat\nimport android.graphics.Typeface\nimport android.graphics.drawable.GradientDrawable\nimport android.os.Build\nimport android.os.Handler\nimport android.os.IBinder\nimport android.os.Looper\nimport android.os.SystemClock\nimport android.view.Gravity\nimport android.view.MotionEvent\nimport android.view.View\nimport android.view.WindowManager\nimport android.widget.LinearLayout\nimport android.widget.TextView\nimport androidx.core.app.NotificationCompat\nimport androidx.core.app.ServiceCompat\nimport org.json.JSONObject\nimport java.net.HttpURLConnection\nimport java.net.URL\nimport java.util.concurrent.Executors\nimport java.util.concurrent.ScheduledFuture\nimport java.util.concurrent.TimeUnit\nimport kotlin.math.abs\nimport kotlin.math.max\nimport kotlin.math.min\n\nclass ComfortableOverlayService : Service() {\n  companion object {\n    const val ACTION_START = \"com.comfortableai.torncopilot.START_HUD\"\n    const val ACTION_STOP = \"com.comfortableai.torncopilot.STOP_HUD\"\n    const val EXTRA_API_KEY = \"comfortable_api_key\"\n    private const val CHANNEL_ID = \"comfortable-hud\"\n    private const val NOTIFICATION_ID = 606\n    @Volatile var isRunning: Boolean = false\n  }\n\n  private data class BarState(\n    val current: Int,\n    val maximum: Int,\n    val increment: Int,\n    val interval: Int,\n    val tickTime: Int,\n    val fullTime: Int,\n  )\n\n  private data class Snapshot(\n    val energy: BarState,\n    val nerve: BarState,\n    val drug: Int,\n    val booster: Int,\n    val medical: Int,\n    val receivedElapsed: Long,\n  )\n\n  private val handler = Handler(Looper.getMainLooper())\n  private val executor = Executors.newSingleThreadScheduledExecutor()\n  private var pollFuture: ScheduledFuture<*>? = null\n  private var apiKey: String? = null\n  @Volatile private var snapshot: Snapshot? = null\n  @Volatile private var lastError: String? = null\n\n  private lateinit var windowManager: WindowManager\n  private var overlayView: LinearLayout? = null\n  private var headerText: TextView? = null\n  private var barsText: TextView? = null\n  private var detailText: TextView? = null\n  private var params: WindowManager.LayoutParams? = null\n  private var expanded = false\n\n  private val ticker = object : Runnable {\n    override fun run() {\n      render()\n      handler.postDelayed(this, 1000)\n    }\n  }\n\n  override fun onCreate() {\n    super.onCreate()\n    windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager\n    handler.post(ticker)\n  }\n\n  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {\n    if (intent?.action == ACTION_STOP) {\n      stopSelf()\n      return START_NOT_STICKY\n    }\n\n    startAsForeground()\n    val incomingKey = intent?.getStringExtra(EXTRA_API_KEY)\n    if (!incomingKey.isNullOrBlank()) apiKey = incomingKey\n\n    if (apiKey.isNullOrBlank()) {\n      stopSelf()\n      return START_NOT_STICKY\n    }\n\n    try {\n      ensureOverlay()\n    } catch (_: Exception) {\n      stopSelf()\n      return START_NOT_STICKY\n    }\n\n    isRunning = true\n    startPolling()\n    return START_NOT_STICKY\n  }\n\n  override fun onBind(intent: Intent?): IBinder? = null\n\n  override fun onDestroy() {\n    isRunning = false\n    apiKey = null\n    handler.removeCallbacks(ticker)\n    pollFuture?.cancel(true)\n    executor.shutdownNow()\n    overlayView?.let {\n      try { windowManager.removeView(it) } catch (_: Exception) {}\n    }\n    overlayView = null\n    stopForeground(STOP_FOREGROUND_REMOVE)\n    super.onDestroy()\n  }\n\n  private fun startAsForeground() {\n    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager\n    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n      manager.createNotificationChannel(\n        NotificationChannel(CHANNEL_ID, \"Comfortable HUD\", NotificationManager.IMPORTANCE_LOW).apply {\n          description = \"Keeps the Comfortable AI floating Torn HUD running\"\n          setShowBadge(false)\n        }\n      )\n    }\n\n    val launchIntent = packageManager.getLaunchIntentForPackage(packageName)\n    val launchPending = launchIntent?.let {\n      PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)\n    }\n    val stopIntent = Intent(this, ComfortableOverlayService::class.java).apply { action = ACTION_STOP }\n    val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)\n\n    val notification = NotificationCompat.Builder(this, CHANNEL_ID)\n      .setSmallIcon(applicationInfo.icon)\n      .setContentTitle(\"Comfortable AI HUD is running\")\n      .setContentText(\"Energy and Nerve are staying visible over your apps.\")\n      .setOngoing(true)\n      .setOnlyAlertOnce(true)\n      .setCategory(NotificationCompat.CATEGORY_SERVICE)\n      .setPriority(NotificationCompat.PRIORITY_LOW)\n      .setContentIntent(launchPending)\n      .addAction(android.R.drawable.ic_menu_close_clear_cancel, \"Stop HUD\", stopPending)\n      .build()\n\n    if (Build.VERSION.SDK_INT >= 34) {\n      ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)\n    } else {\n      startForeground(NOTIFICATION_ID, notification)\n    }\n  }\n\n  private fun ensureOverlay() {\n    if (overlayView != null) return\n\n    val root = LinearLayout(this).apply {\n      orientation = LinearLayout.VERTICAL\n      setPadding(dp(14), dp(10), dp(14), dp(10))\n      minimumWidth = dp(250)\n      elevation = dp(10).toFloat()\n      background = GradientDrawable().apply {\n        shape = GradientDrawable.RECTANGLE\n        cornerRadius = dp(18).toFloat()\n        setColor(Color.argb(242, 12, 15, 21))\n        setStroke(dp(1), Color.rgb(233, 182, 83))\n      }\n    }\n\n    headerText = makeText(\"COMFORTABLE HUD \u2022 CONNECTING\", 10f, Color.rgb(233, 182, 83), true).also {\n      it.letterSpacing = 0.08f\n      root.addView(it)\n    }\n    barsText = makeText(\"\u26a1 -- / --      \ud83e\udde0 -- / --\", 17f, Color.rgb(244, 246, 250), true).also {\n      it.setPadding(0, dp(5), 0, 0)\n      it.maxLines = 1\n      root.addView(it)\n    }\n    detailText = makeText(\"Connecting to Torn\u2026\", 12f, Color.rgb(151, 160, 178), false).also {\n      it.setPadding(0, dp(7), 0, 0)\n      it.visibility = View.GONE\n      root.addView(it)\n    }\n\n    val prefs = getSharedPreferences(\"comfortable_hud\", Context.MODE_PRIVATE)\n    val display = resources.displayMetrics\n    val savedX = prefs.getInt(\"x\", dp(12))\n    val savedY = prefs.getInt(\"y\", dp(120))\n    val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE\n\n    val lp = WindowManager.LayoutParams(\n      WindowManager.LayoutParams.WRAP_CONTENT,\n      WindowManager.LayoutParams.WRAP_CONTENT,\n      type,\n      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,\n      PixelFormat.TRANSLUCENT\n    ).apply {\n      gravity = Gravity.TOP or Gravity.START\n      x = min(max(0, savedX), max(0, display.widthPixels - dp(220)))\n      y = max(dp(36), savedY)\n    }\n\n    var initialX = 0\n    var initialY = 0\n    var initialTouchX = 0f\n    var initialTouchY = 0f\n    var moved = false\n\n    root.setOnTouchListener { _, event ->\n      when (event.actionMasked) {\n        MotionEvent.ACTION_DOWN -> {\n          initialX = lp.x\n          initialY = lp.y\n          initialTouchX = event.rawX\n          initialTouchY = event.rawY\n          moved = false\n          true\n        }\n        MotionEvent.ACTION_MOVE -> {\n          val dx = event.rawX - initialTouchX\n          val dy = event.rawY - initialTouchY\n          if (abs(dx) > dp(4) || abs(dy) > dp(4)) moved = true\n          if (moved) {\n            val width = max(root.width, dp(250))\n            val height = max(root.height, dp(60))\n            lp.x = min(max(0, initialX + dx.toInt()), max(0, display.widthPixels - width))\n            lp.y = min(max(dp(30), initialY + dy.toInt()), max(dp(30), display.heightPixels - height - dp(30)))\n            try { windowManager.updateViewLayout(root, lp) } catch (_: Exception) {}\n          }\n          true\n        }\n        MotionEvent.ACTION_UP -> {\n          if (!moved) {\n            expanded = !expanded\n            detailText?.visibility = if (expanded) View.VISIBLE else View.GONE\n            render()\n          }\n          prefs.edit().putInt(\"x\", lp.x).putInt(\"y\", lp.y).apply()\n          true\n        }\n        else -> false\n      }\n    }\n\n    windowManager.addView(root, lp)\n    overlayView = root\n    params = lp\n    render()\n  }\n\n  private fun makeText(value: String, size: Float, color: Int, bold: Boolean): TextView =\n    TextView(this).apply {\n      text = value\n      textSize = size\n      setTextColor(color)\n      typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT\n      includeFontPadding = false\n    }\n\n  private fun startPolling() {\n    if (pollFuture == null || pollFuture?.isCancelled == true) {\n      pollFuture = executor.scheduleWithFixedDelay({ fetchSnapshot() }, 0, 60, TimeUnit.SECONDS)\n    } else {\n      executor.execute { fetchSnapshot() }\n    }\n  }\n\n  private fun fetchSnapshot() {\n    val key = apiKey ?: return\n    try {\n      val bars = getJson(\"/user/bars\", key).getJSONObject(\"bars\")\n      val cooldowns = getJson(\"/user/cooldowns\", key).getJSONObject(\"cooldowns\")\n      val next = Snapshot(\n        energy = readBar(bars.getJSONObject(\"energy\")),\n        nerve = readBar(bars.getJSONObject(\"nerve\")),\n        drug = cooldowns.optInt(\"drug\", 0),\n        booster = cooldowns.optInt(\"booster\", 0),\n        medical = cooldowns.optInt(\"medical\", 0),\n        receivedElapsed = SystemClock.elapsedRealtime(),\n      )\n      snapshot = next\n      lastError = null\n      handler.post { render() }\n    } catch (e: Exception) {\n      lastError = e.message ?: \"Connection issue\"\n      handler.post { render() }\n    }\n  }\n\n  private fun getJson(path: String, key: String): JSONObject {\n    val connection = URL(\"https://api.torn.com/v2$path?comment=ComfortableAI-HUD\").openConnection() as HttpURLConnection\n    connection.connectTimeout = 12000\n    connection.readTimeout = 12000\n    connection.requestMethod = \"GET\"\n    connection.setRequestProperty(\"Authorization\", \"ApiKey $key\")\n    connection.setRequestProperty(\"Accept\", \"application/json\")\n    connection.setRequestProperty(\"User-Agent\", \"ComfortableAI/0.6\")\n    return try {\n      val code = connection.responseCode\n      val stream = if (code in 200..299) connection.inputStream else connection.errorStream\n      val body = stream?.bufferedReader()?.use { it.readText() } ?: \"{}\"\n      val json = JSONObject(body)\n      if (code !in 200..299 || json.has(\"error\")) {\n        val error = json.optJSONObject(\"error\")\n        throw IllegalStateException(error?.optString(\"error\") ?: error?.optString(\"message\") ?: \"Torn API error ($code)\")\n      }\n      json\n    } finally {\n      connection.disconnect()\n    }\n  }\n\n  private fun readBar(json: JSONObject): BarState {\n    val bar = BarState(\n      current = json.optInt(\"current\", 0),\n      maximum = json.optInt(\"maximum\", 0),\n      increment = json.optInt(\"increment\", 0),\n      interval = json.optInt(\"interval\", 0),\n      tickTime = max(0, json.optInt(\"tick_time\", 0)),\n      fullTime = max(0, json.optInt(\"full_time\", 0)),\n    )\n    if (bar.maximum <= 0) throw IllegalStateException(\"Invalid Torn bar response\")\n    return bar\n  }\n\n  private fun projected(bar: BarState, elapsed: Int): Int {\n    if (bar.current >= bar.maximum) return bar.maximum\n    if (bar.interval <= 0 || bar.increment <= 0) return bar.current\n    val firstTick = if (bar.tickTime > 0) bar.tickTime else bar.interval\n    if (elapsed < firstTick) return bar.current\n    val ticks = 1 + (elapsed - firstTick) / bar.interval\n    return min(bar.maximum, bar.current + ticks * bar.increment)\n  }\n\n  private fun remaining(initial: Int, elapsed: Int): Int = max(0, initial - elapsed)\n\n  private fun render() {\n    val snap = snapshot\n    if (snap == null) {\n      headerText?.text = if (lastError == null) \"COMFORTABLE HUD \u2022 CONNECTING\" else \"COMFORTABLE HUD \u2022 OFFLINE\"\n      barsText?.text = \"\u26a1 -- / --      \ud83e\udde0 -- / --\"\n      detailText?.text = lastError ?: \"Connecting to Torn\u2026\"\n      return\n    }\n\n    val elapsed = max(0, ((SystemClock.elapsedRealtime() - snap.receivedElapsed) / 1000L).toInt())\n    val energy = projected(snap.energy, elapsed)\n    val nerve = projected(snap.nerve, elapsed)\n    val stale = elapsed > 120 || lastError != null\n\n    headerText?.text = if (stale) \"COMFORTABLE HUD \u2022 CHECKING\" else \"COMFORTABLE HUD \u2022 LIVE\"\n    headerText?.setTextColor(if (stale) Color.rgb(255, 112, 94) else Color.rgb(233, 182, 83))\n    barsText?.text = \"\u26a1 $energy / ${snap.energy.maximum}      \ud83e\udde0 $nerve / ${snap.nerve.maximum}\"\n\n    val energyFull = if (energy >= snap.energy.maximum) \"CAPPED\" else formatDuration(remaining(snap.energy.fullTime, elapsed))\n    val nerveFull = if (nerve >= snap.nerve.maximum) \"CAPPED\" else formatDuration(remaining(snap.nerve.fullTime, elapsed))\n    val drug = formatDuration(remaining(snap.drug, elapsed))\n    val booster = formatDuration(remaining(snap.booster, elapsed))\n    val medical = formatDuration(remaining(snap.medical, elapsed))\n    val errorLine = lastError?.let { \"\\nLast refresh failed \u2022 retrying automatically\" } ?: \"\"\n\n    detailText?.text = \"E FULL $energyFull  \u2022  N FULL $nerveFull\\n\ud83d\udc8a $drug  \u2022  \ud83c\udf6c $booster  \u2022  \ud83c\udfe5 $medical$errorLine\\nTap to collapse  \u2022  Drag to move\"\n  }\n\n  private fun formatDuration(totalSeconds: Int): String {\n    if (totalSeconds <= 0) return \"READY\"\n    val hours = totalSeconds / 3600\n    val minutes = (totalSeconds % 3600) / 60\n    val seconds = totalSeconds % 60\n    return when {\n      hours > 0 -> \"${hours}h ${minutes}m\"\n      minutes > 0 -> \"${minutes}m ${seconds}s\"\n      else -> \"${seconds}s\"\n    }\n  }\n\n  private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()\n}\n";
 
-function ensurePermission(manifest, name) {
-  manifest['uses-permission'] = manifest['uses-permission'] || [];
-  const exists = manifest['uses-permission'].some(item => item?.$?.['android:name'] === name);
-  if (!exists) manifest['uses-permission'].push({$: {'android:name': name}});
+const APP_JS = String.raw`import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {ActivityIndicator, Alert, AppState, NativeModules, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {StatusBar} from 'expo-status-bar';
+import {fetchSnapshot} from './src/tornApi';
+import {clearApiKey, DEFAULT_SETTINGS, getApiKey, loadSettings, saveApiKey, saveSettings} from './src/storage';
+import {prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';
+import {makeDemo} from './src/demo';
+const {projectBar, timeUntil, formatDuration, recommend} = require('./src/core');
+const {ComfortableOverlay} = NativeModules;
+
+function cooldownRemaining(seconds, fetchedAt, nowMs = Date.now()) {
+  const elapsed = Math.max(0, Math.floor((nowMs - Number(fetchedAt || nowMs)) / 1000));
+  return Math.max(0, Number(seconds || 0) - elapsed);
 }
 
-function withComfortableHud(config) {
-  config = withAndroidManifest(config, config => {
-    const manifest = config.modResults.manifest;
-    ensurePermission(manifest, 'android.permission.SYSTEM_ALERT_WINDOW');
-    ensurePermission(manifest, 'android.permission.FOREGROUND_SERVICE');
-    ensurePermission(manifest, 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE');
-    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');
+function Card({label, icon, bar, clock}) {
+  const p = projectBar(bar, clock);
+  return <View style={styles.card}>
+    <View style={styles.cardHead}><Text style={styles.cardLabel}>{icon} {label}</Text><Text style={styles.value}>{Math.floor(p.projected)} / {p.maximum}</Text></View>
+    <View style={styles.track}><View style={[styles.fill, {width: \
+      `${p.percent}%`}]} /></View>
+    <View style={styles.row}><Text style={styles.muted}>CAPS IN</Text><Text style={styles.cap}>{p.percent >= 100 ? 'CAPPED' : timeUntil(p.capMs, clock)}</Text></View>
+  </View>;
+}
 
-    const application = manifest.application?.[0];
-    if (!application) throw new Error('Comfortable AI: Android application manifest node not found.');
-    application.service = application.service || [];
-    const serviceName = `${PACKAGE_NAME}.ComfortableOverlayService`;
-    const exists = application.service.some(service => {
-      const name = service?.$?.['android:name'];
-      return name === serviceName || name === '.ComfortableOverlayService';
-    });
-    if (!exists) {
-      application.service.push({
-        $: {
-          'android:name': serviceName,
-          'android:exported': 'false',
-          'android:stopWithTask': 'false',
-          'android:foregroundServiceType': 'specialUse',
-        },
-        property: [{
-          $: {
-            'android:name': 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE',
-            'android:value': 'Floating Torn status HUD for the user while other apps are open',
-          },
-        }],
-      });
+function Cooldown({icon, label, seconds}) {
+  return <View style={styles.cooldown}><Text style={styles.coolIcon}>{icon}</Text><View style={{flex:1}}><Text style={styles.coolLabel}>{label}</Text><Text style={[styles.coolValue, seconds === 0 && styles.ready]}>{formatDuration(seconds)}</Text></View></View>;
+}
+
+const HUD_STYLE_OPTIONS = [
+  {label:'Subtle', value:'subtle'},
+  {label:'Balanced', value:'balanced'},
+  {label:'Solid', value:'solid'},
+];
+
+const HUD_PRESETS = [
+  {label:'TL', value:'top-left'},
+  {label:'TC', value:'top-center'},
+  {label:'TR', value:'top-right'},
+];
+
+export default function App() {
+  const [snapshot, setSnapshot] = useState(null);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [hudRunning, setHudRunning] = useState(false);
+  const [hudBusy, setHudBusy] = useState(false);
+  const [clock, setClock] = useState(Date.now());
+  const [hudPrefs, setHudPrefs] = useState({style:'balanced', preset:'top-center'});
+  const pendingHudStart = useRef(false);
+
+  async function sync(keyOverride, spinner=true) {
+    const key = keyOverride || await getApiKey();
+    if (!key) return;
+    if (spinner) setRefreshing(true);
+    try {
+      const snap = await fetchSnapshot(key);
+      setSnapshot(snap);
+      setError('');
+      await scheduleSnapshotAlerts(snap, settings);
+      return snap;
+    } catch (e) {
+      setError(e?.message || 'Unable to connect to Torn.');
+      throw e;
+    } finally { if (spinner) setRefreshing(false); }
+  }
+
+  async function refreshHudRunning() {
+    if (!ComfortableOverlay?.isRunning) return;
+    const running = await ComfortableOverlay.isRunning().catch(()=>false);
+    setHudRunning(Boolean(running));
+  }
+
+  async function finishPendingHudStart() {
+    if (!pendingHudStart.current || !ComfortableOverlay) return;
+    try {
+      const allowed = await ComfortableOverlay.hasPermission();
+      if (!allowed) return;
+      pendingHudStart.current = false;
+      const key = await getApiKey();
+      if (!key) return;
+      await ComfortableOverlay.startHud(key, hudPrefs.style, hudPrefs.preset);
+      setHudRunning(true);
+    } catch (e) {
+      setError(e?.message || 'Unable to start the floating HUD.');
     }
-    return config;
-  });
+  }
 
-  config = withMainApplication(config, config => {
-    let source = config.modResults.contents;
-    if (!source.includes('ComfortableOverlayPackage()')) {
-      if (config.modResults.language === 'kt' || source.includes('PackageList(this).packages.apply {')) {
-        const marker = 'PackageList(this).packages.apply {';
-        if (!source.includes(marker)) throw new Error('Comfortable AI: could not find Kotlin package list in MainApplication.');
-        source = source.replace(marker, `${marker}\n              add(ComfortableOverlayPackage())`);
-      } else {
-        const marker = 'List<ReactPackage> packages = new PackageList(this).getPackages();';
-        if (!source.includes(marker)) throw new Error('Comfortable AI: could not find Java package list in MainApplication.');
-        source = source.replace(marker, `${marker}\n        packages.add(new ComfortableOverlayPackage());`);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const s = await loadSettings();
+      if (!live) return;
+      setSettings(s);
+      await prepareNotifications().catch(()=>false);
+      if (ComfortableOverlay?.getPrefs) {
+        const prefs = await ComfortableOverlay.getPrefs().catch(()=>null);
+        if (prefs && live) setHudPrefs(prefs);
+      }
+      await refreshHudRunning().catch(()=>{});
+      const key = await getApiKey();
+      if (key) await sync(key, false).catch(()=>{});
+      if (live) setLoading(false);
+    })();
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+      finishPendingHudStart().catch(()=>{});
+      refreshHudRunning().catch(()=>{});
+      if (!snapshot?.demo) getApiKey().then(key => key ? sync(key, false).catch(()=>{}) : null);
+    });
+    return () => sub.remove();
+  }, [snapshot?.demo, settings, hudPrefs]);
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!snapshot || snapshot.demo) return;
+    const id = setInterval(() => sync(null, false).catch(()=>{}), 120000);
+    return () => clearInterval(id);
+  }, [snapshot?.demo, settings]);
+
+  const next = useMemo(() => snapshot ? recommend(snapshot, clock) : null, [snapshot, refreshing, clock]);
+
+  async function connect() {
+    const key = apiKeyInput.trim();
+    if (!key) return Alert.alert('API key needed', 'Enter your restricted Torn API key.');
+    setRefreshing(true);
+    try {
+      const snap = await fetchSnapshot(key);
+      await saveApiKey(key);
+      setSnapshot(snap);
+      setApiKeyInput('');
+      setError('');
+      await scheduleSnapshotAlerts(snap, settings);
+    } catch (e) { Alert.alert('Could not connect', e?.message || 'Check your API key and internet connection.'); }
+    finally { setRefreshing(false); setLoading(false); }
+  }
+
+  async function updateHudPrefs(nextPrefs) {
+    setHudPrefs(nextPrefs);
+    if (ComfortableOverlay?.savePrefs) {
+      await ComfortableOverlay.savePrefs(nextPrefs.style, nextPrefs.preset).catch(()=>{});
+    }
+    if (hudRunning && ComfortableOverlay?.applyPrefs) {
+      await ComfortableOverlay.applyPrefs(nextPrefs.style, nextPrefs.preset).catch(()=>{});
+    }
+  }
+
+  async function startHud() {
+    if (Platform.OS !== 'android' || !ComfortableOverlay) {
+      return Alert.alert('Android HUD unavailable', 'This floating HUD build is currently Android-only.');
+    }
+    const key = await getApiKey();
+    if (!key) return Alert.alert('Connect Torn first', 'Connect your restricted Torn API key before starting the HUD.');
+    setHudBusy(true);
+    try {
+      const allowed = await ComfortableOverlay.hasPermission();
+      if (!allowed) {
+        Alert.alert(
+          'Enable floating HUD',
+          'Android needs “Display over other apps” permission so Comfortable AI can stay visible while Torn is open.',
+          [
+            {text:'Not now', style:'cancel'},
+            {text:'Open settings', onPress: async () => {
+              pendingHudStart.current = true;
+              await ComfortableOverlay.requestPermission().catch(()=>{});
+            }},
+          ]
+        );
+        return;
+      }
+      await ComfortableOverlay.startHud(key, hudPrefs.style, hudPrefs.preset);
+      setHudRunning(true);
+    } catch (e) {
+      Alert.alert('HUD could not start', e?.message || 'Check overlay permission and try again.');
+    } finally { setHudBusy(false); }
+  }
+
+  async function stopHud() {
+    if (!ComfortableOverlay) return;
+    setHudBusy(true);
+    try {
+      await ComfortableOverlay.stopHud();
+      setHudRunning(false);
+    } catch (e) {
+      Alert.alert('HUD could not stop', e?.message || 'Try again.');
+    } finally { setHudBusy(false); }
+  }
+
+  async function resetHudPosition() {
+    if (!ComfortableOverlay?.resetPosition) return;
+    await ComfortableOverlay.resetPosition(hudPrefs.preset).catch(()=>{});
+  }
+
+  async function disconnect() {
+    await stopHud().catch(()=>{});
+    await clearApiKey();
+    setSnapshot(null);
+    setError('');
+  }
+
+  async function setWarn(kind, value) {
+    const nextSettings = {...settings, [kind]: value};
+    setSettings(nextSettings); await saveSettings(nextSettings);
+    if (snapshot && !snapshot.demo) await scheduleSnapshotAlerts(snapshot, nextSettings);
+  }
+
+  if (loading) return <SafeAreaView style={styles.center}><StatusBar style="light"/><ActivityIndicator size="large"/><Text style={styles.brand}>COMFORTABLE AI</Text></SafeAreaView>;
+
+  if (!snapshot) return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.setup} keyboardShouldPersistTaps="handled">
+    <Text style={styles.eyebrow}>TORN CO-PILOT</Text><Text style={styles.title}>Comfortable AI</Text><Text style={styles.subtitle}>A slim floating Torn HUD that keeps your bars visible without making you leave the game.</Text>
+    <View style={styles.hero}><Text style={styles.heroIcon}>⚡</Text><Text style={styles.heroText}>HUD CONTROL CENTER</Text><Text style={styles.heroSub}>Connect a restricted Torn API key, then launch a compact floating overlay with live Energy, Nerve and fast status info.</Text></View>
+    <Text style={styles.inputLabel}>TORN API KEY</Text><TextInput value={apiKeyInput} onChangeText={setApiKeyInput} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder="Paste restricted key" placeholderTextColor="#596173" style={styles.input}/>
+    <Pressable onPress={connect} style={styles.primary}><Text style={styles.primaryText}>{refreshing ? 'CONNECTING…' : 'CONNECT TO TORN'}</Text></Pressable>
+    <Pressable onPress={() => {setSnapshot(makeDemo()); setError('');}} style={styles.secondary}><Text style={styles.secondaryText}>OPEN DEMO MODE</Text></Pressable>
+    <Text style={styles.note}>v0.6.1 • Slim HUD polish • Read-only Torn data • API key stored securely on Android</Text>
+  </ScrollView></SafeAreaView>;
+
+  const drug = cooldownRemaining(snapshot.cooldowns.drug, snapshot.fetchedAt, clock);
+  const booster = cooldownRemaining(snapshot.cooldowns.booster, snapshot.fetchedAt, clock);
+  const medical = cooldownRemaining(snapshot.cooldowns.medical, snapshot.fetchedAt, clock);
+
+  return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.content}>
+    <View style={styles.top}><View><Text style={styles.eyebrow}>{snapshot.demo ? 'DEMO MODE' : 'LIVE TORN DATA'}</Text><Text style={styles.dashTitle}>Mr. Comfortable</Text></View><Pressable onPress={() => snapshot.demo ? setSnapshot(makeDemo()) : sync()} style={styles.refresh}><Text style={styles.refreshText}>{refreshing ? '…' : '↻'}</Text></Pressable></View>
+    {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
+
+    {!snapshot.demo ? <View style={styles.hudPanel}>
+      <View style={styles.hudHead}>
+        <View><Text style={styles.hudEyebrow}>FLOATING HUD</Text><Text style={styles.hudTitle}>{hudRunning ? 'LIVE AND FLOATING' : 'READY TO LAUNCH'}</Text></View>
+        <View style={[styles.hudDot, hudRunning && styles.hudDotOn]} />
+      </View>
+      <Text style={styles.hudCopy}>Slimmer compact mode, tap-to-expand detail, edge snap and style controls built in.</Text>
+
+      <Text style={styles.hudSection}>HUD STYLE</Text>
+      <View style={styles.optionRow}>{HUD_STYLE_OPTIONS.map(o => <Pressable key={o.value} onPress={() => updateHudPrefs({...hudPrefs, style:o.value})} style={[styles.optionPill, hudPrefs.style===o.value && styles.optionPillOn]}><Text style={styles.optionPillText}>{o.label}</Text></Pressable>)}</View>
+
+      <Text style={styles.hudSection}>START POSITION</Text>
+      <View style={styles.optionRow}>{HUD_PRESETS.map(o => <Pressable key={o.value} onPress={() => updateHudPrefs({...hudPrefs, preset:o.value})} style={[styles.optionPill, hudPrefs.preset===o.value && styles.optionPillOn]}><Text style={styles.optionPillText}>{o.label}</Text></Pressable>)}</View>
+
+      <View style={styles.hudActions}>
+        <Pressable onPress={hudRunning ? stopHud : startHud} disabled={hudBusy} style={[styles.hudButton, hudRunning && styles.hudButtonOn]}><Text style={[styles.hudButtonText, hudRunning && styles.hudButtonTextOn]}>{hudBusy ? 'WORKING…' : hudRunning ? 'STOP HUD' : 'START HUD'}</Text></Pressable>
+        <Pressable onPress={resetHudPosition} style={styles.hudGhost}><Text style={styles.hudGhostText}>RESET POSITION</Text></Pressable>
+      </View>
+      <Text style={styles.hudMeta}>Live API refresh every 60s • local timers between refreshes • drag anywhere, then it snaps to edge</Text>
+    </View> : null}
+
+    <Card icon="⚡" label="ENERGY" bar={snapshot.energy} clock={clock}/><Card icon="🧠" label="NERVE" bar={snapshot.nerve} clock={clock}/>
+    <Text style={styles.section}>COOLDOWNS</Text><View style={styles.coolGrid}><Cooldown icon="💊" label="DRUG" seconds={drug}/><Cooldown icon="🍬" label="BOOSTER" seconds={booster}/><Cooldown icon="🏥" label="MEDICAL" seconds={medical}/></View>
+    <Text style={styles.section}>NEXT MOVE</Text><View style={styles.next}><Text style={styles.nextTitle}>{next.title}</Text><Text style={styles.nextDetail}>{next.detail}</Text></View>
+    <Text style={styles.section}>ALERT BUFFER</Text><View style={styles.pills}>{[10,15,20,30].map(v => <Pressable key={v} onPress={() => setWarn('energyWarningMinutes', v)} style={[styles.pill, settings.energyWarningMinutes===v && styles.pillOn]}><Text style={styles.pillText}>E {v}m</Text></Pressable>)}</View>
+    <View style={styles.pills}>{[10,15,20,30].map(v => <Pressable key={v} onPress={() => setWarn('nerveWarningMinutes', v)} style={[styles.pill, settings.nerveWarningMinutes===v && styles.pillOn]}><Text style={styles.pillText}>N {v}m</Text></Pressable>)}</View>
+    <Text style={styles.syncText}>Last sync: {new Date(snapshot.fetchedAt).toLocaleTimeString()}</Text>
+    {snapshot.demo ? <Pressable onPress={() => setSnapshot(null)} style={styles.secondary}><Text style={styles.secondaryText}>EXIT DEMO</Text></Pressable> : <Pressable onPress={disconnect} style={styles.secondary}><Text style={styles.secondaryText}>DISCONNECT API KEY</Text></Pressable>}
+  </ScrollView></SafeAreaView>;
+}
+
+const C = {bg:'#090B10', panel:'#121722', line:'#232A39', text:'#F4F6FA', muted:'#8B94A7', gold:'#E9B653', hot:'#FF705E', green:'#5BD69A'};
+const styles = StyleSheet.create({
+  screen:{flex:1,backgroundColor:C.bg}, center:{flex:1,backgroundColor:C.bg,alignItems:'center',justifyContent:'center'}, content:{padding:18,paddingTop:Platform.OS==='android'?42:18,paddingBottom:48}, setup:{padding:24,paddingTop:54},
+  brand:{color:C.gold,fontWeight:'900',letterSpacing:2,marginTop:16}, eyebrow:{color:C.gold,fontSize:11,fontWeight:'900',letterSpacing:1.8}, title:{color:C.text,fontSize:38,fontWeight:'900',marginTop:7}, subtitle:{color:C.muted,fontSize:16,lineHeight:23,marginTop:10,marginBottom:28},
+  hero:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:20,padding:22,alignItems:'center',marginBottom:26}, heroIcon:{fontSize:44}, heroText:{color:C.text,fontWeight:'900',letterSpacing:1.2,marginTop:10}, heroSub:{color:C.muted,textAlign:'center',lineHeight:20,marginTop:8},
+  inputLabel:{color:C.muted,fontSize:11,fontWeight:'800',letterSpacing:1.2,marginBottom:8}, input:{backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:14,padding:16,color:C.text,fontSize:15},
+  primary:{backgroundColor:C.gold,borderRadius:14,padding:17,alignItems:'center',marginTop:14}, primaryText:{color:'#16120A',fontWeight:'900',letterSpacing:1}, secondary:{borderWidth:1,borderColor:C.line,borderRadius:14,padding:16,alignItems:'center',marginTop:12}, secondaryText:{color:C.text,fontWeight:'800',letterSpacing:.8}, note:{color:C.muted,fontSize:12,lineHeight:18,marginTop:16,textAlign:'center'},
+  top:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:8,marginBottom:18}, dashTitle:{color:C.text,fontSize:30,fontWeight:'900',marginTop:3}, refresh:{width:44,height:44,borderRadius:22,backgroundColor:C.panel,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.line}, refreshText:{color:C.gold,fontSize:24,fontWeight:'800'},
+  error:{backgroundColor:'#2A1618',borderColor:'#5B292F',borderWidth:1,borderRadius:12,padding:12,marginBottom:12}, errorText:{color:'#FF9B9B',fontWeight:'700'},
+  hudPanel:{backgroundColor:'#12150F',borderWidth:1,borderColor:'#39311F',borderRadius:22,padding:18,marginBottom:14}, hudHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}, hudEyebrow:{color:C.muted,fontSize:11,fontWeight:'900',letterSpacing:1.7}, hudTitle:{color:C.gold,fontSize:20,fontWeight:'900',marginTop:2}, hudDot:{width:14,height:14,borderRadius:7,backgroundColor:'#495063'}, hudDotOn:{backgroundColor:C.green}, hudCopy:{color:C.text,lineHeight:22,marginTop:10}, hudSection:{color:C.muted,fontSize:10,fontWeight:'900',letterSpacing:1.5,marginTop:16,marginBottom:8}, optionRow:{flexDirection:'row',gap:8}, optionPill:{flex:1,backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:12,paddingVertical:10,alignItems:'center'}, optionPillOn:{borderColor:C.gold,backgroundColor:'#211C12'}, optionPillText:{color:C.text,fontWeight:'800',fontSize:12}, hudActions:{flexDirection:'row',gap:10,marginTop:14}, hudButton:{flex:1,backgroundColor:C.gold,borderRadius:14,paddingVertical:14,alignItems:'center'}, hudButtonOn:{backgroundColor:C.green}, hudButtonText:{color:'#16120A',fontWeight:'900',letterSpacing:.8}, hudButtonTextOn:{color:'#09120B'}, hudGhost:{borderWidth:1,borderColor:C.line,borderRadius:14,paddingVertical:14,paddingHorizontal:16,alignItems:'center',justifyContent:'center'}, hudGhostText:{color:C.text,fontWeight:'800',fontSize:12}, hudMeta:{color:C.muted,fontSize:12,lineHeight:18,marginTop:12,textAlign:'center'},
+  card:{backgroundColor:C.panel,borderRadius:18,borderWidth:1,borderColor:C.line,padding:18,marginBottom:12}, cardHead:{flexDirection:'row',justifyContent:'space-between'}, cardLabel:{color:C.text,fontWeight:'900',letterSpacing:1.1}, value:{color:C.text,fontWeight:'900',fontSize:18}, track:{height:10,borderRadius:6,backgroundColor:'#232A35',overflow:'hidden',marginTop:16}, fill:{height:'100%',backgroundColor:C.gold,borderRadius:6}, row:{flexDirection:'row',justifyContent:'space-between',marginTop:12}, muted:{color:C.muted,fontSize:11,fontWeight:'800',letterSpacing:1}, cap:{color:C.gold,fontWeight:'900'},
+  section:{color:C.muted,fontSize:11,fontWeight:'900',letterSpacing:1.7,marginTop:16,marginBottom:9}, coolGrid:{flexDirection:'row',gap:8}, cooldown:{flex:1,backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:16,padding:13,minHeight:105}, coolIcon:{fontSize:23}, coolLabel:{color:C.muted,fontSize:10,fontWeight:'900',marginTop:8}, coolValue:{color:C.text,fontSize:15,fontWeight:'900',marginTop:3}, ready:{color:C.green},
+  next:{backgroundColor:'#17150F',borderColor:'#3F3520',borderWidth:1,borderRadius:18,padding:18}, nextTitle:{color:C.gold,fontSize:20,fontWeight:'900'}, nextDetail:{color:C.text,lineHeight:20,marginTop:7},
+  pills:{flexDirection:'row',gap:7,marginBottom:8}, pill:{flex:1,backgroundColor:C.panel,borderWidth:1,borderColor:C.line,borderRadius:12,paddingVertical:10,alignItems:'center'}, pillOn:{borderColor:C.gold,backgroundColor:'#211C12'}, pillText:{color:C.text,fontWeight:'800',fontSize:12}, syncText:{color:C.muted,fontSize:12,textAlign:'center',marginTop:17}
+});`;
+
+const TORN_API_JS = String.raw`const BASE = 'https://api.torn.com/v2';
+const TIMEOUT_MS = 12000;
+
+async function getJson(path, key) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(`${BASE}${path}?comment=ComfortableAI`, {
+      headers: {Authorization: `ApiKey ${key}`, Accept: 'application/json'},
+      signal: controller.signal,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok || json?.error) {
+      const msg = json?.error?.error || json?.error?.message || `Torn API error (${response.status})`;
+      throw new Error(msg);
+    }
+    return json;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('Torn API timed out. Check your connection and try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function validateBars(payload) {
+  const energy = payload?.bars?.energy;
+  const nerve = payload?.bars?.nerve;
+  if (!energy || !nerve) throw new Error('Unexpected Torn bars response.');
+  for (const [name, bar] of [['energy', energy], ['nerve', nerve]]) {
+    if (!Number.isFinite(bar.current) || !Number.isFinite(bar.maximum)) throw new Error(`Invalid ${name} data from Torn.`);
+  }
+  return {energy, nerve};
+}
+
+function normalizeBar(bar, nowSec) {
+  const fullRemaining = Math.max(0, Number(bar?.full_time || 0));
+  const tickRemaining = Math.max(0, Number(bar?.tick_time || 0));
+  return {
+    ...bar,
+    full_time: nowSec + fullRemaining,
+    tick_time: tickRemaining > 0 ? nowSec + tickRemaining : 0,
+  };
+}
+
+async function fetchSnapshot(key) {
+  const [barsPayload, cooldownPayload] = await Promise.all([
+    getJson('/user/bars', key),
+    getJson('/user/cooldowns', key),
+  ]);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const {energy, nerve} = validateBars(barsPayload);
+  const cooldowns = cooldownPayload?.cooldowns;
+  if (!cooldowns || !['drug', 'medical', 'booster'].every(k => Number.isFinite(cooldowns[k]))) {
+    throw new Error('Unexpected Torn cooldown response.');
+  }
+  return {energy: normalizeBar(energy, nowSec), nerve: normalizeBar(nerve, nowSec), cooldowns, fetchedAt: Date.now(), demo: false};
+}
+
+module.exports = {fetchSnapshot};`;
+
+const CORE_JS = String.raw`function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function projectBar(bar, nowMs = Date.now()) {
+  if (!bar) return null;
+  const current = Number(bar.current || 0);
+  const maximum = Number(bar.maximum || 0);
+  const increment = Number(bar.increment || 0);
+  const interval = Number(bar.interval || 0);
+  const fullTime = Number(bar.full_time || 0);
+  if (maximum <= 0) return {...bar, projected: current, percent: 0, capMs: null};
+  if (current >= maximum) return {...bar, projected: current, percent: 100, capMs: nowMs};
+
+  let projected = current;
+  if (interval > 0 && increment > 0 && fullTime > 0) {
+    const remainingMs = Math.max(0, fullTime * 1000 - nowMs);
+    const remainingTicks = Math.ceil(remainingMs / (interval * 1000));
+    const expectedRemaining = remainingTicks * increment;
+    projected = clamp(maximum - expectedRemaining, current, maximum);
+  }
+
+  return {
+    ...bar,
+    projected,
+    percent: clamp((projected / maximum) * 100, 0, 100),
+    capMs: fullTime > 0 ? fullTime * 1000 : null,
+  };
+}
+
+function formatDuration(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (s === 0) return 'READY';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function timeUntil(ms, nowMs = Date.now()) {
+  if (!ms) return 'UNKNOWN';
+  return formatDuration(Math.max(0, Math.ceil((ms - nowMs) / 1000)));
+}
+
+function recommend(snapshot, nowMs = Date.now()) {
+  const energy = projectBar(snapshot.energy, nowMs);
+  const nerve = projectBar(snapshot.nerve, nowMs);
+  const drug = Math.max(0, Number(snapshot.cooldowns?.drug || 0) - Math.floor((nowMs - Number(snapshot.fetchedAt || nowMs)) / 1000));
+
+  if (nerve && nerve.percent >= 90) return {title: 'SPEND NERVE', detail: 'Your nerve is close to capping. Use it before natural regeneration is wasted.'};
+  if (energy && energy.percent >= 90) return {title: 'SPEND ENERGY', detail: 'Your energy is close to capping. Train or use it before natural regeneration is wasted.'};
+  if (drug === 0) return {title: 'DRUG READY', detail: 'Your drug cooldown is clear. Check whether using your planned drug fits your training strategy.'};
+  if (energy && energy.percent >= 60) return {title: 'PLAN TRAINING', detail: 'You have a healthy energy bar. Consider your next gym session before it creeps toward cap.'};
+  return {title: 'REGENERATING', detail: 'Nothing urgent right now. Let your bars regenerate and Comfortable AI will keep watch.'};
+}
+
+module.exports = {clamp, projectBar, formatDuration, timeUntil, recommend};`;
+
+const SELF_TEST = String.raw`const assert = require('assert');
+const {projectBar, formatDuration, timeUntil, recommend} = require('../src/core');
+const now = 1_000_000_000_000;
+const bar = {current:100, maximum:150, increment:5, interval:600, full_time:Math.floor((now+6000_000)/1000)};
+const projected = projectBar(bar, now);
+assert(projected.projected >= 100 && projected.projected <= 150);
+assert.strictEqual(formatDuration(0), 'READY');
+assert.strictEqual(formatDuration(3661), '1h 1m');
+assert.strictEqual(timeUntil(now+60000, now), '1m 0s');
+const rec = recommend({energy:{...bar,current:149,full_time:Math.floor((now+600000)/1000)}, nerve:{current:10,maximum:52,increment:1,interval:300,full_time:Math.floor((now+10000000)/1000)}, cooldowns:{drug:100}, fetchedAt: now}, now);
+assert.strictEqual(rec.title, 'SPEND ENERGY');
+console.log('Comfortable AI core self-test: PASS');`;
+
+const OVERLAY_SERVICE = String.raw`package ${PACKAGE_NAME}
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.provider.Settings
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.core.app.NotificationCompat
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.math.abs
+import kotlin.math.max
+
+class ComfortableHudService : Service() {
+  companion object {
+    private const val CHANNEL_ID = "comfortable_hud"
+    private const val NOTIFICATION_ID = 41061
+    private const val ACTION_STOP = "${PACKAGE_NAME}.STOP_HUD"
+    private const val PREFS = "comfortable_overlay"
+    private const val KEY_X = "hud_x"
+    private const val KEY_Y = "hud_y"
+    private const val KEY_STYLE = "hud_style"
+    private const val KEY_PRESET = "hud_preset"
+    private const val REFRESH_MS = 60000L
+    fun isOverlayAllowed(context: Context): Boolean = Settings.canDrawOverlays(context)
+  }
+
+  private lateinit var windowManager: WindowManager
+  private lateinit var overlayView: LinearLayout
+  private lateinit var topLine: TextView
+  private lateinit var bottomLine: TextView
+  private lateinit var dot: View
+  private var layoutParams: WindowManager.LayoutParams? = null
+  private val handler = Handler(Looper.getMainLooper())
+  private var apiKey: String = ""
+  private var compact = true
+  private var style = "balanced"
+  private var preset = "top-center"
+  private var lastSync = 0L
+  private var energyCurrent = 0
+  private var energyMax = 0
+  private var energyInc = 0
+  private var energyInterval = 0
+  private var energyCapMs = 0L
+  private var nerveCurrent = 0
+  private var nerveMax = 0
+  private var nerveInc = 0
+  private var nerveInterval = 0
+  private var nerveCapMs = 0L
+  private var drug = 0
+  private var booster = 0
+  private var medical = 0
+
+  private val uiTick = object : Runnable {
+    override fun run() {
+      updateOverlayText()
+      handler.postDelayed(this, 1000)
+    }
+  }
+
+  private val refreshTick = object : Runnable {
+    override fun run() {
+      Thread {
+        fetchSnapshot()
+      }.start()
+      handler.postDelayed(this, REFRESH_MS)
+    }
+  }
+
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    when (intent?.action) {
+      ACTION_STOP -> {
+        stopSelf()
+        return START_NOT_STICKY
       }
     }
-    config.modResults.contents = source;
-    return config;
-  });
 
-  config = withDangerousMod(config, ['android', async config => {
-    const root = config.modRequest.projectRoot;
-    const srcDir = path.join(root, 'src');
-    fs.mkdirSync(srcDir, {recursive: true});
+    apiKey = intent?.getStringExtra("apiKey") ?: apiKey
+    style = intent?.getStringExtra("style") ?: loadStyle()
+    preset = intent?.getStringExtra("preset") ?: loadPreset()
+    savePrefs(style, preset)
 
-    // Patch the JS app used by the release bundle after the workflow restores /src.
-    fs.writeFileSync(path.join(root, 'App.js'), APP_JS, 'utf8');
-    fs.writeFileSync(path.join(root, 'core.js'), CORE_JS, 'utf8');
-    fs.writeFileSync(path.join(root, 'tornApi.js'), TORN_API_JS, 'utf8');
-    fs.writeFileSync(path.join(srcDir, 'core.js'), CORE_JS, 'utf8');
-    fs.writeFileSync(path.join(srcDir, 'tornApi.js'), TORN_API_JS, 'utf8');
+    if (!::windowManager.isInitialized) {
+      windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+      createOverlay()
+    } else {
+      applyStyle()
+      if (intent?.hasExtra("preset") == true) applyPreset(preset)
+    }
 
-    const javaDir = path.join(root, 'android', 'app', 'src', 'main', 'java', ...PACKAGE_NAME.split('.'));
-    fs.mkdirSync(javaDir, {recursive: true});
-    fs.writeFileSync(path.join(javaDir, 'ComfortableOverlayModule.kt'), OVERLAY_MODULE_KT, 'utf8');
-    fs.writeFileSync(path.join(javaDir, 'ComfortableOverlayPackage.kt'), OVERLAY_PACKAGE_KT, 'utf8');
-    fs.writeFileSync(path.join(javaDir, 'ComfortableOverlayService.kt'), OVERLAY_SERVICE_KT, 'utf8');
-    return config;
+    startForeground(NOTIFICATION_ID, buildNotification())
+    handler.removeCallbacks(uiTick)
+    handler.removeCallbacks(refreshTick)
+    handler.post(uiTick)
+    handler.post(refreshTick)
+    Thread { fetchSnapshot() }.start()
+    return START_STICKY
+  }
+
+  override fun onDestroy() {
+    handler.removeCallbacksAndMessages(null)
+    if (::windowManager.isInitialized && ::overlayView.isInitialized) {
+      try { windowManager.removeView(overlayView) } catch (_: Exception) {}
+    }
+    super.onDestroy()
+  }
+
+  override fun onBind(intent: Intent?): IBinder? = null
+
+  private fun buildNotification(): Notification {
+    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Comfortable HUD", NotificationManager.IMPORTANCE_LOW))
+    }
+    val stopIntent = Intent(this, ComfortableHudService::class.java).apply { action = ACTION_STOP }
+    val stopPending = PendingIntent.getService(this, 2, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    val openIntent = packageManager.getLaunchIntentForPackage(packageName)
+    val openPending = PendingIntent.getActivity(this, 1, openIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    return NotificationCompat.Builder(this, CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setContentTitle("Comfortable HUD")
+      .setContentText("Floating Torn HUD is running")
+      .setOngoing(true)
+      .setContentIntent(openPending)
+      .addAction(0, "Stop HUD", stopPending)
+      .build()
+  }
+
+  private fun createOverlay() {
+    overlayView = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(14), dp(9), dp(14), dp(9))
+      gravity = Gravity.CENTER_VERTICAL
+      elevation = dp(10).toFloat()
+      setOnClickListener {
+        compact = !compact
+        bottomLine.visibility = if (compact) View.GONE else View.VISIBLE
+        applyStyle()
+        updateOverlayText()
+      }
+    }
+
+    val topRow = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER_VERTICAL
+    }
+
+    dot = View(this).apply {
+      layoutParams = LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(8) }
+      background = circleDrawable(Color.parseColor("#5BD69A"))
+    }
+
+    topLine = TextView(this).apply {
+      setTextColor(Color.WHITE)
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+      typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+
+    bottomLine = TextView(this).apply {
+      setTextColor(Color.parseColor("#B9C0CF"))
+      setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+      visibility = View.GONE
+    }
+
+    topRow.addView(dot)
+    topRow.addView(topLine)
+    overlayView.addView(topRow)
+    overlayView.addView(bottomLine)
+
+    layoutParams = WindowManager.LayoutParams(
+      WindowManager.LayoutParams.WRAP_CONTENT,
+      WindowManager.LayoutParams.WRAP_CONTENT,
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+      PixelFormat.TRANSLUCENT
+    ).apply {
+      gravity = Gravity.TOP or Gravity.START
+      x = loadX()
+      y = loadY()
+    }
+
+    applyPresetIfNeeded()
+    applyStyle()
+    attachDragBehavior()
+    windowManager.addView(overlayView, layoutParams)
+  }
+
+  private fun attachDragBehavior() {
+    overlayView.setOnTouchListener(object : View.OnTouchListener {
+      private var initialX = 0
+      private var initialY = 0
+      private var initialTouchX = 0f
+      private var initialTouchY = 0f
+      private var moved = false
+      override fun onTouch(v: View, event: MotionEvent): Boolean {
+        val p = layoutParams ?: return false
+        when (event.action) {
+          MotionEvent.ACTION_DOWN -> {
+            initialX = p.x
+            initialY = p.y
+            initialTouchX = event.rawX
+            initialTouchY = event.rawY
+            moved = false
+            return true
+          }
+          MotionEvent.ACTION_MOVE -> {
+            val dx = (event.rawX - initialTouchX).toInt()
+            val dy = (event.rawY - initialTouchY).toInt()
+            if (abs(dx) > 6 || abs(dy) > 6) moved = true
+            p.x = initialX + dx
+            p.y = max(dp(24), initialY + dy)
+            windowManager.updateViewLayout(overlayView, p)
+            return true
+          }
+          MotionEvent.ACTION_UP -> {
+            snapToEdge()
+            savePosition()
+            if (!moved) v.performClick()
+            return true
+          }
+        }
+        return false
+      }
+    })
+  }
+
+  private fun snapToEdge() {
+    val p = layoutParams ?: return
+    val width = resources.displayMetrics.widthPixels
+    p.x = if (p.x + overlayView.width / 2 < width / 2) dp(10) else width - overlayView.width - dp(10)
+    windowManager.updateViewLayout(overlayView, p)
+  }
+
+  private fun applyPresetIfNeeded() {
+    val p = layoutParams ?: return
+    if (loadX() != 0 || loadY() != 0) return
+    applyPreset(preset)
+  }
+
+  fun applyPreset(name: String) {
+    val p = layoutParams ?: return
+    val width = resources.displayMetrics.widthPixels
+    val yBase = dp(72)
+    when (name) {
+      "top-left" -> { p.x = dp(10); p.y = yBase }
+      "top-right" -> { p.x = width - dp(220); p.y = yBase }
+      else -> { p.x = (width / 2) - dp(110); p.y = yBase }
+    }
+    try { windowManager.updateViewLayout(overlayView, p) } catch (_: Exception) {}
+    savePosition()
+  }
+
+  private fun applyStyle() {
+    val bg = when (style) {
+      "subtle" -> "#CC0E1420"
+      "solid" -> "#F0121722"
+      else -> "#E6121722"
+    }
+    overlayView.background = roundedDrawable(Color.parseColor(bg), Color.parseColor("#E9B653"))
+    overlayView.setPadding(dp(14), if (compact) dp(8) else dp(10), dp(14), if (compact) dp(8) else dp(10))
+    topLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 15f else 14f)
+    bottomLine.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+  }
+
+  private fun fetchSnapshot() {
+    if (apiKey.isBlank()) return
+    try {
+      val bars = requestJson("https://api.torn.com/v2/user/bars?comment=ComfortableAI")
+      val cds = requestJson("https://api.torn.com/v2/user/cooldowns?comment=ComfortableAI")
+      val nowMs = System.currentTimeMillis()
+      val energy = bars.getJSONObject("bars").getJSONObject("energy")
+      val nerve = bars.getJSONObject("bars").getJSONObject("nerve")
+      energyCurrent = energy.optInt("current", 0)
+      energyMax = energy.optInt("maximum", 0)
+      energyInc = energy.optInt("increment", 0)
+      energyInterval = energy.optInt("interval", 0)
+      energyCapMs = nowMs + energy.optLong("full_time", 0) * 1000L
+      nerveCurrent = nerve.optInt("current", 0)
+      nerveMax = nerve.optInt("maximum", 0)
+      nerveInc = nerve.optInt("increment", 0)
+      nerveInterval = nerve.optInt("interval", 0)
+      nerveCapMs = nowMs + nerve.optLong("full_time", 0) * 1000L
+      val cool = cds.getJSONObject("cooldowns")
+      drug = cool.optInt("drug", 0)
+      booster = cool.optInt("booster", 0)
+      medical = cool.optInt("medical", 0)
+      lastSync = nowMs
+      handler.post { updateOverlayText() }
+    } catch (_: Exception) {
+      handler.post {
+        dot.background = circleDrawable(Color.parseColor("#FF705E"))
+        topLine.text = "⚠ HUD sync issue"
+        if (!compact) bottomLine.text = "Check internet or Torn API key"
+      }
+    }
+  }
+
+  private fun requestJson(url: String): JSONObject {
+    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+      requestMethod = "GET"
+      connectTimeout = 12000
+      readTimeout = 12000
+      setRequestProperty("Authorization", "ApiKey $apiKey")
+      setRequestProperty("Accept", "application/json")
+    }
+    val code = conn.responseCode
+    val reader = BufferedReader(InputStreamReader(if (code in 200..299) conn.inputStream else conn.errorStream))
+    val text = reader.use { it.readText() }
+    val json = JSONObject(text)
+    if (code !in 200..299 || json.has("error")) {
+      throw IllegalStateException("Torn API error")
+    }
+    return json
+  }
+
+  private fun updateOverlayText() {
+    val now = System.currentTimeMillis()
+    val e = projectedValue(energyCurrent, energyMax, energyInc, energyInterval, energyCapMs, now)
+    val n = projectedValue(nerveCurrent, nerveMax, nerveInc, nerveInterval, nerveCapMs, now)
+    val age = if (lastSync == 0L) Long.MAX_VALUE else (now - lastSync) / 1000L
+    dot.background = circleDrawable(
+      when {
+        age <= 75 -> Color.parseColor("#5BD69A")
+        age <= 150 -> Color.parseColor("#E9B653")
+        else -> Color.parseColor("#FF705E")
+      }
+    )
+    topLine.text = "⚡ ${e.first}/${energyMax}   🧠 ${n.first}/${nerveMax}"
+    if (!compact) {
+      bottomLine.visibility = View.VISIBLE
+      bottomLine.text = "E ${formatTime(e.second)} • N ${formatTime(n.second)} • 💊 ${formatReady(drug, age)} • 🍬 ${formatReady(booster, age)} • 🏥 ${formatReady(medical, age)}"
+    } else {
+      bottomLine.visibility = View.GONE
+    }
+  }
+
+  private fun projectedValue(current: Int, maximum: Int, increment: Int, interval: Int, capMs: Long, now: Long): Pair<Int, Long> {
+    if (current >= maximum || maximum <= 0) return Pair(current.coerceAtMost(maximum), 0L)
+    if (interval <= 0 || increment <= 0 || capMs <= 0L) return Pair(current, 0L)
+    val remainingMs = max(0L, capMs - now)
+    val remainingTicks = kotlin.math.ceil(remainingMs.toDouble() / (interval * 1000.0)).toInt()
+    val expectedRemaining = remainingTicks * increment
+    val projected = (maximum - expectedRemaining).coerceIn(current, maximum)
+    return Pair(projected, remainingMs)
+  }
+
+  private fun formatTime(ms: Long): String {
+    if (ms <= 0L) return "cap"
+    val total = ms / 1000L
+    val h = total / 3600L
+    val m = (total % 3600L) / 60L
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
+  }
+
+  private fun formatReady(raw: Int, ageSec: Long): String {
+    val remain = max(0, raw - ageSec.toInt())
+    if (remain <= 0) return "ready"
+    val h = remain / 3600
+    val m = (remain % 3600) / 60
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
+  }
+
+  private fun savePosition() {
+    val p = layoutParams ?: return
+    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_X, p.x).putInt(KEY_Y, p.y).apply()
+  }
+
+  private fun savePrefs(style: String, preset: String) {
+    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_STYLE, style).putString(KEY_PRESET, preset).apply()
+  }
+
+  private fun loadX(): Int = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_X, 0)
+  private fun loadY(): Int = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_Y, 0)
+  private fun loadStyle(): String = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_STYLE, "balanced") ?: "balanced"
+  private fun loadPreset(): String = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PRESET, "top-center") ?: "top-center"
+
+  private fun dp(v: Int): Int = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
+
+  private fun roundedDrawable(fill: Int, stroke: Int): android.graphics.drawable.GradientDrawable {
+    return android.graphics.drawable.GradientDrawable().apply {
+      shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+      cornerRadius = dp(18).toFloat()
+      setColor(fill)
+      setStroke(dp(1), stroke)
+    }
+  }
+
+  private fun circleDrawable(fill: Int): android.graphics.drawable.GradientDrawable {
+    return android.graphics.drawable.GradientDrawable().apply {
+      shape = android.graphics.drawable.GradientDrawable.OVAL
+      setColor(fill)
+    }
+  }
+}`;
+
+const OVERLAY_MODULE = String.raw`package ${PACKAGE_NAME}
+
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import com.facebook.react.bridge.*
+
+class ComfortableOverlayModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+  override fun getName() = "ComfortableOverlay"
+
+  @ReactMethod
+  fun hasPermission(promise: Promise) {
+    promise.resolve(ComfortableHudService.isOverlayAllowed(reactContext))
+  }
+
+  @ReactMethod
+  fun requestPermission(promise: Promise) {
+    try {
+      val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${PACKAGE_NAME}"))
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      reactContext.startActivity(intent)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("overlay_permission", e)
+    }
+  }
+
+  @ReactMethod
+  fun startHud(apiKey: String, style: String, preset: String, promise: Promise) {
+    try {
+      val intent = Intent(reactContext, ComfortableHudService::class.java).apply {
+        putExtra("apiKey", apiKey)
+        putExtra("style", style)
+        putExtra("preset", preset)
+      }
+      reactContext.startForegroundService(intent)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("start_hud", e)
+    }
+  }
+
+  @ReactMethod
+  fun stopHud(promise: Promise) {
+    try {
+      reactContext.stopService(Intent(reactContext, ComfortableHudService::class.java))
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("stop_hud", e)
+    }
+  }
+
+  @ReactMethod
+  fun isRunning(promise: Promise) {
+    promise.resolve(true)
+  }
+
+  @ReactMethod
+  fun savePrefs(style: String, preset: String, promise: Promise) {
+    val prefs = reactContext.getSharedPreferences("comfortable_overlay", android.content.Context.MODE_PRIVATE)
+    prefs.edit().putString("hud_style", style).putString("hud_preset", preset).apply()
+    promise.resolve(true)
+  }
+
+  @ReactMethod
+  fun getPrefs(promise: Promise) {
+    val prefs = reactContext.getSharedPreferences("comfortable_overlay", android.content.Context.MODE_PRIVATE)
+    val map = Arguments.createMap()
+    map.putString("style", prefs.getString("hud_style", "balanced"))
+    map.putString("preset", prefs.getString("hud_preset", "top-center"))
+    promise.resolve(map)
+  }
+
+  @ReactMethod
+  fun applyPrefs(style: String, preset: String, promise: Promise) {
+    val intent = Intent(reactContext, ComfortableHudService::class.java).apply {
+      putExtra("apiKey", "")
+      putExtra("style", style)
+      putExtra("preset", preset)
+    }
+    reactContext.startForegroundService(intent)
+    promise.resolve(true)
+  }
+
+  @ReactMethod
+  fun resetPosition(preset: String, promise: Promise) {
+    val prefs = reactContext.getSharedPreferences("comfortable_overlay", android.content.Context.MODE_PRIVATE)
+    prefs.edit().putInt("hud_x", 0).putInt("hud_y", 0).putString("hud_preset", preset).apply()
+    promise.resolve(true)
+  }
+}`;
+
+const OVERLAY_PACKAGE = String.raw`package ${PACKAGE_NAME}
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class ComfortableOverlayPackage : ReactPackage {
+  override fun createNativeModules(reactContext: ReactApplicationContext): MutableList<NativeModule> = mutableListOf(ComfortableOverlayModule(reactContext))
+  override fun createViewManagers(reactContext: ReactApplicationContext): MutableList<ViewManager<*, *>> = mutableListOf()
+}`;
+
+function writeFileIfChanged(filePath, contents) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === contents) return;
+  fs.writeFileSync(filePath, contents, 'utf8');
+}
+
+function withFiles(config) {
+  return withDangerousMod(config, ['android', async cfg => {
+    const root = cfg.modRequest.projectRoot;
+    writeFileIfChanged(path.join(root, 'App.js'), APP_JS);
+    writeFileIfChanged(path.join(root, 'core.js'), CORE_JS);
+    writeFileIfChanged(path.join(root, 'tornApi.js'), TORN_API_JS);
+    writeFileIfChanged(path.join(root, 'self-test.cjs'), SELF_TEST);
+    writeFileIfChanged(path.join(root, 'android', 'app', 'src', 'main', 'java', ...PACKAGE_NAME.split('.'), 'ComfortableHudService.kt'), OVERLAY_SERVICE);
+    writeFileIfChanged(path.join(root, 'android', 'app', 'src', 'main', 'java', ...PACKAGE_NAME.split('.'), 'ComfortableOverlayModule.kt'), OVERLAY_MODULE);
+    writeFileIfChanged(path.join(root, 'android', 'app', 'src', 'main', 'java', ...PACKAGE_NAME.split('.'), 'ComfortableOverlayPackage.kt'), OVERLAY_PACKAGE);
+    return cfg;
   }]);
+}
 
-  return config;
+function withOverlayManifest(config) {
+  return withAndroidManifest(config, cfg => {
+    const manifest = cfg.modResults.manifest;
+    const app = manifest.application?.[0];
+    if (!app) return cfg;
+
+    manifest.$ = manifest.$ || {};
+    const perms = manifest['uses-permission'] || [];
+    const ensurePerm = name => {
+      if (!perms.some(p => p.$ && p.$['android:name'] === name)) perms.push({ $: { 'android:name': name } });
+    };
+    ensurePerm('android.permission.SYSTEM_ALERT_WINDOW');
+    ensurePerm('android.permission.FOREGROUND_SERVICE');
+    ensurePerm('android.permission.INTERNET');
+    manifest['uses-permission'] = perms;
+
+    app.service = app.service || [];
+    if (!app.service.some(s => s.$ && s.$['android:name'] === '.ComfortableHudService')) {
+      app.service.push({ $: { 'android:name': '.ComfortableHudService', 'android:exported': 'false', 'android:foregroundServiceType': 'specialUse' }, 'property': [{ $: { 'android:name': 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE', 'android:value': 'floating_hud_overlay' } }] });
+    }
+
+    return cfg;
+  });
+}
+
+function withOverlayPackage(config) {
+  return withMainApplication(config, cfg => {
+    const src = cfg.modResults.contents;
+    let out = src;
+    if (!out.includes('ComfortableOverlayPackage')) {
+      out = out.replace(/import expo.modules.ApplicationLifecycleDispatcher/, m => `${m}\nimport ${PACKAGE_NAME}.ComfortableOverlayPackage`);
+      out = out.replace(/override fun getPackages\(\): List<ReactPackage> = /, 'override fun getPackages(): List<ReactPackage> = ');
+      out = out.replace(/PackageList\(this\)\.packages\.apply \{/, 'PackageList(this).packages.apply {\n      add(ComfortableOverlayPackage())');
+    }
+    cfg.modResults.contents = out;
+    return cfg;
+  });
 }
 
 module.exports = ({ config }) => {
-  config = {...config};
-  config.name = 'Comfortable AI';
-  config.slug = 'comfortable-ai';
-  config.version = '0.6.0';
-  config.orientation = 'portrait';
-  config.userInterfaceStyle = 'dark';
-  config.android = {
-    ...(config.android || {}),
-    package: PACKAGE_NAME,
-    versionCode: 6,
-  };
-
-  const plugins = Array.isArray(config.plugins) ? [...config.plugins] : [];
-  const pluginName = entry => Array.isArray(entry) ? entry[0] : entry;
-  if (!plugins.some(entry => pluginName(entry) === 'expo-notifications')) {
-    plugins.push(['expo-notifications', {defaultChannel: 'torn-alerts'}]);
-  }
-  if (!plugins.some(entry => pluginName(entry) === 'expo-secure-store')) {
-    plugins.push('expo-secure-store');
-  }
-  config.plugins = plugins;
-
-  return withComfortableHud(config);
+  config.version = '0.6.1';
+  config.android = config.android || {};
+  config.android.versionCode = 6;
+  config.android.package = PACKAGE_NAME;
+  config.android.permissions = Array.from(new Set([...(config.android.permissions || []), 'POST_NOTIFICATIONS', 'VIBRATE', 'SYSTEM_ALERT_WINDOW', 'FOREGROUND_SERVICE', 'INTERNET']));
+  config.plugins = config.plugins || [];
+  return withOverlayPackage(withOverlayManifest(withFiles(config)));
 };
