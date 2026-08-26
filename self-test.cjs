@@ -1,0 +1,12 @@
+const assert = require('assert');
+const {projectBar, formatDuration, timeUntil, recommend} = require('../src/core');
+const now = 1_000_000_000_000;
+const bar = {current:100, maximum:150, increment:5, interval:600, full_time:Math.floor((now+6000_000)/1000)};
+const projected = projectBar(bar, now);
+assert(projected.projected >= 100 && projected.projected <= 150);
+assert.strictEqual(formatDuration(0), 'READY');
+assert.strictEqual(formatDuration(3661), '1h 1m');
+assert.strictEqual(timeUntil(now+60000, now), '1m 0s');
+const rec = recommend({energy:{...bar,current:149,full_time:Math.floor((now+600000)/1000)}, nerve:{current:10,maximum:52,increment:1,interval:300,full_time:Math.floor((now+10000000)/1000)}, cooldowns:{drug:100}}, now);
+assert.strictEqual(rec.title, 'SPEND ENERGY');
+console.log('Comfortable AI core self-test: PASS');

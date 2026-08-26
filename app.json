@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Comfortable AI",
+    "slug": "comfortable-ai",
+    "version": "0.5.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.comfortableai.torncopilot",
+      "versionCode": 5,
+      "permissions": ["POST_NOTIFICATIONS", "VIBRATE"]
+    },
+    "plugins": [
+      ["expo-notifications", {"defaultChannel": "torn-alerts"}],
+      "expo-secure-store"
+    ]
+  }
+}
