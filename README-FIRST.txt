@@ -1,19 +1,24 @@
-TORNPULSE v0.8.2 — HEALTH + STATUS HUD
+TORNPULSE v0.8.2 — CORRECTED BUILD FILES
 
-WHAT'S NEW
-- Health/Life added to the floating HUD and dashboard.
-- Current Torn status in the HUD header (Okay, Hospital, Jail, Traveling, etc.).
-- Hospital/Jail/status countdown uses Torn's status `until` timestamp.
-- Tap the HUD to expand and see the latest incoming attack result and attacker name when Torn exposes it.
-- Stealthed/hidden attackers stay UNKNOWN / STEALTH.
-- Incoming attack history is optional: a Limited read-only Torn API key enables it. Core Health/Status/Energy/Nerve still works without attack access.
-- Existing Energy/Nerve/cooldown polling, drag/tap behavior, alerts, branding, and package ID are preserved.
+IMPORTANT: the original v0.8.2 bundle omitted patch-v081.cjs. Use this corrected bundle.
 
-INSTALL INTO THE REPO
-1. Upload patch-v082.cjs to the repository ROOT beside patch-v081.cjs.
-2. Replace .github/workflows/main.yml with the included main.yml.
-3. Commit both changes.
-4. GitHub Actions will build artifact: tornpulse-v0.8.2-apk.
+GitHub repository: realsmyreligion/comfortable-ai
 
-SECURITY
-TornPulse remains read-only. Do not use or store your Torn password in the app.
+1) Put BOTH patch files in the repository ROOT:
+   - patch-v081.cjs
+   - patch-v082.cjs
+
+2) Replace the existing workflow at EXACTLY:
+   .github/workflows/main.yml
+   with the main.yml included in this ZIP.
+
+3) Commit to main.
+
+The workflow should show these two steps in order:
+   Apply v0.8.1 refinement
+   Apply v0.8.2 Health + Status HUD
+
+Then it will build and upload artifact:
+   tornpulse-v0.8.2-apk
+
+Do not use the artifact from run #28; that run still used the old v0.8.0 workflow.
