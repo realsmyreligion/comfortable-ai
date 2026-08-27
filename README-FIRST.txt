@@ -1,30 +1,19 @@
-TORNPULSE v0.8.0 VISUAL REDESIGN
+TORNPULSE v0.8.2 — HEALTH + STATUS HUD
 
-FILES TO PUT IN THE REPOSITORY:
-1. /patch-v080.cjs
-2. /tornpulse-icon.png
-3. /tornpulse-splash.png
-4. /.github/workflows/main.yml  (replace the current workflow)
+WHAT'S NEW
+- Health/Life added to the floating HUD and dashboard.
+- Current Torn status in the HUD header (Okay, Hospital, Jail, Traveling, etc.).
+- Hospital/Jail/status countdown uses Torn's status `until` timestamp.
+- Tap the HUD to expand and see the latest incoming attack result and attacker name when Torn exposes it.
+- Stealthed/hidden attackers stay UNKNOWN / STEALTH.
+- Incoming attack history is optional: a Limited read-only Torn API key enables it. Core Health/Status/Energy/Nerve still works without attack access.
+- Existing Energy/Nerve/cooldown polling, drag/tap behavior, alerts, branding, and package ID are preserved.
 
-WHAT THIS CHANGES:
-- App version -> 0.8.0 / Android versionCode 19
-- New TornPulse launcher icon
-- New noir TornPulse splash screen
-- Main app restyled to black/graphite + crimson + silver
-- Cleaner rounded cards, controls, bars and spacing
-- Floating HUD receives a visual-only polish:
-  thinner accent, softer border, tighter padding, cleaner expanded text
-- GitHub workflow/artifact naming changed from Comfortable AI to TornPulse
+INSTALL INTO THE REPO
+1. Upload patch-v082.cjs to the repository ROOT beside patch-v081.cjs.
+2. Replace .github/workflows/main.yml with the included main.yml.
+3. Commit both changes.
+4. GitHub Actions will build artifact: tornpulse-v0.8.2-apk.
 
-WHAT THIS DOES NOT CHANGE:
-- Android package ID (com.comfortableai.torncopilot)
-- Torn API mechanics
-- API key storage
-- Notification logic
-- HUD fetch/projection logic
-- HUD 60-second polling
-- Tap/expand/drag behavior
-- Foreground service lifecycle
-
-The patch intentionally fails the CI build if an expected v0.7.3 source fragment
-does not match, rather than silently producing a partially patched build.
+SECURITY
+TornPulse remains read-only. Do not use or store your Torn password in the app.
