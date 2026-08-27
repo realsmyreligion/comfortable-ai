@@ -209,8 +209,8 @@ swap(
   'HUD accent thickness'
 );
 swap(
-  "headerText = makeText(\\\"TORNPULSE \\\\u2022 CONNECTING\\\", 8f, Color.rgb(156, 164, 176), true)",
-  "headerText = makeText(\\\"TORNPULSE \\\\u2022 CONNECTING\\\", 8f, Color.rgb(176, 183, 193), true)",
+  "Color.rgb(156, 164, 176), true).also",
+  "Color.rgb(176, 183, 193), true).also",
   'HUD header tone'
 );
 swap(
@@ -219,13 +219,13 @@ swap(
   'HUD header tracking'
 );
 swap(
-  "cooldownText = makeText(\\\"💊 --   •   🥤 --   •   ✚ --\\\", 9f, Color.rgb(165, 173, 184), true)",
-  "cooldownText = makeText(\\\"💊 --   •   🥤 --   •   ✚ --\\\", 8f, Color.rgb(174, 181, 191), true)",
+  "9f, Color.rgb(165, 173, 184), true).also",
+  "8f, Color.rgb(174, 181, 191), true).also",
   'HUD cooldown typography'
 );
 swap(
-  "detailText = makeText(\\\"Connecting to Torn\\\\u2026\\\", 10f, Color.rgb(145, 156, 175), false)",
-  "detailText = makeText(\\\"Connecting to Torn\\\\u2026\\\", 9f, Color.rgb(153, 163, 178), false)",
+  "10f, Color.rgb(145, 156, 175), false).also",
+  "9f, Color.rgb(153, 163, 178), false).also",
   'HUD expanded typography'
 );
 swap(
@@ -233,11 +233,7 @@ swap(
   "headerText?.setTextColor(if (stale) Color.rgb(225, 168, 52) else Color.rgb(213, 47, 50))",
   'HUD live color'
 );
-swap(
-  "detailText?.text = \\\"FULL   ϟ $energyFull   •   ✺ $nerveFull\\\\nCOOLDOWNS   💊 $drug   •   🥤 $booster   •   ✚ $medical$errorLine\\\\nTap to collapse   •   Drag to move\\\"",
-  "detailText?.text = \\\"ϟ ENERGY FULL  $energyFull   •   ✺ NERVE FULL  $nerveFull\\\\n💊 DRUG  $drug   •   🥤 BOOSTER  $booster   •   ✚ MEDICAL  $medical$errorLine\\\\nTAP TO COLLAPSE   •   DRAG TO MOVE\\\"",
-  'HUD expanded layout'
-);
+// Expanded HUD labels remain unchanged in v0.8.0 to preserve the proven native layout.
 
 fs.writeFileSync(FILE, src, 'utf8');
 console.log('\nTornPulse v0.8.0 visual redesign applied successfully.');
