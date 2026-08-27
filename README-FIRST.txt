@@ -1,23 +1,21 @@
-TORNPULSE v1.0.0 — FINAL HUD POLISH
+TornPulse v1.0.0 — Lettered + Collapsible HUD final polish
 
-This bundle adds the locked final HUD design on top of patch-v100.cjs.
+ONLY ONE REPO FILE NEEDS TO BE REPLACED:
+  patch-v100-hud.cjs  (repo root)
 
-1. Upload patch-v100-hud.cjs to the REPO ROOT, beside patch-v100.cjs.
-2. Replace .github/workflows/main.yml with the included main.yml.
-3. Commit the changes.
+Do NOT change .github/workflows/main.yml again. The active workflow is already correct and will run this replacement patch automatically on commit.
 
-The workflow MUST show these two v1 steps:
-- Apply v1.0.0 final release
-- Apply v1.0.0 final HUD polish
+What changed:
+- Replaces compact HUD symbols with bold HEALTH / ENERGY / NERVE labels.
+- HEALTH label blue, ENERGY green, NERVE orange/red.
+- Current number stays white with a category-colored glow until capped.
+- Max number stays category-colored.
+- When capped, current/max become category-colored and the current value gets the stronger glow.
+- Adds a minimize control in the header: — minimizes, ＋ restores.
+- Minimized HUD becomes a small logo + live status strip instead of disappearing completely.
+- While minimized, bars, cooldowns, detail panel and ticker are hidden.
+- Minimized HUD remains draggable and long-press lock still works.
+- Minimized state is remembered across overlay rebuilds/restarts.
+- Existing attack/mug ticker, stealth handling, alerts, size presets and API behavior remain unchanged.
 
-Final HUD behavior:
-- TORNPULSE wordmark left, live status right.
-- Larger Health / Energy / Nerve values.
-- Current value white + category glow while below cap.
-- Maximum value always category-colored.
-- At cap, current value becomes category-colored with stronger glow.
-- Health blue, Energy green, Nerve orange/red.
-- Bottom scrolling event ticker for new attacks/mugs and Hospital/Jail release.
-- No mug cash amount is invented because Torn's attack payload does not provide it.
-- Stealth attackers remain UNKNOWN / STEALTH.
-- Existing HUD size presets, position memory, lock, alerts, diagnostics, and package ID are preserved.
+After uploading/replacing patch-v100-hud.cjs and committing, GitHub Actions should start a new Build TornPulse APK run automatically.
