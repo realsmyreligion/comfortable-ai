@@ -230,6 +230,71 @@ app = replaceOnce(
   '{snapshot.life?<MetricCard label="Health" bar={snapshot.life} accent={C.life}/>:null}\n    <MetricCard label="Energy" bar={snapshot.energy} accent={C.energy}/>\n    <MetricCard label="Nerve" bar={snapshot.nerve} accent={C.nerve}/>',
   'main-screen Health Energy Nerve labels'
 );
+
+
+// Final v1.0 Torn-familiar graphite reskin
+const skylineStart = kt.indexOf('  private class SkylineDrawable');
+const companionStart = skylineStart >= 0 ? kt.indexOf('  companion object {', skylineStart) : -1;
+if (skylineStart < 0 || companionStart < 0) throw new Error('TornPulse gray reskin: SkylineDrawable block not found');
+kt = kt.slice(0, skylineStart) + kt.slice(companionStart);
+
+kt = replaceOnce(
+  kt,
+  `import android.graphics.Canvas\nimport android.graphics.Color\nimport android.graphics.Paint\nimport android.graphics.PixelFormat\nimport android.graphics.Typeface\nimport android.graphics.drawable.Drawable\nimport android.graphics.drawable.GradientDrawable`,
+  `import android.graphics.Color\nimport android.graphics.PixelFormat\nimport android.graphics.Typeface\nimport android.graphics.drawable.GradientDrawable`,
+  'remove skyline drawing imports'
+);
+
+const grayHudBackground = `      background = GradientDrawable(\n        GradientDrawable.Orientation.TOP_BOTTOM,\n        intArrayOf(Color.rgb(77, 80, 83), Color.rgb(54, 57, 60))\n      ).apply {\n        shape = GradientDrawable.RECTANGLE\n        cornerRadius = dp(12).toFloat()\n      }`;
+kt = replaceOnce(
+  kt,
+  `      background = if (hudCollapsed) GradientDrawable().apply {\n        shape = GradientDrawable.RECTANGLE\n        cornerRadius = dp(12).toFloat()\n        setColor(Color.argb(248, 48, 51, 56))\n        setStroke(dp(1), Color.argb(165, 213, 47, 50))\n      } else SkylineDrawable(resources.displayMetrics.density)`,
+  grayHudBackground,
+  'clean graphite HUD background'
+);
+
+kt = replaceOnce(
+  kt,
+  `      setBackgroundColor(Color.rgb(213, 47, 50))`,
+  `      setBackgroundColor(Color.argb(85, 225, 228, 231))`,
+  'neutral steel HUD divider'
+);
+
+kt = replaceOnce(
+  kt,
+  `    root.background = if (hudCollapsed) GradientDrawable().apply {\n      shape = GradientDrawable.RECTANGLE\n      cornerRadius = dp(12).toFloat()\n      setColor(Color.argb(248, 48, 51, 56))\n      setStroke(dp(1), Color.argb(165, 213, 47, 50))\n    } else SkylineDrawable(resources.displayMetrics.density)`,
+  `    root.background = GradientDrawable(\n      GradientDrawable.Orientation.TOP_BOTTOM,\n      intArrayOf(Color.rgb(77, 80, 83), Color.rgb(54, 57, 60))\n    ).apply {\n      shape = GradientDrawable.RECTANGLE\n      cornerRadius = dp(12).toFloat()\n    }`,
+  'clean graphite collapsed/expanded HUD shell'
+);
+
+app = replaceOnce(
+  app,
+  `const C={\n  bg:'#050607',\n  surface:'#0B0D10',\n  surface2:'#111419',\n  line:'#22272E',\n  line2:'#353C46',\n  text:'#F4F5F6',\n  muted:'#89919C',\n  red:'#D52F32',\n  redDark:'#251012',\n  life:'#3498DB',\n  energy:'#67D52D',\n  nerve:'#FF5A38',\n  green:'#61D785',\n  amber:'#E1A834'\n};`,
+  `const C={\n  bg:'#303336',\n  surface:'#3A3E41',\n  surface2:'#464A4E',\n  line:'#26292C',\n  line2:'#5B6065',\n  text:'#F3F3F1',\n  muted:'#B7BBC0',\n  red:'#C83A3E',\n  redDark:'#44272A',\n  life:'#3498DB',\n  energy:'#67D52D',\n  nerve:'#FF5A38',\n  green:'#6FD08D',\n  amber:'#D7A544'\n};`,
+  'Torn-familiar graphite app palette'
+);
+
+app = replaceOnce(
+  app,
+  `A live overlay for Health, Energy, Nerve and Torn status. Choose a size, tap to expand, drag to move, or hold to lock it in place.`,
+  `A compact live overlay for Health, Energy, Nerve and Torn status. Choose a size, tap the TornPulse logo to collapse, drag to move, or hold to lock it in place.`,
+  'updated HUD help copy'
+);
+app = replaceOnce(app, `tap • drag • hold lock`, `logo collapse • drag • hold lock`, 'updated HUD interaction hint');
+
+// Industrialize the main page: tighter corners and warmer steel-gray copy.
+app = app.replaceAll("borderRadius:14", "borderRadius:7");
+app = app.replaceAll("borderRadius:13", "borderRadius:7");
+app = app.replaceAll("borderRadius:12", "borderRadius:6");
+app = app.replaceAll("borderRadius:11", "borderRadius:6");
+app = app.replaceAll("borderRadius:10", "borderRadius:5");
+app = app.replaceAll("borderRadius:8", "borderRadius:4");
+app = app.replaceAll("color:'#C7CBD0'", "color:'#E0E1DF'");
+app = app.replaceAll("color:'#C6CAD0'", "color:'#DDDEDC'");
+app = app.replaceAll("backgroundColor:'#090B0E'", "backgroundColor:C.surface2");
+app = app.replaceAll("backgroundColor:'#242930'", "backgroundColor:'#292C2F'");
+app = app.replaceAll("color:'#666D76'", "color:'#A4A8AC'");
+
 setEmbedded('APP_JS', app);
 
 setEmbedded('OVERLAY_SERVICE_KT', kt);

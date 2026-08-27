@@ -1,21 +1,20 @@
-TornPulse v1.0.0 — Lettered + Collapsible HUD final polish
+TORNPULSE v1.0.0 — TORN-FAMILIAR GRAPHITE RESKIN
 
-ONLY ONE REPO FILE NEEDS TO BE REPLACED:
-  patch-v100-hud.cjs  (repo root)
+Replace ONLY the root repository file:
+  patch-v100-hud.cjs
 
-Do NOT change .github/workflows/main.yml again. The active workflow is already correct and will run this replacement patch automatically on commit.
+Do NOT edit .github/workflows/main.yml.
 
-What changed:
-- Replaces compact HUD symbols with bold HEALTH / ENERGY / NERVE labels.
-- HEALTH label blue, ENERGY green, NERVE orange/red.
-- Current number stays white with a category-colored glow until capped.
-- Max number stays category-colored.
-- When capped, current/max become category-colored and the current value gets the stronger glow.
-- Adds a minimize control in the header: — minimizes, ＋ restores.
-- Minimized HUD becomes a small logo + live status strip instead of disappearing completely.
-- While minimized, bars, cooldowns, detail panel and ticker are hidden.
-- Minimized HUD remains draggable and long-press lock still works.
-- Minimized state is remembered across overlay rebuilds/restarts.
-- Existing attack/mug ticker, stealth handling, alerts, size presets and API behavior remain unchanged.
-
-After uploading/replacing patch-v100-hud.cjs and committing, GitHub Actions should start a new Build TornPulse APK run automatically.
+This pass includes:
+- Main app reskinned to graphite / steel gray
+- Tighter, more industrial Torn-inspired panel geometry
+- Health / Energy / Nerve full-word labels retained
+- HUD cityscape removed completely
+- HUD red shell outline removed completely
+- HUD uses clean graphite gray gradient shell
+- Neutral steel divider replaces decorative red rail
+- H / E / N compact stats retained
+- Per-stat full/capped prompts retained
+- Logo-only collapse retained
+- Boxed attack/mug alert retained
+- Main-screen HUD instructions corrected for logo collapse
