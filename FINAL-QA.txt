@@ -1,0 +1,22 @@
+TORNPULSE v1.0.0 — ON-DEVICE FINAL QA
+=====================================
+
+After installing over v0.9.0, confirm:
+
+[ ] App opens as v1.0.0 without asking for the API key again.
+[ ] Health is blue; Energy green; Nerve orange/red.
+[ ] Existing alerts/settings were retained.
+[ ] HUD launches and shows live Health / Energy / Nerve / status.
+[ ] COMPACT HUD is visibly smaller and hides the cooldown strip.
+[ ] STANDARD matches the familiar v0.9 sizing.
+[ ] LARGE is easier to read and still stays on-screen.
+[ ] Changing HUD size while HUD is running updates it immediately.
+[ ] Drag position is remembered after stopping/restarting HUD.
+[ ] Long-press lock/unlock still works.
+[ ] RESET POSITION returns the HUD to its safe default location.
+[ ] System Check reports API, live data, overlay permission, notifications and HUD service.
+[ ] Incoming attack notification works with a Limited read-only Torn API key.
+[ ] Hospital/Jail release and cooldown alerts behave normally.
+[ ] Turning data/Wi-Fi off shows stale/checking behavior and recovers when connection returns.
+
+If these pass, TornPulse 1.0.0 is release-ready.

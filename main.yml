@@ -53,8 +53,22 @@ jobs:
       - name: Apply v0.9.0 release candidate
         run: node patch-v090.cjs
 
+      - name: Apply v1.0.0 final release
+        run: node patch-v100.cjs
+
+      - name: Verify v1.0.0 patch
+        run: |
+          grep -q "config.version = '1.0.0';" app.config.js
+          grep -q "versionCode: 23," app.config.js
+          grep -q "TORNPULSE 1.0" app.config.js
+
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
+
+      - name: Verify native v1.0 HUD
+        run: |
+          grep -q 'TornPulse/1.0.0' android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
+          grep -q 'hud_preset' android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
@@ -63,9 +77,12 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
+      - name: APK checksum
+        run: sha256sum android/app/build/outputs/apk/release/app-release.apk
+
       - name: Upload TornPulse APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v0.9.0-rc-apk
+          name: tornpulse-v1.0.0-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
