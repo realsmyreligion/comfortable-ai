@@ -44,8 +44,11 @@ jobs:
       - name: Run TornPulse self-test
         run: npm run selftest
 
-      - name: Apply v0.8.0 visual redesign
-        run: node patch-v080.cjs
+      - name: Apply v0.8.1 refinement
+        run: node patch-v081.cjs
+
+      - name: Apply v0.8.2 Health + Status HUD
+        run: node patch-v082.cjs
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
@@ -60,6 +63,6 @@ jobs:
       - name: Upload TornPulse APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-apk
+          name: tornpulse-v0.8.2-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
