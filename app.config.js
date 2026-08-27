@@ -95,13 +95,13 @@ module.exports = ({ config }) => {
   config = {...config};
   config.name = 'TornPulse';
   config.slug = 'comfortable-ai';
-  config.version = '0.7.2';
+  config.version = '0.7.3';
   config.orientation = 'portrait';
   config.userInterfaceStyle = 'dark';
   config.android = {
     ...(config.android || {}),
     package: PACKAGE_NAME,
-    versionCode: 17,
+    versionCode: 18,
   };
 
   const plugins = Array.isArray(config.plugins) ? [...config.plugins] : [];
