@@ -1,0 +1,65 @@
+name: Build TornPulse APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Restore source folders
+        run: |
+          mkdir -p src scripts
+          cp core.js demo.js notifications.js storage.js tornApi.js src/
+          cp self-test.cjs scripts/
+
+      - name: Install dependencies
+        run: |
+          npm install --no-audit --no-fund
+          npx expo install --fix
+
+      - name: Run TornPulse self-test
+        run: npm run selftest
+
+      - name: Apply v0.8.0 visual redesign
+        run: node patch-v080.cjs
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --clean
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Upload TornPulse APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tornpulse-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
