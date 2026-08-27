@@ -1,24 +1,26 @@
-TORNPULSE v0.8.2 — CORRECTED BUILD FILES
+TORNPULSE v0.9.0 RELEASE CANDIDATE
+====================================
 
-IMPORTANT: the original v0.8.2 bundle omitted patch-v081.cjs. Use this corrected bundle.
+What this RC adds
+- Native incoming-attack notifications while the floating HUD is running (Limited read-only key required).
+- Hospital/Jail release notifications.
+- User-facing toggles for cooldown, status-release and incoming-attack alerts.
+- Incoming attack age in the app and expanded HUD.
+- Long-press the HUD to lock/unlock its position; lock state persists.
+- Better stale/offline indication and last-sync age.
+- Final version/copy cleanup for the v1.0 runway.
 
-GitHub repository: realsmyreligion/comfortable-ai
+Upload / replace
+1) Put patch-v090.cjs in the repository ROOT beside patch-v081.cjs and patch-v082.cjs.
+2) Replace .github/workflows/main.yml with the included main.yml.
+3) Commit both files.
+4) GitHub Actions should show: Apply v0.9.0 release candidate.
+5) The successful artifact is named: tornpulse-v0.9.0-rc-apk
 
-1) Put BOTH patch files in the repository ROOT:
-   - patch-v081.cjs
-   - patch-v082.cjs
+Important
+- Keep patch-v081.cjs and patch-v082.cjs in the repo root. The workflow applies the release chain in order.
+- Attack identity remains UNKNOWN / STEALTH when Torn does not expose the attacker.
+- Incoming attack push alerts operate while the native TornPulse HUD service is running.
 
-2) Replace the existing workflow at EXACTLY:
-   .github/workflows/main.yml
-   with the main.yml included in this ZIP.
-
-3) Commit to main.
-
-The workflow should show these two steps in order:
-   Apply v0.8.1 refinement
-   Apply v0.8.2 Health + Status HUD
-
-Then it will build and upload artifact:
-   tornpulse-v0.8.2-apk
-
-Do not use the artifact from run #28; that run still used the old v0.8.0 workflow.
+Visual polish:
+- Health now uses Torn-style blue (#3498DB) in both the dashboard and floating HUD.
