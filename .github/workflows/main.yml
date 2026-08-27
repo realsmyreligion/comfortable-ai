@@ -53,8 +53,36 @@ jobs:
       - name: Apply v0.9.0 release candidate
         run: node patch-v090.cjs
 
+      - name: Apply v1.0.0 final release
+        run: node patch-v100.cjs
+
+      - name: Apply v1.0.0 final HUD polish
+        run: node patch-v100-hud.cjs
+
+      - name: Verify v1.0.0 patches
+        run: |
+          grep -q "config.version = '1.0.0';" app.config.js
+          grep -q "versionCode: 23," app.config.js
+          grep -q "TORNPULSE 1.0" app.config.js
+          grep -q "eventTickerText" app.config.js
+          grep -q "GlowSpan" app.config.js
+          grep -q "MUGGED BY" app.config.js
+          grep -q "RELEASED FROM HOSPITAL" app.config.js
+
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
+
+      - name: Verify native v1.0 HUD
+        run: |
+          HUD=android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
+          grep -q 'TornPulse/1.0.0' "$HUD"
+          grep -q 'hud_preset' "$HUD"
+          grep -q 'eventTickerText' "$HUD"
+          grep -q 'GlowSpan' "$HUD"
+          grep -q 'statusText' "$HUD"
+          grep -q 'ImageView' "$HUD"
+          grep -q 'import android.widget.ImageView' "$HUD"
+          grep -q 'MUGGED BY' "$HUD"
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
@@ -63,9 +91,12 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
+      - name: APK checksum
+        run: sha256sum android/app/build/outputs/apk/release/app-release.apk
+
       - name: Upload TornPulse APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v0.9.0-rc-apk
+          name: tornpulse-v1.0.0-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
