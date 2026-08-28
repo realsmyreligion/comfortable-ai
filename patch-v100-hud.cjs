@@ -504,6 +504,12 @@ function targetListShortName(name) {
   return String(name || 'TARGETS').replace("Baldr's ",'').toUpperCase();
 }
 
+function TornPulsePageTabs({active,onChange}) {
+  return <View style={styles.pageTabs}>
+    {[['DASHBOARD','DASHBOARD'],['TARGETS','TARGETS']].map(([key,label]) => <Pressable key={key} onPress={()=>onChange(key)} style={[styles.pageTab,active===key&&styles.pageTabOn]}><Text style={[styles.pageTabText,active===key&&styles.pageTabTextOn]}>{label}</Text></Pressable>)}
+  </View>;
+}
+
 function TargetRow({target, demo, clock}) {
   const [expanded,setExpanded] = useState(false);
   const attackable = target.status === 'okay';
@@ -543,6 +549,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   const [tab,setTab] = useState('READY');
   const [lists,setLists] = useState(demo ? {'Demo Targets':TARGET_DEMO} : {});
   const [listName,setListName] = useState(demo ? 'Demo Targets' : '');
+  const [levelFilter,setLevelFilter] = useState('ALL');
   const [page,setPage] = useState(0);
   const [statusById,setStatusById] = useState({});
   const [loadingLists,setLoadingLists] = useState(!demo);
@@ -571,6 +578,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
         if (!names.length) throw new Error('No Baldr target lists were returned.');
         setLists(normalized);
         setListName(names[0]);
+        setLevelFilter('ALL');
         setPage(0);
         setMessage('Targets loaded • checking availability');
       } catch (e) {
@@ -582,10 +590,15 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
 
   const listNames = Object.keys(lists);
   const baseTargets = (lists[listName] || []).map(t => ({...t,...(statusById[t.id] || {status:'unknown',until:0,statusDescription:''})}));
-  const pageCount = Math.max(1,Math.ceil(baseTargets.length/TARGET_PAGE_SIZE));
+  const eligibleTargets = baseTargets.filter(t => Number(t.level||0) >= 15);
+  const availableLevels = [...new Set(eligibleTargets.map(t=>Number(t.level||0)).filter(Boolean))].sort((a,b)=>a-b);
+  const filteredTargets = levelFilter === 'ALL' ? eligibleTargets : eligibleTargets.filter(t => Number(t.level) === Number(levelFilter));
+  const orderedTargets = [...filteredTargets].sort((a,b) => b.level-a.level || a.total-b.total);
+  const pageCount = Math.max(1,Math.ceil(orderedTargets.length/TARGET_PAGE_SIZE));
   const safePage = Math.min(page,pageCount-1);
   const pageStart = safePage*TARGET_PAGE_SIZE;
-  const pageTargets = baseTargets.slice(pageStart,pageStart+TARGET_PAGE_SIZE);
+  const pageTargets = orderedTargets.slice(pageStart,pageStart+TARGET_PAGE_SIZE);
+  const levelCounts = filteredTargets.reduce((acc,t) => { const key=Number(t.level||0); acc[key]=(acc[key]||0)+1; return acc; },{});
   const nowMs = Number(clock || Date.now());
   const recentCalls = scanLogRef.current.filter(ts => nowMs-ts < TARGET_API_WINDOW_MS);
   scanLogRef.current = recentCalls;
@@ -595,8 +608,8 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
 
   let shown = [...pageTargets];
   if (tab === 'READY') shown = shown.filter(t => t.status === 'okay');
-  if (tab === 'LOW') shown.sort((a,b) => (a.status==='okay'?0:1)-(b.status==='okay'?0:1) || a.total-b.total || b.level-a.level);
-  if (tab === 'LEVEL') shown.sort((a,b) => b.level-a.level || a.total-b.total);
+  if (tab === 'LOW') shown.sort((a,b) => b.level-a.level || (a.status==='okay'?0:1)-(b.status==='okay'?0:1) || a.total-b.total);
+  else shown.sort((a,b) => b.level-a.level || a.total-b.total);
 
   async function scanPage(auto=false) {
     if (demo) return Alert.alert('Target Assistant demo','Live mode checks Torn status for the visible page.');
@@ -655,22 +668,29 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     const current = Math.max(0,listNames.indexOf(listName));
     const nextIndex = (current+delta+listNames.length)%listNames.length;
     setListName(listNames[nextIndex]);
+    setLevelFilter('ALL');
     setPage(0);
-    setTab('READY');
+    setTab('ALL');
     autoScanRef.current = false;
-    setMessage('List changed • refresh to check status');
+    setMessage('List changed • choose a level or refresh status');
+  }
+
+  function selectLevel(level) {
+    setLevelFilter(level);
+    setPage(0);
+    setTab('ALL');
+    setMessage(level === 'ALL' ? 'Level 15+ • refresh visible targets' : ('Level ' + level + ' selected • refresh status'));
   }
 
   function changePage(delta) {
     const nextPage = Math.max(0,Math.min(pageCount-1,safePage+delta));
     if (nextPage === safePage) return;
     setPage(nextPage);
-    setTab('READY');
     setMessage('Page ' + (nextPage+1) + ' • refresh to check status');
   }
 
   const emptyTitle = loadingLists ? 'LOADING TARGET INTEL…' : scanning ? 'SCANNING…' : tab==='READY' && checkedOnPage===0 ? 'CHECKING AVAILABILITY…' : tab==='READY' ? 'NO READY TARGETS ON THIS PAGE' : 'NO TARGETS';
-  const emptyText = loadingLists ? 'Pulling the current Baldr target lists.' : tab==='READY' ? 'Tap refresh to re-check this page, or switch to LOW BS / LEVEL / ALL.' : 'Choose another list or page.';
+  const emptyText = loadingLists ? 'Pulling the current Baldr target lists.' : tab==='READY' ? 'Tap refresh to re-check this level, or switch to LOW BS / ALL.' : 'Choose another level, list or page.';
 
   return <View style={styles.targetPanel}>
     <View style={styles.targetHead}>
@@ -679,17 +699,28 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     </View>
     <View style={styles.targetListBar}>
       <Pressable onPress={()=>changeList(-1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>‹</Text></Pressable>
-      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>{targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{baseTargets.length} TARGETS • PAGE {safePage+1}/{pageCount}</Text></View>
+      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>{targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{filteredTargets.length} SHOWN • {eligibleTargets.length} LEVEL 15+ • PAGE {safePage+1}/{pageCount}</Text></View>
       <Pressable onPress={()=>changeList(1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>›</Text></Pressable>
     </View>
+    <View style={styles.targetLevelWrap}>
+      <Text style={styles.targetLevelLabel}>LEVEL</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.targetLevelScroll}>
+        <Pressable onPress={()=>selectLevel('ALL')} style={[styles.targetLevelChip,levelFilter==='ALL'&&styles.targetLevelChipOn]}><Text style={[styles.targetLevelChipText,levelFilter==='ALL'&&styles.targetLevelChipTextOn]}>15+</Text></Pressable>
+        {availableLevels.map(level => <Pressable key={level} onPress={()=>selectLevel(level)} style={[styles.targetLevelChip,Number(levelFilter)===Number(level)&&styles.targetLevelChipOn]}><Text style={[styles.targetLevelChipText,Number(levelFilter)===Number(level)&&styles.targetLevelChipTextOn]}>{level}</Text></Pressable>)}
+      </ScrollView>
+    </View>
     <View style={styles.targetTabs}>
-      {[['READY','READY'],['LOW','LOW BS'],['LEVEL','LEVEL'],['ALL','ALL']].map(([key,label]) => <Pressable key={key} onPress={()=>setTab(key)} style={[styles.targetTab,tab===key&&styles.targetTabOn]}><Text style={[styles.targetTabText,tab===key&&styles.targetTabTextOn]}>{label}</Text></Pressable>)}
+      {[['READY','READY'],['LOW','LOW BS'],['ALL','ALL']].map(([key,label]) => <Pressable key={key} onPress={()=>setTab(key)} style={[styles.targetTab,tab===key&&styles.targetTabOn]}><Text style={[styles.targetTabText,tab===key&&styles.targetTabTextOn]}>{label}</Text></Pressable>)}
     </View>
     <View style={styles.targetColumns}><Text style={styles.targetColumnsText}>TARGET                 LV     TOTAL          STATUS</Text></View>
-    {shown.length ? shown.map(t => <TargetRow key={t.id} target={t} demo={demo} clock={clock}/>) : <View style={styles.targetEmpty}><Text style={styles.targetEmptyTitle}>{emptyTitle}</Text><Text style={styles.targetEmptyText}>{emptyText}</Text></View>}
+    {shown.length ? shown.map((t,index) => {
+      const prev = index>0 ? shown[index-1] : null;
+      const showLevel = !prev || Number(prev.level)!==Number(t.level);
+      return <View key={t.id}>{showLevel ? <View style={styles.targetLevelDivider}><Text style={styles.targetLevelDividerText}>LEVEL {t.level || '?'}</Text><Text style={styles.targetLevelDividerCount}>{levelCounts[Number(t.level||0)] || 0} TARGETS</Text></View> : null}<TargetRow target={t} demo={demo} clock={clock}/></View>;
+    }) : <View style={styles.targetEmpty}><Text style={styles.targetEmptyTitle}>{emptyTitle}</Text><Text style={styles.targetEmptyText}>{emptyText}</Text></View>}
     {pageCount>1 ? <View style={styles.targetPageNav}>
       <Pressable onPress={()=>changePage(-1)} disabled={safePage<=0} style={[styles.targetPageButton,safePage<=0&&styles.targetPageButtonOff]}><Text style={styles.targetPageButtonText}>‹ PREV</Text></Pressable>
-      <Text style={styles.targetPageText}>{pageStart+1}-{Math.min(pageStart+TARGET_PAGE_SIZE,baseTargets.length)} / {baseTargets.length}</Text>
+      <Text style={styles.targetPageText}>{pageStart+1}-{Math.min(pageStart+TARGET_PAGE_SIZE,filteredTargets.length)} / {filteredTargets.length}</Text>
       <Pressable onPress={()=>changePage(1)} disabled={safePage>=pageCount-1} style={[styles.targetPageButton,safePage>=pageCount-1&&styles.targetPageButtonOff]}><Text style={styles.targetPageButtonText}>NEXT ›</Text></Pressable>
     </View> : null}
     <Text style={styles.targetDemoNote}>{demo ? 'DEMO DATA • layout preview only' : (message || 'BALDR LIST INTEL • LIVE TORN STATUS')}</Text>
@@ -710,29 +741,62 @@ if (existingComponentStart >= 0 && existingComponentStart < appComponentAt) {
   app = app.slice(0,appComponentAt) + targetComponents + '\n' + app.slice(appComponentAt);
 }
 
-const sectionMarker = '<View style={styles.sectionHead}><Text style={styles.sectionTitle}>NEXT MOVE</Text><View style={styles.sectionLine}/></View>';
-if (app.includes('<TargetAssistant demo={Boolean(snapshot.demo)}/>')) {
-  app = app.replace('<TargetAssistant demo={Boolean(snapshot.demo)}/>', '<TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>');
-} else if (!app.includes('<TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>')) {
+// Targets now lives on its own first-class app page instead of inside the dashboard.
+if (!app.includes("const [activePage,setActivePage] = useState('DASHBOARD');")) {
   app = replaceOnce(
     app,
-    sectionMarker,
-    '<View style={styles.sectionHead}><Text style={styles.sectionTitle}>TARGETS</Text><View style={styles.sectionLine}/></View>\n    <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>\n    ' + sectionMarker,
-    'Target Assistant dashboard placement'
+    'const [clock, setClock] = useState(Date.now());',
+    "const [clock, setClock] = useState(Date.now());\n  const [activePage,setActivePage] = useState('DASHBOARD');",
+    'Targets page state'
+  );
+}
+
+// Remove an older inline dashboard Target Assistant if this patch is ever run on an upgraded source.
+app = app.replace('<View style={styles.sectionHead}><Text style={styles.sectionTitle}>TARGETS</Text><View style={styles.sectionLine}/></View>\n    <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>\n    ', '');
+app = app.replace('<TargetAssistant demo={Boolean(snapshot.demo)}/>', '');
+
+const connectedReturn = 'return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.content}>';
+if (!app.includes('TORNPULSE_TARGETS_PAGE_RETURN')) {
+  const targetPageReturn = `/* TORNPULSE_TARGETS_PAGE_RETURN */
+  if (activePage === 'TARGETS') return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.content}>
+    <View style={styles.header}>
+      <View style={styles.headerRail}/>
+      <View style={styles.headerMain}><View><Text style={styles.wordmark}>TORN<Text style={{color:C.red}}>PULSE</Text></Text><Text style={styles.headerSub}>TARGET INTELLIGENCE</Text></View><Pressable onPress={()=>setActivePage('DASHBOARD')} style={styles.refresh}><Text style={styles.refreshText}>‹</Text></Pressable></View>
+      <View style={styles.headerMeta}><StatusTag tone={snapshot.demo?'warn':'live'}>{snapshot.demo?'DEMO':'TARGETS'}</StatusTag><Text style={styles.versionInline}>v1.0.0</Text></View>
+    </View>
+    <TornPulsePageTabs active="TARGETS" onChange={setActivePage}/>
+    <View style={styles.targetPageIntro}><Text style={styles.targetPageTitle}>FIND YOUR LEVEL</Text><Text style={styles.targetPageCopy}>Targets start at Level 15. Swipe the level bar, choose a level, refresh live status, then pick a READY target.</Text></View>
+    <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>
+  </ScrollView></SafeAreaView>;
+
+  `;
+  app = replaceOnce(app, connectedReturn, targetPageReturn + connectedReturn, 'Targets standalone page');
+}
+
+const dashboardHeaderEnd = `<View style={styles.headerMeta}><StatusTag tone={snapshot.demo?'warn':staleData?'warn':'live'}>{snapshot.demo?'DEMO':staleData?'STALE':'LIVE DATA'}</StatusTag><Text style={styles.versionInline}>v1.0.0</Text></View>\n    </View>`;
+if (!app.includes('<TornPulsePageTabs active="DASHBOARD" onChange={setActivePage}/>')) {
+  app = replaceOnce(
+    app,
+    dashboardHeaderEnd,
+    dashboardHeaderEnd + '\n    <TornPulsePageTabs active="DASHBOARD" onChange={setActivePage}/>',
+    'Dashboard page tabs'
   );
 }
 
 const targetStyles = `
-  targetPanel:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:6,overflow:'hidden'},
-  targetHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,paddingHorizontal:10,paddingTop:9,paddingBottom:7},targetEyebrow:{color:C.text,fontSize:11,fontWeight:'900',letterSpacing:1.2},targetCount:{color:C.green,fontSize:9,fontWeight:'900',marginTop:2},targetCountMuted:{color:C.muted},targetRefresh:{width:34,height:34,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.line2,borderRadius:4,backgroundColor:C.surface2},targetRefreshOff:{opacity:.45},targetRefreshText:{color:C.text,fontSize:18,fontWeight:'900'},
-  targetListBar:{minHeight:38,flexDirection:'row',alignItems:'center',borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetListArrow:{width:38,height:38,alignItems:'center',justifyContent:'center'},targetListArrowText:{color:C.text,fontSize:24,fontWeight:'900'},targetListNameWrap:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center'},targetListName:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:1},targetListMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:1},
-  targetTabs:{flexDirection:'row',borderTopWidth:1,borderBottomWidth:1,borderColor:C.line},targetTab:{flex:1,paddingVertical:7,alignItems:'center',backgroundColor:C.surface2},targetTabOn:{backgroundColor:C.bg},targetTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:.65},targetTabTextOn:{color:C.text},
-  targetColumns:{paddingHorizontal:9,paddingVertical:4,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},
-  targetRow:{minHeight:48,flexDirection:'row',borderTopWidth:1,borderColor:C.line,backgroundColor:C.surface},targetBody:{flex:1,paddingLeft:8,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:20,flexDirection:'row',alignItems:'center'},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:C.text,fontSize:11,fontWeight:'900'},targetLv:{width:31,color:C.muted,fontSize:9,fontWeight:'800',textAlign:'right'},targetTotal:{width:66,color:C.text,fontSize:9,fontWeight:'900',textAlign:'right'},targetState:{width:51,color:C.amber,fontSize:9,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},
+  pageTabs:{flexDirection:'row',gap:7,marginBottom:14},pageTab:{flex:1,borderWidth:1,borderColor:C.line2,backgroundColor:C.surface,borderRadius:10,paddingVertical:10,alignItems:'center'},pageTabOn:{borderColor:C.red,backgroundColor:C.redDark},pageTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:1.1},pageTabTextOn:{color:C.text},
+  targetPageIntro:{marginBottom:10,paddingHorizontal:2},targetPageTitle:{color:C.text,fontSize:18,fontWeight:'900',letterSpacing:.6},targetPageCopy:{color:C.muted,fontSize:11,lineHeight:17,marginTop:4},
+  targetPanel:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:10,overflow:'hidden'},
+  targetHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,paddingHorizontal:10,paddingTop:9,paddingBottom:7},targetEyebrow:{color:C.text,fontSize:11,fontWeight:'900',letterSpacing:1.2},targetCount:{color:C.green,fontSize:9,fontWeight:'900',marginTop:2},targetCountMuted:{color:C.muted},targetRefresh:{width:34,height:34,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.line2,borderRadius:7,backgroundColor:C.surface2},targetRefreshOff:{opacity:.45},targetRefreshText:{color:C.text,fontSize:18,fontWeight:'900'},
+  targetListBar:{minHeight:40,flexDirection:'row',alignItems:'center',borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetListArrow:{width:40,height:40,alignItems:'center',justifyContent:'center'},targetListArrowText:{color:C.text,fontSize:24,fontWeight:'900'},targetListNameWrap:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center'},targetListName:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:1},targetListMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:1},
+  targetLevelWrap:{borderTopWidth:1,borderColor:C.line,backgroundColor:C.surface2,paddingTop:7,paddingBottom:8},targetLevelLabel:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:1.5,paddingHorizontal:9,marginBottom:6},targetLevelScroll:{paddingHorizontal:8,gap:6},targetLevelChip:{minWidth:38,height:30,borderWidth:1,borderColor:C.line2,borderRadius:7,backgroundColor:C.bg,alignItems:'center',justifyContent:'center',paddingHorizontal:9},targetLevelChipOn:{borderColor:C.red,backgroundColor:C.redDark},targetLevelChipText:{color:C.muted,fontSize:9,fontWeight:'900'},targetLevelChipTextOn:{color:C.text},
+  targetTabs:{flexDirection:'row',borderTopWidth:1,borderBottomWidth:1,borderColor:C.line},targetTab:{flex:1,paddingVertical:8,alignItems:'center',backgroundColor:C.surface2},targetTabOn:{backgroundColor:C.bg},targetTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:.65},targetTabTextOn:{color:C.text},
+  targetColumns:{paddingHorizontal:9,paddingVertical:4,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},targetLevelDivider:{height:28,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0C0E11'},targetLevelDividerText:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:1.1},targetLevelDividerCount:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:.7},
+  targetRow:{minHeight:48,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:C.surface},targetBody:{flex:1,paddingLeft:8,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:20,flexDirection:'row',alignItems:'center'},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:C.text,fontSize:11,fontWeight:'900'},targetLv:{width:31,color:C.muted,fontSize:9,fontWeight:'800',textAlign:'right'},targetTotal:{width:66,color:C.text,fontSize:9,fontWeight:'900',textAlign:'right'},targetState:{width:51,color:C.amber,fontSize:9,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},
   targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:14},targetStat:{flex:1,color:C.muted,fontSize:8,fontWeight:'800'},targetAttack:{width:38,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:C.line,backgroundColor:C.surface2},targetAttackOff:{opacity:.24},targetAttackText:{fontSize:17},
   targetExpanded:{marginLeft:14,marginTop:3,paddingTop:4,paddingBottom:2,borderTopWidth:1,borderColor:C.line},targetExpandedText:{color:C.muted,fontSize:8,fontWeight:'700'},targetEmpty:{padding:14,alignItems:'center'},targetEmptyTitle:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:.7},targetEmptyText:{color:C.muted,fontSize:9,lineHeight:14,textAlign:'center',marginTop:5},
   targetPageNav:{minHeight:36,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:6,borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetPageButton:{minWidth:64,paddingVertical:8,paddingHorizontal:6,alignItems:'center'},targetPageButtonOff:{opacity:.25},targetPageButtonText:{color:C.text,fontSize:8,fontWeight:'900',letterSpacing:.6},targetPageText:{color:C.muted,fontSize:8,fontWeight:'800'},
-  targetDemoNote:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.55,textAlign:'center',paddingVertical:5,paddingHorizontal:8,borderTopWidth:1,borderColor:C.line}
+  targetDemoNote:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.55,textAlign:'center',paddingVertical:6,paddingHorizontal:8,borderTopWidth:1,borderColor:C.line}
 `;
 
 if (!app.includes('targetListBar:{')) {
