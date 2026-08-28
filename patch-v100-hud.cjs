@@ -1,4 +1,46 @@
-// ============================================================
+if (!process.env.TORNPULSE_RECOVERY_MERGE) {
+  const fs0 = require('fs');
+  const {execFileSync} = require('child_process');
+
+  execFileSync(
+    'git',
+    ['fetch', '--depth=3', 'origin', 'main'],
+    {stdio:'ignore'}
+  );
+
+  const base = execFileSync(
+    'git',
+    [
+      'show',
+      'd6aadd2149067962c1a041f067e64b8087fa66a3:patch-v100-hud.cjs'
+    ],
+    {encoding:'utf8'}
+  );
+
+  const self = fs0.readFileSync(__filename, 'utf8');
+  const title = '// TornPulse — Compact Target Assistant v1';
+  const titleAt = self.indexOf(title);
+  const start = self.lastIndexOf(
+    '// ============================================================',
+    titleAt
+  );
+
+  if (start < 0) {
+    throw new Error(
+      'TornPulse recovery: Target Assistant block not found'
+    );
+  }
+
+  process.env.TORNPULSE_RECOVERY_MERGE = '1';
+
+  eval(
+    base +
+    '\n\n' +
+    self.slice(start)
+  );
+
+  process.exit(0);
+}// ============================================================
 // TornPulse — Compact Target Assistant v1
 // ============================================================
 
