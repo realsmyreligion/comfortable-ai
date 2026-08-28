@@ -373,10 +373,13 @@ import android.net.Uri
 import android.os.Build`,
   `import android.app.Dialog
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
+import android.util.Base64
 import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -385,7 +388,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.TextView`,
+import android.widget.TextView
+import java.io.ByteArrayOutputStream`,
   'in-app attack browser native imports'
 );
 
@@ -399,6 +403,25 @@ overlayModule = replaceOnce(
     promise.resolve(ComfortableOverlayService.isRunning)
   }`,
   `  @ReactMethod
+  fun getAppIcon(promise: Promise) {
+    try {
+      val drawable = appContext.applicationInfo.loadIcon(appContext.packageManager)
+      val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 192
+      val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 192
+      val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(bitmap)
+      drawable.setBounds(0, 0, canvas.width, canvas.height)
+      drawable.draw(canvas)
+      val output = ByteArrayOutputStream()
+      bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+      val encoded = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+      promise.resolve("data:image/png;base64,$encoded")
+    } catch (e: Exception) {
+      promise.reject("APP_ICON", "Unable to load TornPulse app icon.", e)
+    }
+  }
+
+  @ReactMethod
   fun openTornApp(url: String, promise: Promise) {
     try {
       val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -540,7 +563,7 @@ setEmbedded('OVERLAY_MODULE_KT', overlayModule);
 app = replaceOnce(
   app,
   'NativeModules, Platform, Pressable,',
-  'Animated, Linking, NativeModules, Platform, Pressable,',
+  'Animated, Image, Linking, NativeModules, Platform, Pressable,',
   'React Native Linking import'
 );
 
@@ -604,7 +627,7 @@ function normalizeTargetState(status) {
 
 function targetStatusGlyph(status) {
   if (status === 'okay') return '●';
-  if (status === 'afk') return '◆';
+  if (status === 'afk') return '•';
   if (status === 'hospital') return '✚';
   if (status === 'jail') return '▣';
   if (status === 'travel') return '✈';
@@ -615,7 +638,7 @@ function targetStatusGlyph(status) {
 
 function targetStatusColor(status) {
   if (status === 'okay') return C.green;
-  if (status === 'afk') return '#9A7CFF';
+  if (status === 'afk') return '#8D98A5';
   if (status === 'hospital') return C.red;
   if (status === 'jail') return C.amber;
   if (status === 'checking') return C.amber;
@@ -636,7 +659,7 @@ function targetStatusText(target, clock) {
     return (m > 99 ? '99+' : String(m)) + ':' + String(s).padStart(2,'0');
   }
   if (target.status === 'okay') return 'READY';
-  if (target.status === 'afk') return 'AFK?';
+  if (target.status === 'afk') return 'UNKNOWN';
   if (target.status === 'checking') return '...';
   if (target.status === 'travel') return 'TRAVEL';
   if (target.status === 'jail') return 'JAIL';
@@ -676,9 +699,9 @@ async function fetchPublicTargetStatus(targetId, key) {
 }
 
 function targetListShortName(name) {
-  if (name === "Baldr's List 1") return 'BALDR 1';
-  if (name === "Baldr's List 2") return 'BALDR 2';
-  if (name === "Baldr's List 3") return 'BALDR 3';
+  if (name === "Baldr's List 1") return 'SET 1';
+  if (name === "Baldr's List 2") return 'SET 2';
+  if (name === "Baldr's List 3") return 'SET 3';
   if (name === "Baldr's Extra List 1") return 'EXTRA 1';
   if (name === "Baldr's Extra List 2") return 'EXTRA 2';
   if (name === "Baldr's Extra List 3") return 'EXTRA 3';
@@ -694,25 +717,32 @@ function TornPulsePageTabs({active,onChange}) {
 
 function PulseBootLogo() {
   const pulse = useRef(new Animated.Value(0)).current;
+  const [iconUri,setIconUri] = useState('');
   useEffect(() => {
     const animation = Animated.loop(Animated.sequence([
-      Animated.timing(pulse,{toValue:1,duration:480,useNativeDriver:true}),
-      Animated.timing(pulse,{toValue:0,duration:720,useNativeDriver:true}),
+      Animated.timing(pulse,{toValue:1,duration:460,useNativeDriver:true}),
+      Animated.timing(pulse,{toValue:0,duration:740,useNativeDriver:true}),
     ]));
     animation.start();
     return () => animation.stop();
   }, [pulse]);
-  const logoScale = pulse.interpolate({inputRange:[0,1],outputRange:[1,1.075]});
-  const glowScale = pulse.interpolate({inputRange:[0,1],outputRange:[.86,1.34]});
-  const glowOpacity = pulse.interpolate({inputRange:[0,1],outputRange:[.14,.52]});
-  const lineScale = pulse.interpolate({inputRange:[0,1],outputRange:[.62,1]});
+  useEffect(() => {
+    let live = true;
+    if (Platform.OS === 'android' && ComfortableOverlay?.getAppIcon) {
+      ComfortableOverlay.getAppIcon().then(uri=>{ if (live && uri) setIconUri(String(uri)); }).catch(()=>{});
+    }
+    return () => { live = false; };
+  }, []);
+  const logoScale = pulse.interpolate({inputRange:[0,1],outputRange:[1,1.065]});
+  const glowScale = pulse.interpolate({inputRange:[0,1],outputRange:[.88,1.28]});
+  const glowOpacity = pulse.interpolate({inputRange:[0,1],outputRange:[.12,.42]});
+  const lineScale = pulse.interpolate({inputRange:[0,1],outputRange:[.58,1]});
   return <SafeAreaView style={styles.pulseBootScreen}>
     <StatusBar style="light"/>
     <View style={styles.pulseBootStage}>
       <Animated.View style={[styles.pulseBootGlow,{opacity:glowOpacity,transform:[{scale:glowScale}]}]}/>
-      <Animated.View style={[styles.pulseBootLogo,{transform:[{scale:logoScale}]}]}>
-        <View style={styles.pulseBootSlash}/>
-        <Text style={styles.pulseBootT}>T</Text><Text style={styles.pulseBootP}>P</Text>
+      <Animated.View style={[styles.pulseBootIconFrame,{transform:[{scale:logoScale}]}]}>
+        {iconUri ? <Image source={{uri:iconUri}} resizeMode="contain" style={styles.pulseBootIcon}/> : <View style={styles.pulseBootFallback}><Text style={styles.pulseBootFallbackText}>TP</Text></View>}
       </Animated.View>
     </View>
     <Text style={styles.pulseBootWord}>TORN<Text style={styles.pulseBootWordAccent}>PULSE</Text></Text>
@@ -727,7 +757,7 @@ function targetGroupInfo(status) {
   if (key === 'hospital') return {key:'hospital',label:'HOSPITAL • UNAVAILABLE',color:C.red};
   if (key === 'jail') return {key:'jail',label:'JAIL • UNAVAILABLE',color:C.amber};
   if (['travel','fallen','federal'].includes(key)) return {key:'away',label:'AWAY / OTHER • UNAVAILABLE',color:C.muted};
-  return {key:'unchecked',label:'UNCHECKED • STATUS UNKNOWN',color:'#72C7FF'};
+  return {key:'unchecked',label:'STATUS UNKNOWN',color:'#8D98A5'};
 }
 
 function targetStatusFilterMatch(target, filter) {
@@ -746,27 +776,17 @@ function TargetRow({target, demo, clock, rank}) {
   const sources = Array.isArray(target.sources) ? target.sources : (target.staticAfk ? ['AFK'] : ['BALDR']);
   const hasBaldr = sources.includes('BALDR');
   const hasAfk = sources.includes('AFK');
-  const staticAfk = hasAfk && !hasBaldr;
-  const sourceLabel = hasBaldr && hasAfk ? 'B+AFK' : hasAfk ? 'AFK' : 'BALDR';
+  const sourceLabel = hasBaldr && hasAfk ? 'MERGED' : hasAfk ? 'CLASSIC' : 'LIVE';
   const attack = async () => {
     if (demo) return Alert.alert('Target Assistant demo','The sword opens this player in the official Torn app when installed, with TornPulse’s browser as the fallback.');
     const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
     const openPreferred = async (url) => {
       if (Platform.OS === 'android' && ComfortableOverlay?.openTornApp) {
-        try {
-          await ComfortableOverlay.openTornApp(url);
-          return;
-        } catch (_) {}
+        try { await ComfortableOverlay.openTornApp(url); return; } catch (_) {}
       }
-      if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) {
-        await ComfortableOverlay.openAttackBrowser(url);
-        return;
-      }
-      if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
-        await ComfortableOverlay.openExternalUrl(url);
-        return;
-      }
+      if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) { await ComfortableOverlay.openAttackBrowser(url); return; }
+      if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) { await ComfortableOverlay.openExternalUrl(url); return; }
       await Linking.openURL(url);
     };
     try {
@@ -782,32 +802,28 @@ function TargetRow({target, demo, clock, rank}) {
   };
   const statusText = targetStatusText(target,clock);
   const totalLabel = hasBaldr ? compactStat(target.total) : String(target.statCap || '<2K');
+  const statLabel = (value) => hasBaldr ? compactStat(value) : '—';
   const railColor = targetStatusColor(target.status);
   const unavailable = targetUnavailable(target.status);
-  return <View style={[styles.targetRow,staticAfk&&styles.targetRowAfk,unavailable&&styles.targetRowUnavailable]}>
+  return <View style={[styles.targetRow,unavailable&&styles.targetRowUnavailable]}>
     <View style={[styles.targetRail,{backgroundColor:railColor}]}/>
     <Pressable onPress={() => setExpanded(v=>!v)} style={styles.targetBody}>
       <View style={styles.targetLine1}>
         <Text style={styles.targetRank}>{String(rank||1).padStart(2,'0')}</Text>
-        <Text numberOfLines={1} style={[styles.targetName,staticAfk&&styles.targetNameAfk]}>{target.name}</Text>
+        <Text numberOfLines={1} style={styles.targetName}>{target.name}</Text>
         <Text style={styles.targetLv}>L{target.level || '?'}</Text>
-        <Text style={styles.targetTotal}>BS {totalLabel}</Text>
+        <Text style={styles.targetTotal}>TOTAL {totalLabel}</Text>
         <Text style={[styles.targetState,{color:railColor}]}>{statusText}</Text>
       </View>
       <View style={styles.targetLine2}>
-        <Text style={[styles.targetSourceTag,hasAfk&&styles.targetSourceTagAfk,hasBaldr&&hasAfk&&styles.targetSourceTagBoth]}>{sourceLabel}</Text>
-        {hasBaldr ? <>
-          <Text style={styles.targetStat}>STR {compactStat(target.strength)}</Text>
-          <Text style={styles.targetStat}>DEF {compactStat(target.defense)}</Text>
-          <Text style={styles.targetStat}>SPD {compactStat(target.speed)}</Text>
-          <Text style={styles.targetStat}>DEX {compactStat(target.dexterity)}</Text>
-        </> : <Text numberOfLines={1} style={styles.targetStaticMeta}>TRIP CLASSIC • {target.statCap || '<2K'} BS CAP • REFRESH FOR LIVE STATUS</Text>}
+        <Text style={styles.targetStat}>STR {statLabel(target.strength)}</Text>
+        <Text style={styles.targetStat}>DEF {statLabel(target.defense)}</Text>
+        <Text style={styles.targetStat}>SPD {statLabel(target.speed)}</Text>
+        <Text style={styles.targetStat}>DEX {statLabel(target.dexterity)}</Text>
       </View>
-      {expanded ? <View style={styles.targetExpanded}>
-        <Text style={styles.targetExpandedText}>ID {target.id}  •  SOURCE {sourceLabel}  •  {target.statusDescription || statusText}</Text>
-      </View> : null}
+      {expanded ? <View style={styles.targetExpanded}><Text style={styles.targetExpandedText}>ID {target.id}  •  {sourceLabel} INTEL  •  {target.statusDescription || statusText}</Text></View> : null}
     </Pressable>
-    <Pressable onPress={attack} disabled={unavailable} style={[styles.targetAttack,staticAfk&&styles.targetAttackAfk,unavailable&&styles.targetAttackOff]} accessibilityLabel={(unavailable?'Unavailable target ':'Open attack page for ') + target.name} accessibilityState={{disabled:unavailable}}>
+    <Pressable onPress={attack} disabled={unavailable} style={[styles.targetAttack,unavailable&&styles.targetAttackOff]} accessibilityLabel={(unavailable?'Unavailable target ':'Open attack page for ') + target.name} accessibilityState={{disabled:unavailable}}>
       <Text style={[styles.targetAttackText,unavailable&&styles.targetAttackTextOff]}>⚔</Text>
     </Pressable>
   </View>;
@@ -845,7 +861,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
         if (!names.length) throw new Error('No Baldr target lists were returned.');
         setLists(normalized);
         setListName(names[0]);
-        setMessage('Unified radar loaded • Baldr + AFK Classic');
+        setMessage('Target radar loaded • sources merged');
       } catch (e) {
         if (live) setMessage(e && e.message ? e.message : 'Could not load the live target list.');
       } finally { if (live) setLoadingLists(false); }
@@ -953,7 +969,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     setListName(listNames[nextIndex]);
     setPage(0);
     setStatusFilter('ALL');
-    setMessage('Baldr set changed • AFK Classic remains merged in');
+    setMessage('Target set changed • sources remain merged');
   }
 
   function selectLevel(level) {
@@ -976,7 +992,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
 
   const levelScopeLabel = allLevelsSelected ? 'ALL LEVELS' : ('LEVEL ' + levelFilter);
   const emptyTitle = loadingLists ? 'LOADING TARGET INTEL…' : scanning ? 'SCANNING…' : 'NO TARGETS MATCH THIS VIEW';
-  const emptyText = loadingLists ? 'Combining Baldr and AFK Classic.' : 'Try ALL levels, ALL states, or another Baldr set.';
+  const emptyText = loadingLists ? 'Building the TornPulse target board.' : 'Try ALL levels, ALL states, or another target set.';
   const baldrCount = liveTargets.length;
   const afkCount = afkTargets.length;
 
@@ -985,10 +1001,10 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
       <View style={{flex:1,minWidth:0}}><Text style={styles.targetEyebrow}>UNIFIED TARGET BOARD</Text><Text style={styles.targetCount}>{readyOnPage} READY <Text style={styles.targetCountMuted}>• {hospitalOnPage} HOSP • {unavailableOnPage} UNAVAILABLE • {checkedOnPage}/{pageTargets.length} CHECKED</Text></Text></View>
       <Pressable onPress={()=>scanPage(false).catch(()=>{})} disabled={scanning||loadingLists||!pageTargets.length} style={[styles.targetRefresh,(scanning||loadingLists)&&styles.targetRefreshOff]}><Text style={styles.targetRefreshText}>{scanning?'…':'↻'}</Text></Pressable>
     </View>
-    <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}><Text style={{color:'#72C7FF'}}>BALDR {baldrCount}</Text>  +  <Text style={{color:'#C0AFFF'}}>AFK {afkCount}</Text>  •  DUPLICATES MERGED  •  API {apiBudget}/{TARGET_API_BUDGET}</Text></View>
+    <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}>TORNPULSE INTEL  •  {eligibleTargets.length} TARGETS  •  SOURCES MERGED  •  API {apiBudget}/{TARGET_API_BUDGET}</Text></View>
     <View style={styles.targetListBar}>
       <Pressable onPress={()=>changeList(-1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>‹</Text></Pressable>
-      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>{targetListShortName(listName)} + AFK CLASSIC</Text><Text style={styles.targetListMeta}>{eligibleTargets.length} UNIQUE • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
+      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>TORNPULSE {targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{eligibleTargets.length} TARGETS • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
       <Pressable onPress={()=>changeList(1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>›</Text></Pressable>
     </View>
     <View style={styles.targetLevelWrap}>
@@ -1001,7 +1017,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.targetStateTabs}>
       {[['ALL','ALL'],['READY','READY'],['HOSP','HOSPITAL'],['JAIL','JAIL'],['AWAY','AWAY'],['UNCHECKED','UNCHECKED']].map(([key,label]) => <Pressable key={key} onPress={()=>selectStatus(key)} style={[styles.targetStateTab,statusFilter===key&&styles.targetStateTabOn]}><Text style={[styles.targetStateTabText,statusFilter===key&&styles.targetStateTabTextOn]}>{label}</Text></Pressable>)}
     </ScrollView>
-    <View style={styles.targetColumns}><Text style={styles.targetColumnsText}>PLAYER                 LV       BS             STATE</Text></View>
+    <View style={styles.targetColumns}><Text style={styles.targetColumnsText}>PLAYER                 LV       TOTAL          STATE</Text></View>
     {pageTargets.length ? <>{shownGroups.map(group => <View key={'level-'+group.level}>
       <View style={styles.targetLevelDivider}><View style={styles.targetLevelAccent}/><Text style={styles.targetLevelDividerText}>LEVEL {group.level}</Text><Text style={styles.targetLevelDividerCount}>{group.targets.length} SHOWN</Text></View>
       {group.targets.map((target,index) => { const info=targetGroupInfo(target.status); const previous=index>0?targetGroupInfo(group.targets[index-1].status):null; return <View key={target.id}>{(!previous||previous.key!==info.key) ? <View style={[styles.targetStateDivider,{borderColor:info.color}]}><View style={[styles.targetStateDot,{backgroundColor:info.color}]}/><Text style={[styles.targetStateDividerText,{color:info.color}]}>{info.label}</Text></View> : null}<TargetRow target={target} demo={demo} clock={clock} rank={pageStart+pageTargets.indexOf(target)+1}/></View>; })}
@@ -1011,7 +1027,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
       <Text style={styles.targetPageText}>{orderedTargets.length ? (pageStart+1) : 0}-{Math.min(pageStart+TARGET_PAGE_SIZE,orderedTargets.length)} / {orderedTargets.length}</Text>
       <Pressable onPress={()=>changePage(1)} disabled={safePage>=pageCount-1} style={[styles.targetPageButton,safePage>=pageCount-1&&styles.targetPageButtonOff]}><Text style={styles.targetPageButtonText}>NEXT ›</Text></Pressable>
     </View> : null}
-    <Text style={styles.targetDemoNote}>{demo ? 'DEMO DATA • layout preview only' : (message || 'BALDR + AFK CLASSIC • ONE BOARD • REFRESH FOR LIVE STATUS')}</Text>
+    <Text style={styles.targetDemoNote}>{demo ? 'DEMO DATA • layout preview only' : (message || 'TORNPULSE TARGET INTEL • REFRESH FOR LIVE STATUS')}</Text>
   </View>;
 }
 
@@ -1065,7 +1081,7 @@ if (!app.includes('TORNPULSE_TARGETS_PAGE_RETURN')) {
       <View style={styles.headerMeta}><StatusTag tone={snapshot.demo?'warn':'live'}>{snapshot.demo?'DEMO':'TARGETS'}</StatusTag><Text style={styles.versionInline}>v1.0.0</Text></View>
     </View>
     <TornPulsePageTabs active="TARGETS" onChange={setActivePage}/>
-    <View style={styles.targetPageIntro}><Text style={styles.targetPageKicker}>TORNPULSE • TARGET INTELLIGENCE</Text><Text style={styles.targetPageTitle}>TARGET RADAR</Text><Text style={styles.targetPageCopy}>One clean target board combines Baldr and AFK Classic. Filter by level and current state, refresh the visible page for live status, and attackable players stay bright while unavailable players fade out.</Text></View>
+    <View style={styles.targetPageIntro}><Text style={styles.targetPageKicker}>TORNPULSE • TARGET INTELLIGENCE</Text><Text style={styles.targetPageTitle}>TARGET RADAR</Text><Text style={styles.targetPageCopy}>A compact TornPulse target board built for fast scanning: level, total power, STR, DEF, SPD, DEX and live availability at a glance.</Text></View>
     <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>
   </ScrollView></SafeAreaView>;
 
@@ -1084,23 +1100,23 @@ if (!app.includes('<TornPulsePageTabs active="DASHBOARD" onChange={setActivePage
 }
 
 const targetStyles = `
-  pulseBootScreen:{flex:1,backgroundColor:'#030405',alignItems:'center',justifyContent:'center',paddingHorizontal:28},pulseBootStage:{width:190,height:190,alignItems:'center',justifyContent:'center'},pulseBootGlow:{position:'absolute',width:150,height:150,borderRadius:42,backgroundColor:'rgba(200,58,62,.20)',borderWidth:1,borderColor:'rgba(200,58,62,.34)'},pulseBootLogo:{width:126,height:126,borderRadius:25,backgroundColor:'#0A0B0D',borderWidth:2,borderColor:'#31353A',alignItems:'center',justifyContent:'center',flexDirection:'row',overflow:'hidden',elevation:9},pulseBootSlash:{position:'absolute',width:13,height:160,backgroundColor:C.red,transform:[{rotate:'24deg'}],opacity:.92},pulseBootT:{color:'#F4F5F6',fontSize:58,fontWeight:'900',letterSpacing:-5,marginRight:-1,textShadowColor:'rgba(255,255,255,.20)',textShadowRadius:4},pulseBootP:{color:C.red,fontSize:58,fontWeight:'900',letterSpacing:-5,marginLeft:-1,textShadowColor:'rgba(200,58,62,.45)',textShadowRadius:6},pulseBootWord:{color:'#F4F5F6',fontSize:22,fontWeight:'900',letterSpacing:3.3,marginTop:18},pulseBootWordAccent:{color:C.red},pulseBootLineTrack:{width:152,height:2,backgroundColor:'#202327',overflow:'hidden',marginTop:15},pulseBootLine:{width:'100%',height:2,backgroundColor:C.red},pulseBootSub:{color:'#757D87',fontSize:8,fontWeight:'900',letterSpacing:2.1,marginTop:11},
+  pulseBootScreen:{flex:1,backgroundColor:'#030405',alignItems:'center',justifyContent:'center',paddingHorizontal:28},pulseBootStage:{width:190,height:190,alignItems:'center',justifyContent:'center'},pulseBootGlow:{position:'absolute',width:154,height:154,borderRadius:48,backgroundColor:'rgba(198,45,49,.16)',borderWidth:1,borderColor:'rgba(198,45,49,.30)'},pulseBootIconFrame:{width:126,height:126,borderRadius:29,backgroundColor:'#0A0B0D',borderWidth:1,borderColor:'#33383E',alignItems:'center',justifyContent:'center',overflow:'hidden',elevation:9},pulseBootIcon:{width:118,height:118,borderRadius:25},pulseBootFallback:{width:118,height:118,borderRadius:25,backgroundColor:'#111316',alignItems:'center',justifyContent:'center'},pulseBootFallbackText:{color:C.red,fontSize:42,fontWeight:'900',letterSpacing:-3},pulseBootWord:{color:'#F4F5F6',fontSize:22,fontWeight:'900',letterSpacing:3.3,marginTop:18},pulseBootWordAccent:{color:C.red},pulseBootLineTrack:{width:152,height:2,backgroundColor:'#202327',overflow:'hidden',marginTop:15},pulseBootLine:{width:'100%',height:2,backgroundColor:C.red},pulseBootSub:{color:'#757D87',fontSize:8,fontWeight:'900',letterSpacing:2.1,marginTop:11},
   pageTabs:{flexDirection:'row',gap:7,marginBottom:14},pageTab:{flex:1,borderWidth:1,borderColor:C.line2,backgroundColor:C.surface,borderRadius:10,paddingVertical:10,alignItems:'center'},pageTabOn:{borderColor:C.red,backgroundColor:C.redDark,elevation:4},pageTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:1.05},pageTabTextOn:{color:'#FFF',textShadowColor:'rgba(213,47,50,.55)',textShadowRadius:4},
   targetPageIntro:{marginBottom:12,paddingHorizontal:3,paddingTop:1},targetPageKicker:{color:C.red,fontSize:8,fontWeight:'900',letterSpacing:1.6},targetPageTitle:{color:C.text,fontSize:22,fontWeight:'900',letterSpacing:.7,marginTop:3,textShadowColor:'rgba(255,255,255,.12)',textShadowRadius:3},targetPageCopy:{color:C.muted,fontSize:11,lineHeight:17,marginTop:5},
   targetPanel:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line2,borderRadius:12,overflow:'hidden',elevation:2},
   targetSourceBar:{flexDirection:'row',gap:6,padding:7,backgroundColor:'#090B0E',borderBottomWidth:1,borderColor:C.line},targetSourceChip:{flex:1,minHeight:36,borderWidth:1,borderColor:C.line2,borderRadius:8,alignItems:'center',justifyContent:'center',backgroundColor:C.surface2},targetSourceChipLive:{borderColor:C.green,backgroundColor:'#09170F',elevation:3},targetSourceChipAfk:{borderColor:'#9A7CFF',backgroundColor:'#151126',elevation:3},targetSourceText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:.8},targetSourceTextOn:{color:C.text},
-  targetHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,paddingHorizontal:11,paddingTop:10,paddingBottom:8},targetEyebrow:{color:C.text,fontSize:12,fontWeight:'900',letterSpacing:1.25},targetCount:{color:C.green,fontSize:9,fontWeight:'900',marginTop:3},targetCountAfk:{color:'#B6A5FF'},targetCountMuted:{color:C.muted},targetRefresh:{width:36,height:36,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.green,borderRadius:8,backgroundColor:'#09170F',elevation:2},targetRefreshOff:{opacity:.45},targetRefreshText:{color:C.green,fontSize:19,fontWeight:'900'},targetStaticBadge:{width:42,height:34,borderWidth:1,borderColor:'#9A7CFF',borderRadius:8,backgroundColor:'#151126',alignItems:'center',justifyContent:'center'},targetStaticBadgeText:{color:'#C9BCFF',fontSize:9,fontWeight:'900',letterSpacing:1},
-  targetListBar:{minHeight:40,flexDirection:'row',alignItems:'center',borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetListArrow:{width:40,height:40,alignItems:'center',justifyContent:'center'},targetListArrowText:{color:C.text,fontSize:24,fontWeight:'900'},targetListNameWrap:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center'},targetListName:{color:'#72C7FF',fontSize:10,fontWeight:'900',letterSpacing:1,textShadowColor:'rgba(78,175,255,0.35)',textShadowRadius:3},targetListMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:1},
+  targetHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,paddingHorizontal:11,paddingTop:10,paddingBottom:8},targetEyebrow:{color:C.text,fontSize:12,fontWeight:'900',letterSpacing:1.25},targetCount:{color:C.green,fontSize:9,fontWeight:'900',marginTop:3},targetCountAfk:{color:'#A8B0BA'},targetCountMuted:{color:C.muted},targetRefresh:{width:36,height:36,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.green,borderRadius:8,backgroundColor:'#09170F',elevation:2},targetRefreshOff:{opacity:.45},targetRefreshText:{color:C.green,fontSize:19,fontWeight:'900'},targetStaticBadge:{width:42,height:34,borderWidth:1,borderColor:'#9A7CFF',borderRadius:8,backgroundColor:'#151126',alignItems:'center',justifyContent:'center'},targetStaticBadgeText:{color:'#C9BCFF',fontSize:9,fontWeight:'900',letterSpacing:1},
+  targetListBar:{minHeight:40,flexDirection:'row',alignItems:'center',borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetListArrow:{width:40,height:40,alignItems:'center',justifyContent:'center'},targetListArrowText:{color:C.text,fontSize:24,fontWeight:'900'},targetListNameWrap:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center'},targetListName:{color:'#F1F3F5',fontSize:10,fontWeight:'900',letterSpacing:1.1},targetListMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:1},
   targetAfkSource:{minHeight:44,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:11,borderTopWidth:1,borderColor:C.line,backgroundColor:'#10101A'},targetAfkSourceTitle:{color:'#C9BCFF',fontSize:10,fontWeight:'900',letterSpacing:1},targetAfkSourceMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:2},targetAfkSourceArrow:{color:'#9A7CFF',fontSize:17,fontWeight:'900'},
   targetLevelWrap:{borderTopWidth:1,borderColor:C.line,backgroundColor:C.surface2,paddingTop:8,paddingBottom:9},targetLevelLabel:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:1.5,paddingHorizontal:9,marginBottom:7},targetLevelScroll:{paddingHorizontal:8,gap:6,paddingBottom:1},targetLevelChip:{minWidth:44,height:38,borderWidth:1,borderColor:C.line2,borderRadius:9,backgroundColor:C.bg,alignItems:'center',justifyContent:'center',paddingHorizontal:8},targetLevelChipAll:{minWidth:52},targetLevelChipEmpty:{opacity:.38},targetLevelChipOn:{borderColor:C.red,backgroundColor:C.redDark,elevation:5},targetLevelChipText:{color:C.muted,fontSize:10,fontWeight:'900',lineHeight:12},targetLevelChipTextOn:{color:'#FFF',fontSize:11,textShadowColor:'rgba(213,47,50,.7)',textShadowRadius:4},targetLevelChipCount:{color:'#666F7B',fontSize:7,fontWeight:'900',marginTop:1},targetLevelChipCountOn:{color:'#F5B4B6'},
   targetTabs:{flexDirection:'row',borderTopWidth:1,borderBottomWidth:1,borderColor:C.line},targetTab:{flex:1,paddingVertical:8,alignItems:'center',backgroundColor:C.surface2},targetTabOn:{backgroundColor:'#10151C'},targetTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:.65},targetTabTextOn:{color:'#72C7FF'},targetAfkNotice:{paddingVertical:7,paddingHorizontal:9,borderTopWidth:1,borderBottomWidth:1,borderColor:'#2A2442',backgroundColor:'#110E1B'},targetAfkNoticeText:{color:'#A99AE8',fontSize:8,fontWeight:'900',letterSpacing:.45,textAlign:'center'},
   targetUnifiedLegend:{paddingVertical:7,paddingHorizontal:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0A0D11'},targetUnifiedLegendText:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:.45,textAlign:'center'},
-  targetStateTabs:{paddingHorizontal:7,paddingVertical:7,gap:6,backgroundColor:C.surface2,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line},targetStateTab:{minWidth:66,height:31,paddingHorizontal:10,borderWidth:1,borderColor:C.line2,borderRadius:8,alignItems:'center',justifyContent:'center',backgroundColor:C.bg},targetStateTabOn:{borderColor:'#72C7FF',backgroundColor:'#101824',elevation:3},targetStateTabText:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:.55},targetStateTabTextOn:{color:'#BEE5FF'},
+  targetStateTabs:{paddingHorizontal:7,paddingVertical:7,gap:6,backgroundColor:C.surface2,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line},targetStateTab:{minWidth:66,height:31,paddingHorizontal:10,borderWidth:1,borderColor:C.line2,borderRadius:8,alignItems:'center',justifyContent:'center',backgroundColor:C.bg},targetStateTabOn:{borderColor:C.red,backgroundColor:'#1A0D0F',elevation:3},targetStateTabText:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:.55},targetStateTabTextOn:{color:'#FFFFFF'},
   targetStateDivider:{minHeight:24,flexDirection:'row',alignItems:'center',paddingHorizontal:10,borderTopWidth:1,borderBottomWidth:1,backgroundColor:'#0A0C0F'},targetStateDot:{width:6,height:6,borderRadius:3,marginRight:7},targetStateDividerText:{fontSize:8,fontWeight:'900',letterSpacing:.8},
-  targetSourceTag:{width:43,color:'#72C7FF',fontSize:7,fontWeight:'900',letterSpacing:.35},targetSourceTagAfk:{color:'#C0AFFF'},targetSourceTagBoth:{color:'#A7D5FF'},
-  targetColumns:{paddingHorizontal:9,paddingVertical:5,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},targetLevelDivider:{height:32,flexDirection:'row',alignItems:'center',paddingRight:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0C1016'},targetLevelAccent:{width:4,alignSelf:'stretch',backgroundColor:C.red,marginRight:9},targetLevelDividerText:{flex:1,color:'#F4F6F8',fontSize:11,fontWeight:'900',letterSpacing:1.2},targetLevelDividerCount:{color:'#72C7FF',fontSize:8,fontWeight:'900',letterSpacing:.7},
-  targetRow:{minHeight:50,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:C.surface},targetRowAfk:{backgroundColor:'#111118'},targetRowUnavailable:{opacity:.34,backgroundColor:'#0B0C0E'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#72C7FF',fontSize:11,fontWeight:'900',textShadowColor:'rgba(64,169,255,0.55)',textShadowRadius:5},targetNameAfk:{color:'#C0AFFF',textShadowColor:'rgba(154,124,255,0.58)',textShadowRadius:5},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:68,color:C.text,fontSize:9,fontWeight:'900',textAlign:'right'},targetState:{width:51,fontSize:9,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},targetUnavailableDivider:{minHeight:24,justifyContent:'center',paddingHorizontal:10,borderBottomWidth:1,borderTopWidth:1,borderColor:'#2A2022',backgroundColor:'#120C0D'},targetUnavailableDividerText:{color:'#9A666A',fontSize:7,fontWeight:'900',letterSpacing:.85},
-  targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:23},targetStat:{flex:1,color:C.muted,fontSize:8,fontWeight:'800'},targetStaticMeta:{color:'#7F7898',fontSize:8,fontWeight:'900',letterSpacing:.2,flex:1},targetStaticMetaLive:{color:'#9AB9A7'},targetVerify:{width:34,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:'#30284A',backgroundColor:'#14101F'},targetVerifyBusy:{opacity:.55},targetVerifyText:{color:'#BBAAFF',fontSize:16,fontWeight:'900'},targetAttack:{width:40,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:C.line,backgroundColor:C.surface2},targetAttackAfk:{backgroundColor:'#171226',borderLeftColor:'#30284A'},targetAttackOff:{opacity:.18,backgroundColor:'#0A0B0D'},targetAttackText:{fontSize:17},targetAttackTextOff:{opacity:.35},
+  targetSourceTag:{width:43,color:'#8D98A5',fontSize:7,fontWeight:'900',letterSpacing:.35},targetSourceTagAfk:{color:'#8D98A5'},targetSourceTagBoth:{color:'#A7AFB8'},
+  targetColumns:{paddingHorizontal:9,paddingVertical:5,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},targetLevelDivider:{height:32,flexDirection:'row',alignItems:'center',paddingRight:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0C1016'},targetLevelAccent:{width:4,alignSelf:'stretch',backgroundColor:C.red,marginRight:9},targetLevelDividerText:{flex:1,color:'#F4F6F8',fontSize:11,fontWeight:'900',letterSpacing:1.2},targetLevelDividerCount:{color:'#A8B0BA',fontSize:8,fontWeight:'900',letterSpacing:.7},
+  targetRow:{minHeight:48,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0E1013'},targetRowAfk:{backgroundColor:'#0E1013'},targetRowUnavailable:{opacity:.42,backgroundColor:'#090A0C'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#F2F4F6',fontSize:11,fontWeight:'900'},targetNameAfk:{color:'#F2F4F6'},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:78,color:'#E8EAED',fontSize:8,fontWeight:'900',textAlign:'right'},targetState:{width:58,fontSize:8,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},targetUnavailableDivider:{minHeight:24,justifyContent:'center',paddingHorizontal:10,borderBottomWidth:1,borderTopWidth:1,borderColor:'#2A2022',backgroundColor:'#120C0D'},targetUnavailableDividerText:{color:'#9A666A',fontSize:7,fontWeight:'900',letterSpacing:.85},
+  targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:23,paddingRight:2},targetStat:{flex:1,color:'#9AA3AD',fontSize:8,fontWeight:'800'},targetStaticMeta:{color:'#8D98A5',fontSize:8,fontWeight:'900',letterSpacing:.2,flex:1},targetStaticMetaLive:{color:'#9AB9A7'},targetVerify:{width:34,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:'#30284A',backgroundColor:'#14101F'},targetVerifyBusy:{opacity:.55},targetVerifyText:{color:'#BBAAFF',fontSize:16,fontWeight:'900'},targetAttack:{width:40,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:C.line,backgroundColor:'#13161A'},targetAttackAfk:{backgroundColor:'#13161A',borderLeftColor:C.line},targetAttackOff:{opacity:.18,backgroundColor:'#0A0B0D'},targetAttackText:{fontSize:17},targetAttackTextOff:{opacity:.35},
   targetExpanded:{marginLeft:14,marginTop:3,paddingTop:4,paddingBottom:2,borderTopWidth:1,borderColor:C.line},targetExpandedText:{color:C.muted,fontSize:8,fontWeight:'700'},targetEmpty:{padding:16,alignItems:'center'},targetEmptyTitle:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:.7},targetEmptyText:{color:C.muted,fontSize:9,lineHeight:14,textAlign:'center',marginTop:5},
   targetPageNav:{minHeight:36,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:6,borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetPageButton:{minWidth:64,paddingVertical:8,paddingHorizontal:6,alignItems:'center'},targetPageButtonOff:{opacity:.25},targetPageButtonText:{color:'#72C7FF',fontSize:8,fontWeight:'900',letterSpacing:.6},targetPageText:{color:C.muted,fontSize:8,fontWeight:'800'},
   targetDemoNote:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.55,textAlign:'center',paddingVertical:6,paddingHorizontal:8,borderTopWidth:1,borderColor:C.line}

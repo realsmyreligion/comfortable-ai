@@ -1,33 +1,27 @@
-TornPulse — Unified Target Radar
+TornPulse — Target Radar Final Cleanup
 
 WHAT CHANGED
-• BALDR + AFK Classic now live on ONE target board.
-• No separate LIVE BALDR / AFK CLASSIC pages or mode switch.
-• Duplicate player IDs are merged into one row.
-• Every row carries a compact source tag: BALDR, AFK, or B+AFK.
-• Targets are organized by LEVEL first, then current STATE.
-• State bands: READY, UNCHECKED, HOSPITAL, JAIL, AWAY / OTHER.
-• READY targets stay bright and attackable.
-• Hospital / Jail / Travel / Fallen / Federal targets stay faded and the sword is disabled.
-• UNCHECKED targets stay neutral until refreshed; TornPulse does not guess their live status.
-• Refresh checks the visible mixed page, including AFK targets.
-• Baldr set selector remains compact; AFK Classic stays merged in at all times.
-• Level filters remain: ALL, 15, 16, 17, etc.
-• State filter added: ALL, READY, HOSPITAL, JAIL, AWAY, UNCHECKED.
-• HUD Drug / Booster / Medical symbols remain: 💊 🥤 ✚.
-• Torn-app-first attack routing remains intact.
-• Pulsing TornPulse startup screen remains intact.
-
-EXPECTED FLOW
-TARGETS -> choose level -> choose state if wanted -> refresh -> READY rows bright -> tap sword -> official Torn app first.
+• Target Radar now uses TornPulse graphite / red / steel styling instead of purple AFK styling.
+• Player names are clean near-white; level stays TornPulse red.
+• Rows are compact and stat-first: Name, Level, TOTAL, State / STR, DEF, SPD, DEX.
+• Baldr-backed targets show real total + split battle stats from the source data.
+• Classic AFK-only targets show their available total cap and dashes for unavailable split stats. No fabricated numbers.
+• Big AFK / AFK? / Trip Classic clutter is removed from normal rows.
+• Underlying sources remain merged and duplicate IDs remain collapsed.
+• Target set labels are TornPulse SET 1 / SET 2 / SET 3 etc rather than prominent Baldr branding.
+• READY stays bright and attackable; Hospital/Jail/Away remain faded with disabled sword.
+• Status bands remain READY, STATUS UNKNOWN, HOSPITAL, JAIL, AWAY / OTHER.
+• Official Torn app remains the first attack-link destination.
+• HUD 💊 / 🥤 / ✚ symbols remain intact.
+• Startup screen now loads Android's actual installed TornPulse launcher icon and pulses that exact icon.
 
 INSTALL
 1. Extract this ZIP.
-2. Replace ONLY root patch-v100-hud.cjs in GitHub.
+2. Replace ONLY the root patch-v100-hud.cjs in GitHub.
 3. Leave .github/workflows/main.yml unchanged.
 4. Commit.
 5. Tell ChatGPT: Done
 
 VALIDATION
 • node --check: PASS
-• Target JSX/TypeScript parse: 0 errors
+• Target JSX/TypeScript transpile diagnostics: 0
