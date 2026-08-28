@@ -363,8 +363,60 @@ function replaceOnce(text, oldText, newText, label) {
 }
 
 let app = extractEmbedded('APP_JS').value;
+let overlayModule = extractEmbedded('OVERLAY_MODULE_KT').value;
 
-// Linking only hands a selected player to Torn. The user performs the attack in Torn; TornPulse never automates combat.
+// Android's official Torn app intercepts normal torn.com ACTION_VIEW links and routes
+// them into its URL Manager. Add a native helper that explicitly targets real browser
+// packages so the user's sword tap reaches Torn's web attack screen instead.
+overlayModule = replaceOnce(
+  overlayModule,
+  `  @ReactMethod
+  fun isRunning(promise: Promise) {
+    promise.resolve(ComfortableOverlayService.isRunning)
+  }`,
+  `  @ReactMethod
+  fun openExternalUrl(url: String, promise: Promise) {
+    val uri = Uri.parse(url)
+    val browserPackages = listOf(
+      "com.sec.android.app.sbrowser",
+      "com.android.chrome",
+      "com.google.android.apps.chrome",
+      "org.mozilla.firefox",
+      "com.brave.browser",
+      "com.microsoft.emmx",
+      "com.opera.browser",
+      "com.opera.gx",
+      "com.vivaldi.browser",
+      "com.duckduckgo.mobile.android"
+    )
+    var lastError: Exception? = null
+    for (packageName in browserPackages) {
+      try {
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+          setPackage(packageName)
+          addCategory(Intent.CATEGORY_BROWSABLE)
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        appContext.startActivity(intent)
+        promise.resolve(packageName)
+        return
+      } catch (e: Exception) {
+        lastError = e
+      }
+    }
+    promise.reject("NO_EXTERNAL_BROWSER", "No supported external browser could open this Torn link.", lastError)
+  }
+
+  @ReactMethod
+  fun isRunning(promise: Promise) {
+    promise.resolve(ComfortableOverlayService.isRunning)
+  }`,
+  'external browser launcher native method'
+);
+setEmbedded('OVERLAY_MODULE_KT', overlayModule);
+
+// Linking is still used for non-attack source links. Attack links use the native browser launcher.
+// The user performs the attack in Torn; TornPulse never automates combat.
 app = replaceOnce(
   app,
   'NativeModules, Platform, Pressable,',
@@ -522,17 +574,25 @@ function TargetRow({target, demo, clock, onVerify, rank}) {
   const verifying = staticAfk && target.status === 'checking';
   const liveVerified = staticAfk && !['afk','unknown','checking','error'].includes(String(target.status||''));
   const attack = async () => {
-    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player directly on Torn’s attack screen.');
+    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player directly on Torn’s attack screen in your browser.');
     const attackUrl = 'https://www.torn.com/loader.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
     try {
-      await Linking.openURL(attackUrl);
+      if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
+        await ComfortableOverlay.openExternalUrl(attackUrl);
+      } else {
+        await Linking.openURL(attackUrl);
+      }
     } catch (_) {
       try {
-        await Linking.openURL(profileUrl);
-        Alert.alert('Attack page could not open','TornPulse opened the player profile instead. Tap Attack from Torn if needed.');
+        if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
+          await ComfortableOverlay.openExternalUrl(profileUrl);
+        } else {
+          await Linking.openURL(profileUrl);
+        }
+        Alert.alert('Attack page could not open','TornPulse opened the player profile in your browser instead. Tap Attack from there if needed.');
       } catch (_) {
-        Alert.alert('Could not open Torn','Neither the attack page nor the player profile could be opened.');
+        Alert.alert('Browser needed','TornPulse could not find a supported browser. Install or enable Samsung Internet, Chrome, Firefox, Brave, Edge, Opera, Vivaldi, or DuckDuckGo.');
       }
     }
   };

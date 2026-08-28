@@ -1,16 +1,21 @@
-TornPulse Targets — ALL + Attack Link Fix
+TornPulse Targets — External Browser Attack Fix
 
-Changes:
-- Adds ALL as the first level filter and makes it the default.
-- ALL view keeps targets grouped under LEVEL 15, LEVEL 16, LEVEL 17, etc.
-- Individual level chips still filter to that exact level.
-- Renames the live status tab to ALL STATES so it is not confused with the level ALL filter.
-- Sword is always actionable and opens Torn's direct attack URL for the selected XID.
-- If Android/Torn cannot open the attack URL, TornPulse falls back to that player's Torn profile instead of a dead end.
-- Status colors and Verify are advisory; Torn itself decides whether the attack can proceed.
+WHY:
+Android's official Torn app intercepts torn.com links from TornPulse and opens its URL Manager instead of navigating to the attack page.
 
-Install workflow:
+FIX:
+- Keeps ALL | 15 | 16 | 17... and every Build #54 Target Radar feature.
+- Adds a native Android browser launcher to the existing ComfortableOverlay module.
+- Sword explicitly opens the Torn attack URL in a real browser package, bypassing the official Torn app's URL Manager.
+- Tries Samsung Internet, Chrome, Firefox, Brave, Edge, Opera, Vivaldi and DuckDuckGo.
+- If the attack URL fails, the same external-browser route tries the player's profile.
+- No automated attacks. The sword only opens the user-selected Torn page.
+
+IMPORTANT:
+The first time, you may need to log into Torn in the browser. Browser cookies are separate from the official Torn Android app. After login, attack links should open directly there.
+
+INSTALL:
 1. Extract this ZIP.
-2. Replace only root patch-v100-hud.cjs in GitHub.
-3. Do not change .github/workflows/main.yml.
+2. Replace ONLY root patch-v100-hud.cjs in GitHub.
+3. Leave .github/workflows/main.yml unchanged.
 4. Commit and tell ChatGPT Done.
