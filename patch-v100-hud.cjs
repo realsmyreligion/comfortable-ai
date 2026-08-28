@@ -710,14 +710,14 @@ if (existingComponentStart >= 0 && existingComponentStart < appComponentAt) {
   app = app.slice(0,appComponentAt) + targetComponents + '\n' + app.slice(appComponentAt);
 }
 
-const sectionMarker = '<Text style={styles.section}>NEXT MOVE</Text>';
+const sectionMarker = '<View style={styles.sectionHead}><Text style={styles.sectionTitle}>NEXT MOVE</Text><View style={styles.sectionLine}/></View>';
 if (app.includes('<TargetAssistant demo={Boolean(snapshot.demo)}/>')) {
   app = app.replace('<TargetAssistant demo={Boolean(snapshot.demo)}/>', '<TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>');
 } else if (!app.includes('<TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>')) {
   app = replaceOnce(
     app,
     sectionMarker,
-    '<Text style={styles.section}>TARGETS</Text><TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>\n    ' + sectionMarker,
+    '<View style={styles.sectionHead}><Text style={styles.sectionTitle}>TARGETS</Text><View style={styles.sectionLine}/></View>\n    <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>\n    ' + sectionMarker,
     'Target Assistant dashboard placement'
   );
 }
