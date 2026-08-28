@@ -4,7 +4,7 @@ if (!process.env.TORNPULSE_RECOVERY_MERGE) {
 
   execFileSync(
     'git',
-    ['fetch', '--depth=3', 'origin', 'main'],
+    ['fetch', '--depth=20', 'origin', 'main'],
     {stdio:'ignore'}
   );
 
@@ -12,7 +12,7 @@ if (!process.env.TORNPULSE_RECOVERY_MERGE) {
     'git',
     [
       'show',
-      'd6aadd2149067962c1a041f067e64b8087fa66a3:patch-v100-hud.cjs'
+      'fd11b58b81725531c0d52b6811c60d5572864a34:patch-v100-hud.cjs'
     ],
     {encoding:'utf8'}
   );
