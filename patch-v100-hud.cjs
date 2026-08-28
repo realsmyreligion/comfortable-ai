@@ -420,7 +420,7 @@ setEmbedded('OVERLAY_MODULE_KT', overlayModule);
 app = replaceOnce(
   app,
   'NativeModules, Platform, Pressable,',
-  'Linking, NativeModules, Platform, Pressable,',
+  'Animated, Linking, NativeModules, Platform, Pressable,',
   'React Native Linking import'
 );
 
@@ -568,6 +568,35 @@ function TornPulsePageTabs({active,onChange}) {
   </View>;
 }
 
+function PulseBootLogo() {
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse,{toValue:1,duration:480,useNativeDriver:true}),
+      Animated.timing(pulse,{toValue:0,duration:720,useNativeDriver:true}),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+  const logoScale = pulse.interpolate({inputRange:[0,1],outputRange:[1,1.075]});
+  const glowScale = pulse.interpolate({inputRange:[0,1],outputRange:[.86,1.34]});
+  const glowOpacity = pulse.interpolate({inputRange:[0,1],outputRange:[.14,.52]});
+  const lineScale = pulse.interpolate({inputRange:[0,1],outputRange:[.62,1]});
+  return <SafeAreaView style={styles.pulseBootScreen}>
+    <StatusBar style="light"/>
+    <View style={styles.pulseBootStage}>
+      <Animated.View style={[styles.pulseBootGlow,{opacity:glowOpacity,transform:[{scale:glowScale}]}]}/>
+      <Animated.View style={[styles.pulseBootLogo,{transform:[{scale:logoScale}]}]}>
+        <View style={styles.pulseBootSlash}/>
+        <Text style={styles.pulseBootT}>T</Text><Text style={styles.pulseBootP}>P</Text>
+      </Animated.View>
+    </View>
+    <Text style={styles.pulseBootWord}>TORN<Text style={styles.pulseBootWordAccent}>PULSE</Text></Text>
+    <View style={styles.pulseBootLineTrack}><Animated.View style={[styles.pulseBootLine,{transform:[{scaleX:lineScale}]}]}/></View>
+    <Text style={styles.pulseBootSub}>SYNCING CITY INTEL</Text>
+  </SafeAreaView>;
+}
+
 function TargetRow({target, demo, clock, onVerify, rank}) {
   const [expanded,setExpanded] = useState(false);
   const staticAfk = Boolean(target.staticAfk);
@@ -575,7 +604,7 @@ function TargetRow({target, demo, clock, onVerify, rank}) {
   const liveVerified = staticAfk && !['afk','unknown','checking','error'].includes(String(target.status||''));
   const attack = async () => {
     if (demo) return Alert.alert('Target Assistant demo','The sword opens this player directly on Torn’s attack screen in your browser.');
-    const attackUrl = 'https://www.torn.com/loader.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
+    const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
     try {
       if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
@@ -876,6 +905,16 @@ if (existingComponentStart >= 0 && existingComponentStart < appComponentAt) {
   app = app.slice(0,appComponentAt) + targetComponents + '\n' + app.slice(appComponentAt);
 }
 
+// Minimal TornPulse boot screen: oversized logo with a heartbeat-style pulse.
+const bootStart = app.indexOf('if (loading) return <SafeAreaView');
+const bootEndMarker = '\n\n  if (!snapshot) return';
+const bootEnd = bootStart >= 0 ? app.indexOf(bootEndMarker, bootStart) : -1;
+if (bootStart >= 0 && bootEnd >= 0) {
+  app = app.slice(0,bootStart) + 'if (loading) return <PulseBootLogo/>;' + app.slice(bootEnd);
+} else if (!app.includes('if (loading) return <PulseBootLogo/>;')) {
+  throw new Error('TornPulse Target Assistant: loading screen marker not found');
+}
+
 // Targets now lives on its own first-class app page instead of inside the dashboard.
 if (!app.includes("const [activePage,setActivePage] = useState('DASHBOARD');")) {
   app = replaceOnce(
@@ -919,6 +958,7 @@ if (!app.includes('<TornPulsePageTabs active="DASHBOARD" onChange={setActivePage
 }
 
 const targetStyles = `
+  pulseBootScreen:{flex:1,backgroundColor:'#030405',alignItems:'center',justifyContent:'center',paddingHorizontal:28},pulseBootStage:{width:190,height:190,alignItems:'center',justifyContent:'center'},pulseBootGlow:{position:'absolute',width:150,height:150,borderRadius:42,backgroundColor:'rgba(200,58,62,.20)',borderWidth:1,borderColor:'rgba(200,58,62,.34)'},pulseBootLogo:{width:126,height:126,borderRadius:25,backgroundColor:'#0A0B0D',borderWidth:2,borderColor:'#31353A',alignItems:'center',justifyContent:'center',flexDirection:'row',overflow:'hidden',elevation:9},pulseBootSlash:{position:'absolute',width:13,height:160,backgroundColor:C.red,transform:[{rotate:'24deg'}],opacity:.92},pulseBootT:{color:'#F4F5F6',fontSize:58,fontWeight:'900',letterSpacing:-5,marginRight:-1,textShadowColor:'rgba(255,255,255,.20)',textShadowRadius:4},pulseBootP:{color:C.red,fontSize:58,fontWeight:'900',letterSpacing:-5,marginLeft:-1,textShadowColor:'rgba(200,58,62,.45)',textShadowRadius:6},pulseBootWord:{color:'#F4F5F6',fontSize:22,fontWeight:'900',letterSpacing:3.3,marginTop:18},pulseBootWordAccent:{color:C.red},pulseBootLineTrack:{width:152,height:2,backgroundColor:'#202327',overflow:'hidden',marginTop:15},pulseBootLine:{width:'100%',height:2,backgroundColor:C.red},pulseBootSub:{color:'#757D87',fontSize:8,fontWeight:'900',letterSpacing:2.1,marginTop:11},
   pageTabs:{flexDirection:'row',gap:7,marginBottom:14},pageTab:{flex:1,borderWidth:1,borderColor:C.line2,backgroundColor:C.surface,borderRadius:10,paddingVertical:10,alignItems:'center'},pageTabOn:{borderColor:C.red,backgroundColor:C.redDark,elevation:4},pageTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:1.05},pageTabTextOn:{color:'#FFF',textShadowColor:'rgba(213,47,50,.55)',textShadowRadius:4},
   targetPageIntro:{marginBottom:12,paddingHorizontal:3,paddingTop:1},targetPageKicker:{color:C.red,fontSize:8,fontWeight:'900',letterSpacing:1.6},targetPageTitle:{color:C.text,fontSize:22,fontWeight:'900',letterSpacing:.7,marginTop:3,textShadowColor:'rgba(255,255,255,.12)',textShadowRadius:3},targetPageCopy:{color:C.muted,fontSize:11,lineHeight:17,marginTop:5},
   targetPanel:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line2,borderRadius:12,overflow:'hidden',elevation:2},
