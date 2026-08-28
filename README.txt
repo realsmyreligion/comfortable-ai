@@ -1,28 +1,18 @@
-TornPulse — In-App Attack Browser • Build #57 Kotlin Fix
+TornPulse — Torn App First Attack Links
 
-WHY BUILD #57 FAILED
-The Target/WebView patch applied correctly, but the final Android compile found one React Native Kotlin compatibility issue:
-  currentActivity
-must be referenced through the module's ReactApplicationContext in this project:
-  appContext.currentActivity
+WHAT CHANGED
+- Sword now tries the official Torn Android app first.
+- Official Torn Android package: com.ionicframework.tornv2301860
+- Target URL remains the current format:
+  https://www.torn.com/page.php?sid=attack&user2ID=<ID>
+- If the official Torn app is not installed or cannot accept the URL, TornPulse falls back to its built-in Torn browser.
+- External browser remains a final fallback.
+- No change to Dashboard, HUD, Target Radar, LIVE BALDR, AFK CLASSIC, Verify, ALL/level filters, or pulse startup screen.
 
-THIS FIX
-- Changes only that native activity reference.
-- Keeps TornPulse's built-in Torn WebView attack browser.
-- Keeps persistent Torn WebView cookies/session.
-- Keeps current page.php attack URLs.
-- Keeps BACK / CLOSE controls.
-- Keeps external browser fallback.
-- Keeps ALL / level filters, LIVE BALDR, AFK CLASSIC, Verify, and Target Radar styling.
-- Keeps the animated TornPulse pulse boot screen.
-- Does not change .github/workflows/main.yml.
-
-FIRST USE AFTER A SUCCESSFUL BUILD
-1. Install the APK.
-2. TARGETS -> tap a sword.
-3. Torn opens inside TornPulse.
-4. If Torn asks you to log in, log in directly on torn.com in that window.
-5. The Android WebView cookie should persist for later sword taps.
+EXPECTED FLOW
+TARGETS -> sword -> official Torn app (already logged in)
+If official Torn app unavailable -> TornPulse browser
+If that is unavailable -> external browser
 
 INSTALL
 1. Extract this ZIP.
@@ -32,5 +22,3 @@ INSTALL
 
 VALIDATION
 - node --check: PASS
-- Build #57 failure source identified from GitHub Actions log: unresolved currentActivity in ComfortableOverlayModule.kt.
-- Corrected reference: appContext.currentActivity.

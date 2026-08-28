@@ -399,6 +399,21 @@ overlayModule = replaceOnce(
     promise.resolve(ComfortableOverlayService.isRunning)
   }`,
   `  @ReactMethod
+  fun openTornApp(url: String, promise: Promise) {
+    try {
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        setPackage("com.ionicframework.tornv2301860")
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      appContext.startActivity(intent)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("TORN_APP_UNAVAILABLE", "Official Torn app is not installed or could not open this link.", e)
+    }
+  }
+
+  @ReactMethod
   fun openAttackBrowser(url: String, promise: Promise) {
     val activity = appContext.currentActivity
     if (activity == null) {
@@ -708,29 +723,34 @@ function TargetRow({target, demo, clock, onVerify, rank}) {
   const verifying = staticAfk && target.status === 'checking';
   const liveVerified = staticAfk && !['afk','unknown','checking','error'].includes(String(target.status||''));
   const attack = async () => {
-    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player in TornPulse’s built-in Torn browser. Log in once there and the session stays available for future targets.');
+    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player in the official Torn app when installed, with TornPulse’s browser as the fallback.');
     const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
-    try {
-      if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) {
-        await ComfortableOverlay.openAttackBrowser(attackUrl);
-      } else if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
-        await ComfortableOverlay.openExternalUrl(attackUrl);
-      } else {
-        await Linking.openURL(attackUrl);
+    const openPreferred = async (url) => {
+      if (Platform.OS === 'android' && ComfortableOverlay?.openTornApp) {
+        try {
+          await ComfortableOverlay.openTornApp(url);
+          return;
+        } catch (_) {}
       }
+      if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) {
+        await ComfortableOverlay.openAttackBrowser(url);
+        return;
+      }
+      if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
+        await ComfortableOverlay.openExternalUrl(url);
+        return;
+      }
+      await Linking.openURL(url);
+    };
+    try {
+      await openPreferred(attackUrl);
     } catch (_) {
       try {
-        if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) {
-          await ComfortableOverlay.openAttackBrowser(profileUrl);
-        } else if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
-          await ComfortableOverlay.openExternalUrl(profileUrl);
-        } else {
-          await Linking.openURL(profileUrl);
-        }
+        await openPreferred(profileUrl);
         Alert.alert('Attack page could not open','TornPulse opened the player profile instead. Tap Attack from there if needed.');
       } catch (_) {
-        Alert.alert('Browser needed','TornPulse could not find a supported browser. Install or enable Samsung Internet, Chrome, Firefox, Brave, Edge, Opera, Vivaldi, or DuckDuckGo.');
+        Alert.alert('Torn link unavailable','TornPulse could not open the official Torn app or a browser for this target.');
       }
     }
   };
