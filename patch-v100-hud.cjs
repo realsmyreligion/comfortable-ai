@@ -364,7 +364,7 @@ function replaceOnce(text, oldText, newText, label) {
 
 let app = extractEmbedded('APP_JS').value;
 
-// Linking only hands a selected player to Torn. TornPulse never automates the attack itself.
+// Linking only hands a selected player to Torn. The user performs the attack in Torn; TornPulse never automates combat.
 app = replaceOnce(
   app,
   'NativeModules, Platform, Pressable,',
@@ -521,13 +521,20 @@ function TargetRow({target, demo, clock, onVerify, rank}) {
   const staticAfk = Boolean(target.staticAfk);
   const verifying = staticAfk && target.status === 'checking';
   const liveVerified = staticAfk && !['afk','unknown','checking','error'].includes(String(target.status||''));
-  const blockedStatic = ['hospital','jail','travel','fallen','federal','checking'].includes(String(target.status||''));
-  const attackable = staticAfk ? !blockedStatic : target.status === 'okay';
   const attack = async () => {
-    if (demo) return Alert.alert('Target Assistant demo','Live mode opens this player directly on Torn’s attack screen.');
-    if (!attackable) return Alert.alert('Target unavailable','This target is not currently marked READY.');
-    const url = 'https://www.torn.com/loader.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
-    try { await Linking.openURL(url); } catch (_) { Alert.alert('Could not open Torn','Open this target from TornPulse again.'); }
+    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player directly on Torn’s attack screen.');
+    const attackUrl = 'https://www.torn.com/loader.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
+    const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
+    try {
+      await Linking.openURL(attackUrl);
+    } catch (_) {
+      try {
+        await Linking.openURL(profileUrl);
+        Alert.alert('Attack page could not open','TornPulse opened the player profile instead. Tap Attack from Torn if needed.');
+      } catch (_) {
+        Alert.alert('Could not open Torn','Neither the attack page nor the player profile could be opened.');
+      }
+    }
   };
   const statusText = targetStatusText(target,clock);
   const totalLabel = staticAfk ? String(target.statCap || '<2K') : compactStat(target.total);
@@ -553,7 +560,7 @@ function TargetRow({target, demo, clock, onVerify, rank}) {
       </View> : null}
     </Pressable>
     {staticAfk ? <Pressable onPress={()=>onVerify&&onVerify(target)} disabled={verifying} style={[styles.targetVerify,verifying&&styles.targetVerifyBusy]} accessibilityLabel={'Verify ' + target.name}><Text style={styles.targetVerifyText}>{verifying?'…':'◎'}</Text></Pressable> : null}
-    <Pressable onPress={attack} disabled={!demo && !attackable} style={[styles.targetAttack,staticAfk&&styles.targetAttackAfk,!demo&&!attackable&&styles.targetAttackOff]} accessibilityLabel={'Attack ' + target.name}>
+    <Pressable onPress={attack} style={[styles.targetAttack,staticAfk&&styles.targetAttackAfk]} accessibilityLabel={'Open attack page for ' + target.name}>
       <Text style={styles.targetAttackText}>⚔</Text>
     </Pressable>
   </View>;
@@ -564,7 +571,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   const [tab,setTab] = useState('ALL');
   const [lists,setLists] = useState(demo ? {'Demo Targets':TARGET_DEMO} : {});
   const [listName,setListName] = useState(demo ? 'Demo Targets' : '');
-  const [levelFilter,setLevelFilter] = useState(demo ? 28 : 15);
+  const [levelFilter,setLevelFilter] = useState('ALL');
   const [page,setPage] = useState(0);
   const [statusById,setStatusById] = useState({});
   const [loadingLists,setLoadingLists] = useState(!demo);
@@ -608,8 +615,11 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   const maxSourceLevel = Math.max(TARGET_MIN_LEVEL,...eligibleTargets.map(t=>Number(t.level||TARGET_MIN_LEVEL)));
   const visibleLevels = Array.from({length:Math.max(1,maxSourceLevel-TARGET_MIN_LEVEL+1)},(_,i)=>i+TARGET_MIN_LEVEL);
   const levelCounts = visibleLevels.reduce((map,level)=>{ map[level]=eligibleTargets.filter(t=>Number(t.level)===level).length; return map; },{});
-  const filteredTargets = eligibleTargets.filter(t => Number(t.level) === Number(levelFilter));
-  const orderedTargets = sourceMode === 'AFK' && !demo ? [...filteredTargets] : [...filteredTargets].sort((a,b) => a.total-b.total || String(a.name).localeCompare(String(b.name)));
+  const allLevelsSelected = levelFilter === 'ALL';
+  const filteredTargets = allLevelsSelected ? eligibleTargets : eligibleTargets.filter(t => Number(t.level) === Number(levelFilter));
+  const orderedTargets = sourceMode === 'AFK' && !demo
+    ? [...filteredTargets]
+    : [...filteredTargets].sort((a,b) => allLevelsSelected ? (Number(a.level)-Number(b.level) || a.total-b.total || String(a.name).localeCompare(String(b.name))) : (a.total-b.total || String(a.name).localeCompare(String(b.name))));
   const pageCount = Math.max(1,Math.ceil(orderedTargets.length/TARGET_PAGE_SIZE));
   const safePage = Math.min(page,pageCount-1);
   const pageStart = safePage*TARGET_PAGE_SIZE;
@@ -624,9 +634,19 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   let shown = [...pageTargets];
   if (sourceMode === 'LIVE' || demo) {
     if (tab === 'READY') shown = shown.filter(t => t.status === 'okay');
-    if (tab === 'LOW') shown.sort((a,b) => (a.status==='okay'?0:1)-(b.status==='okay'?0:1) || a.total-b.total);
-    else shown.sort((a,b) => a.total-b.total || String(a.name).localeCompare(String(b.name)));
+    if (tab === 'LOW') shown.sort((a,b) => allLevelsSelected ? (Number(a.level)-Number(b.level) || a.total-b.total) : ((a.status==='okay'?0:1)-(b.status==='okay'?0:1) || a.total-b.total));
+    else if (!allLevelsSelected) shown.sort((a,b) => a.total-b.total || String(a.name).localeCompare(String(b.name)));
   }
+  const shownGroups = [];
+  shown.forEach(target => {
+    const level = Number(target.level||0);
+    let group = shownGroups[shownGroups.length-1];
+    if (!group || group.level !== level) {
+      group = {level,targets:[]};
+      shownGroups.push(group);
+    }
+    group.targets.push(target);
+  });
 
   async function scanPage(auto=false) {
     if (sourceMode === 'AFK' && !demo) return;
@@ -681,12 +701,11 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   }
 
   function setSource(mode) {
-    const nextRows = mode==='AFK' ? TRIP_AFK_TARGETS : (lists[listName]||[]);
     setSourceMode(mode);
-    setLevelFilter(firstAvailableLevel(nextRows));
+    setLevelFilter('ALL');
     setPage(0);
     setTab('ALL');
-    setMessage(mode==='AFK' ? 'Trip Classic ready • choose a level' : 'Live Baldr ready • tap refresh when you want a status check');
+    setMessage(mode==='AFK' ? 'Trip Classic ready • showing all saved levels' : 'Live Baldr ready • showing all levels • refresh when you want a status check');
   }
 
   function changeList(delta) {
@@ -694,12 +713,11 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     const current = Math.max(0,listNames.indexOf(listName));
     const nextIndex = (current+delta+listNames.length)%listNames.length;
     const nextName = listNames[nextIndex];
-    const nextRows = lists[nextName] || [];
     setListName(nextName);
-    setLevelFilter(firstAvailableLevel(nextRows));
+    setLevelFilter('ALL');
     setPage(0);
     setTab('ALL');
-    setMessage('Live list changed • tap refresh to check this level');
+    setMessage('Live list changed • showing all levels • tap refresh to check the visible page');
   }
 
   async function verifyOne(target) {
@@ -729,10 +747,11 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   }
 
   function selectLevel(level) {
-    setLevelFilter(Number(level));
+    const next = level === 'ALL' ? 'ALL' : Number(level);
+    setLevelFilter(next);
     setPage(0);
     setTab('ALL');
-    setMessage((sourceMode==='AFK'?'AFK':'Live') + ' Level ' + level + ' selected');
+    setMessage(next === 'ALL' ? ((sourceMode==='AFK'?'AFK':'Live') + ' • all levels selected') : ((sourceMode==='AFK'?'AFK':'Live') + ' Level ' + next + ' selected'));
   }
 
   function changePage(delta) {
@@ -742,9 +761,10 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     if (sourceMode==='LIVE') setMessage('Page ' + (nextPage+1) + ' • refresh to check status');
   }
 
-  const emptyTitle = sourceMode==='AFK' ? ('NO AFK TARGETS SAVED AT LEVEL ' + levelFilter) : loadingLists ? 'LOADING TARGET INTEL…' : scanning ? 'SCANNING…' : tab==='READY' && checkedOnPage===0 ? 'CHECKING AVAILABILITY…' : tab==='READY' ? 'NO READY TARGETS AT THIS LEVEL' : 'NO TARGETS AT THIS LEVEL';
-  const emptyText = sourceMode==='AFK' ? 'Swipe the level strip and choose another level.' : loadingLists ? 'Pulling the current Baldr target lists.' : tab==='READY' ? 'Tap refresh to re-check this level, or switch to LOW BS / ALL.' : 'Choose another level or Baldr list.';
-  const afkCount = TRIP_AFK_TARGETS.filter(t=>Number(t.level)===Number(levelFilter)).length;
+  const levelScopeLabel = allLevelsSelected ? 'ALL LEVELS' : ('LEVEL ' + levelFilter);
+  const emptyTitle = sourceMode==='AFK' ? ('NO AFK TARGETS IN ' + levelScopeLabel) : loadingLists ? 'LOADING TARGET INTEL…' : scanning ? 'SCANNING…' : tab==='READY' && checkedOnPage===0 ? 'CHECKING AVAILABILITY…' : tab==='READY' ? ('NO READY TARGETS IN ' + levelScopeLabel) : ('NO TARGETS IN ' + levelScopeLabel);
+  const emptyText = sourceMode==='AFK' ? 'Choose ALL or another level from the strip.' : loadingLists ? 'Pulling the current Baldr target lists.' : tab==='READY' ? 'Tap refresh to re-check the visible page, or switch to LOW BS / ALL STATES.' : 'Choose ALL, another level, or another Baldr list.';
+  const afkCount = allLevelsSelected ? eligibleTargets.length : TRIP_AFK_TARGETS.filter(t=>Number(t.level)===Number(levelFilter)).length;
 
   return <View style={styles.targetPanel}>
     <View style={styles.targetSourceBar}>
@@ -752,25 +772,26 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
       <Pressable onPress={()=>setSource('AFK')} style={[styles.targetSourceChip,sourceMode==='AFK'&&styles.targetSourceChipAfk]}><Text style={[styles.targetSourceText,sourceMode==='AFK'&&styles.targetSourceTextOn]}>◆ AFK CLASSIC</Text></Pressable>
     </View>
     <View style={styles.targetHead}>
-      <View style={{flex:1,minWidth:0}}><Text style={styles.targetEyebrow}>{sourceMode==='AFK'?'STATIC AFK TARGETS':'LIVE TARGET ASSISTANT'}</Text><Text style={[styles.targetCount,sourceMode==='AFK'&&styles.targetCountAfk]}>{sourceMode==='AFK' ? (afkCount+' TARGETS • LEVEL '+levelFilter) : (readyOnPage+' READY')} <Text style={styles.targetCountMuted}>{sourceMode==='AFK'?'• STATIC • VERIFY OPTIONAL':('• '+checkedOnPage+'/'+pageTargets.length+' CHECKED • API '+apiBudget+'/'+TARGET_API_BUDGET)}</Text></Text></View>
+      <View style={{flex:1,minWidth:0}}><Text style={styles.targetEyebrow}>{sourceMode==='AFK'?'STATIC AFK TARGETS':'LIVE TARGET ASSISTANT'}</Text><Text style={[styles.targetCount,sourceMode==='AFK'&&styles.targetCountAfk]}>{sourceMode==='AFK' ? (afkCount+' TARGETS • '+levelScopeLabel) : (readyOnPage+' READY')} <Text style={styles.targetCountMuted}>{sourceMode==='AFK'?'• STATIC • VERIFY OPTIONAL':('• '+checkedOnPage+'/'+pageTargets.length+' CHECKED • API '+apiBudget+'/'+TARGET_API_BUDGET)}</Text></Text></View>
       {sourceMode==='LIVE' ? <Pressable onPress={()=>scanPage(false).catch(()=>{})} disabled={scanning||loadingLists||!pageTargets.length} style={[styles.targetRefresh,(scanning||loadingLists)&&styles.targetRefreshOff]}><Text style={styles.targetRefreshText}>{scanning?'…':'↻'}</Text></Pressable> : <View style={styles.targetStaticBadge}><Text style={styles.targetStaticBadgeText}>AFK</Text></View>}
     </View>
     {sourceMode==='LIVE' ? <View style={styles.targetListBar}>
       <Pressable onPress={()=>changeList(-1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>‹</Text></Pressable>
-      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>{targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{filteredTargets.length} AT LEVEL {levelFilter} • PAGE {safePage+1}/{pageCount}</Text></View>
+      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>{targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{filteredTargets.length} • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
       <Pressable onPress={()=>changeList(1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>›</Text></Pressable>
     </View> : <Pressable onPress={()=>Linking.openURL(TRIP_FORUM_URL).catch(()=>{})} style={styles.targetAfkSource}><View><Text style={styles.targetAfkSourceTitle}>TRIP'S TARGET TROVE</Text><Text style={styles.targetAfkSourceMeta}>{TRIP_AFK_TARGETS.length} BUILT-IN • FROM 387 ORIGINAL • LEVELS 15–25</Text></View><Text style={styles.targetAfkSourceArrow}>↗</Text></Pressable>}
     <View style={styles.targetLevelWrap}>
-      <Text style={styles.targetLevelLabel}>CHOOSE LEVEL • STARTS AT 15</Text>
+      <Text style={styles.targetLevelLabel}>FILTER LEVEL • ALL OR PICK ONE</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.targetLevelScroll}>
+        <Pressable onPress={()=>selectLevel('ALL')} style={[styles.targetLevelChip,styles.targetLevelChipAll,allLevelsSelected&&styles.targetLevelChipOn]}><Text style={[styles.targetLevelChipText,allLevelsSelected&&styles.targetLevelChipTextOn]}>ALL</Text><Text style={[styles.targetLevelChipCount,allLevelsSelected&&styles.targetLevelChipCountOn]}>{eligibleTargets.length}</Text></Pressable>
         {visibleLevels.map(level => { const count=Number(levelCounts[level]||0); return <Pressable key={level} onPress={()=>selectLevel(level)} style={[styles.targetLevelChip,count===0&&styles.targetLevelChipEmpty,Number(levelFilter)===level&&styles.targetLevelChipOn]}><Text style={[styles.targetLevelChipText,Number(levelFilter)===level&&styles.targetLevelChipTextOn]}>{level}</Text><Text style={[styles.targetLevelChipCount,Number(levelFilter)===level&&styles.targetLevelChipCountOn]}>{count||'–'}</Text></Pressable>; })}
       </ScrollView>
     </View>
     {sourceMode==='LIVE' ? <View style={styles.targetTabs}>
-      {[['READY','READY'],['LOW','LOW BS'],['ALL','ALL']].map(([key,label]) => <Pressable key={key} onPress={()=>setTab(key)} style={[styles.targetTab,tab===key&&styles.targetTabOn]}><Text style={[styles.targetTabText,tab===key&&styles.targetTabTextOn]}>{label}</Text></Pressable>)}
+      {[['READY','READY'],['LOW','LOW BS'],['ALL','ALL STATES']].map(([key,label]) => <Pressable key={key} onPress={()=>setTab(key)} style={[styles.targetTab,tab===key&&styles.targetTabOn]}><Text style={[styles.targetTabText,tab===key&&styles.targetTabTextOn]}>{label}</Text></Pressable>)}
     </View> : <View style={styles.targetAfkNotice}><Text style={styles.targetAfkNoticeText}>◆ STATIC LIST • ◎ VERIFY ONE TARGET • ⚔ OPEN ATTACK</Text></View>}
     <View style={styles.targetColumns}><Text style={styles.targetColumnsText}>PLAYER                 LV       BS             STATE</Text></View>
-    {shown.length ? <><View style={styles.targetLevelDivider}><View style={styles.targetLevelAccent}/><Text style={styles.targetLevelDividerText}>LEVEL {levelFilter}</Text><Text style={styles.targetLevelDividerCount}>{filteredTargets.length} TARGETS</Text></View>{shown.map((t,index) => <TargetRow key={t.id} target={t} demo={demo} clock={clock} onVerify={verifyOne} rank={pageStart+index+1}/>)}</> : <View style={styles.targetEmpty}><Text style={styles.targetEmptyTitle}>{emptyTitle}</Text><Text style={styles.targetEmptyText}>{emptyText}</Text></View>}
+    {shown.length ? <>{shownGroups.map(group => <View key={'level-'+group.level}><View style={styles.targetLevelDivider}><View style={styles.targetLevelAccent}/><Text style={styles.targetLevelDividerText}>LEVEL {group.level}</Text><Text style={styles.targetLevelDividerCount}>{Number(levelCounts[group.level]||group.targets.length)} TARGETS</Text></View>{group.targets.map(t => <TargetRow key={t.id} target={t} demo={demo} clock={clock} onVerify={verifyOne} rank={pageStart+shown.indexOf(t)+1}/>)}</View>)}</> : <View style={styles.targetEmpty}><Text style={styles.targetEmptyTitle}>{emptyTitle}</Text><Text style={styles.targetEmptyText}>{emptyText}</Text></View>}
     {pageCount>1 ? <View style={styles.targetPageNav}>
       <Pressable onPress={()=>changePage(-1)} disabled={safePage<=0} style={[styles.targetPageButton,safePage<=0&&styles.targetPageButtonOff]}><Text style={styles.targetPageButtonText}>‹ PREV</Text></Pressable>
       <Text style={styles.targetPageText}>{pageStart+1}-{Math.min(pageStart+TARGET_PAGE_SIZE,filteredTargets.length)} / {filteredTargets.length}</Text>
@@ -819,7 +840,7 @@ if (!app.includes('TORNPULSE_TARGETS_PAGE_RETURN')) {
       <View style={styles.headerMeta}><StatusTag tone={snapshot.demo?'warn':'live'}>{snapshot.demo?'DEMO':'TARGETS'}</StatusTag><Text style={styles.versionInline}>v1.0.0</Text></View>
     </View>
     <TornPulsePageTabs active="TARGETS" onChange={setActivePage}/>
-    <View style={styles.targetPageIntro}><Text style={styles.targetPageKicker}>TORNPULSE • TARGET INTELLIGENCE</Text><Text style={styles.targetPageTitle}>TARGET RADAR</Text><Text style={styles.targetPageCopy}>Start at Level 15 and move up. Live Baldr gives current status; Trip Classic stays available as a permanent legacy AFK list with optional one-target verification.</Text></View>
+    <View style={styles.targetPageIntro}><Text style={styles.targetPageKicker}>TORNPULSE • TARGET INTELLIGENCE</Text><Text style={styles.targetPageTitle}>TARGET RADAR</Text><Text style={styles.targetPageCopy}>Use ALL for the full radar or jump straight to Level 15, 16, 17 and up. Live Baldr gives current status; Trip Classic stays available as a permanent legacy AFK list with optional one-target verification.</Text></View>
     <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>
   </ScrollView></SafeAreaView>;
 
@@ -845,7 +866,7 @@ const targetStyles = `
   targetHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8,paddingHorizontal:11,paddingTop:10,paddingBottom:8},targetEyebrow:{color:C.text,fontSize:12,fontWeight:'900',letterSpacing:1.25},targetCount:{color:C.green,fontSize:9,fontWeight:'900',marginTop:3},targetCountAfk:{color:'#B6A5FF'},targetCountMuted:{color:C.muted},targetRefresh:{width:36,height:36,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:C.green,borderRadius:8,backgroundColor:'#09170F',elevation:2},targetRefreshOff:{opacity:.45},targetRefreshText:{color:C.green,fontSize:19,fontWeight:'900'},targetStaticBadge:{width:42,height:34,borderWidth:1,borderColor:'#9A7CFF',borderRadius:8,backgroundColor:'#151126',alignItems:'center',justifyContent:'center'},targetStaticBadgeText:{color:'#C9BCFF',fontSize:9,fontWeight:'900',letterSpacing:1},
   targetListBar:{minHeight:40,flexDirection:'row',alignItems:'center',borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetListArrow:{width:40,height:40,alignItems:'center',justifyContent:'center'},targetListArrowText:{color:C.text,fontSize:24,fontWeight:'900'},targetListNameWrap:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center'},targetListName:{color:'#72C7FF',fontSize:10,fontWeight:'900',letterSpacing:1,textShadowColor:'rgba(78,175,255,0.35)',textShadowRadius:3},targetListMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:1},
   targetAfkSource:{minHeight:44,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:11,borderTopWidth:1,borderColor:C.line,backgroundColor:'#10101A'},targetAfkSourceTitle:{color:'#C9BCFF',fontSize:10,fontWeight:'900',letterSpacing:1},targetAfkSourceMeta:{color:C.muted,fontSize:8,fontWeight:'800',marginTop:2},targetAfkSourceArrow:{color:'#9A7CFF',fontSize:17,fontWeight:'900'},
-  targetLevelWrap:{borderTopWidth:1,borderColor:C.line,backgroundColor:C.surface2,paddingTop:8,paddingBottom:9},targetLevelLabel:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:1.5,paddingHorizontal:9,marginBottom:7},targetLevelScroll:{paddingHorizontal:8,gap:6,paddingBottom:1},targetLevelChip:{minWidth:44,height:38,borderWidth:1,borderColor:C.line2,borderRadius:9,backgroundColor:C.bg,alignItems:'center',justifyContent:'center',paddingHorizontal:8},targetLevelChipEmpty:{opacity:.38},targetLevelChipOn:{borderColor:C.red,backgroundColor:C.redDark,elevation:5},targetLevelChipText:{color:C.muted,fontSize:10,fontWeight:'900',lineHeight:12},targetLevelChipTextOn:{color:'#FFF',fontSize:11,textShadowColor:'rgba(213,47,50,.7)',textShadowRadius:4},targetLevelChipCount:{color:'#666F7B',fontSize:7,fontWeight:'900',marginTop:1},targetLevelChipCountOn:{color:'#F5B4B6'},
+  targetLevelWrap:{borderTopWidth:1,borderColor:C.line,backgroundColor:C.surface2,paddingTop:8,paddingBottom:9},targetLevelLabel:{color:C.muted,fontSize:8,fontWeight:'900',letterSpacing:1.5,paddingHorizontal:9,marginBottom:7},targetLevelScroll:{paddingHorizontal:8,gap:6,paddingBottom:1},targetLevelChip:{minWidth:44,height:38,borderWidth:1,borderColor:C.line2,borderRadius:9,backgroundColor:C.bg,alignItems:'center',justifyContent:'center',paddingHorizontal:8},targetLevelChipAll:{minWidth:52},targetLevelChipEmpty:{opacity:.38},targetLevelChipOn:{borderColor:C.red,backgroundColor:C.redDark,elevation:5},targetLevelChipText:{color:C.muted,fontSize:10,fontWeight:'900',lineHeight:12},targetLevelChipTextOn:{color:'#FFF',fontSize:11,textShadowColor:'rgba(213,47,50,.7)',textShadowRadius:4},targetLevelChipCount:{color:'#666F7B',fontSize:7,fontWeight:'900',marginTop:1},targetLevelChipCountOn:{color:'#F5B4B6'},
   targetTabs:{flexDirection:'row',borderTopWidth:1,borderBottomWidth:1,borderColor:C.line},targetTab:{flex:1,paddingVertical:8,alignItems:'center',backgroundColor:C.surface2},targetTabOn:{backgroundColor:'#10151C'},targetTabText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:.65},targetTabTextOn:{color:'#72C7FF'},targetAfkNotice:{paddingVertical:7,paddingHorizontal:9,borderTopWidth:1,borderBottomWidth:1,borderColor:'#2A2442',backgroundColor:'#110E1B'},targetAfkNoticeText:{color:'#A99AE8',fontSize:8,fontWeight:'900',letterSpacing:.45,textAlign:'center'},
   targetColumns:{paddingHorizontal:9,paddingVertical:5,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},targetLevelDivider:{height:32,flexDirection:'row',alignItems:'center',paddingRight:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0C1016'},targetLevelAccent:{width:4,alignSelf:'stretch',backgroundColor:C.red,marginRight:9},targetLevelDividerText:{flex:1,color:'#F4F6F8',fontSize:11,fontWeight:'900',letterSpacing:1.2},targetLevelDividerCount:{color:'#72C7FF',fontSize:8,fontWeight:'900',letterSpacing:.7},
   targetRow:{minHeight:50,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:C.surface},targetRowAfk:{backgroundColor:'#111118'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#72C7FF',fontSize:11,fontWeight:'900',textShadowColor:'rgba(64,169,255,0.55)',textShadowRadius:5},targetNameAfk:{color:'#C0AFFF',textShadowColor:'rgba(154,124,255,0.58)',textShadowRadius:5},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:68,color:C.text,fontSize:9,fontWeight:'900',textAlign:'right'},targetState:{width:51,fontSize:9,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},

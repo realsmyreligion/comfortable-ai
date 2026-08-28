@@ -1,17 +1,16 @@
-TornPulse Targets — Polished Final Review
+TornPulse Targets — ALL + Attack Link Fix
 
-Replace ONLY patch-v100-hud.cjs in the root of your GitHub repository.
-Leave .github/workflows/main.yml unchanged.
+Changes:
+- Adds ALL as the first level filter and makes it the default.
+- ALL view keeps targets grouped under LEVEL 15, LEVEL 16, LEVEL 17, etc.
+- Individual level chips still filter to that exact level.
+- Renames the live status tab to ALL STATES so it is not confused with the level ALL filter.
+- Sword is always actionable and opens Torn's direct attack URL for the selected XID.
+- If Android/Torn cannot open the attack URL, TornPulse falls back to that player's Torn profile instead of a dead end.
+- Status colors and Verify are advisory; Torn itself decides whether the attack can proceed.
 
-Polish changes:
-- Dedicated Dashboard / Targets navigation retained.
-- Level strip starts at 15 and continues upward only as far as the selected source needs.
-- Every level chip shows its target count; empty levels are dimmed.
-- Switching live Baldr lists automatically lands on the first available level instead of an empty Level 15.
-- Trip Classic preserves Trip's original source ordering instead of alphabetically scrambling it.
-- Static Trip rows are labeled AFK? rather than pretending current status is guaranteed.
-- New per-target VERIFY button checks only that one static target with Torn API; no bulk AFK refresh.
-- If a static target verifies as Hospital/Jail/etc., the attack button disables until it is actually available.
-- Brighter electric-blue live names, purple legacy-AFK names, red level accents, status side rails, selected-tab glow, and cleaner compact stat labels.
-- Trip Classic contains the curated built-in subset from the prior draft and links to the original 387-target forum source.
-- No automated attacks or unattended gameplay.
+Install workflow:
+1. Extract this ZIP.
+2. Replace only root patch-v100-hud.cjs in GitHub.
+3. Do not change .github/workflows/main.yml.
+4. Commit and tell ChatGPT Done.
