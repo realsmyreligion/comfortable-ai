@@ -365,6 +365,30 @@ function replaceOnce(text, oldText, newText, label) {
 let app = extractEmbedded('APP_JS').value;
 let overlayModule = extractEmbedded('OVERLAY_MODULE_KT').value;
 
+// Add the Android UI/WebView imports needed for TornPulse's persistent in-app attack browser.
+overlayModule = replaceOnce(
+  overlayModule,
+  `import android.content.Intent
+import android.net.Uri
+import android.os.Build`,
+  `import android.app.Dialog
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.net.Uri
+import android.os.Build
+import android.view.Gravity
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView`,
+  'in-app attack browser native imports'
+);
+
 // Android's official Torn app intercepts normal torn.com ACTION_VIEW links and routes
 // them into its URL Manager. Add a native helper that explicitly targets real browser
 // packages so the user's sword tap reaches Torn's web attack screen instead.
@@ -375,6 +399,87 @@ overlayModule = replaceOnce(
     promise.resolve(ComfortableOverlayService.isRunning)
   }`,
   `  @ReactMethod
+  fun openAttackBrowser(url: String, promise: Promise) {
+    val activity = currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "TornPulse could not open the in-app Torn browser.")
+      return
+    }
+    activity.runOnUiThread {
+      try {
+        val cookies = CookieManager.getInstance()
+        cookies.setAcceptCookie(true)
+
+        val dialog = Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+
+        val root = LinearLayout(activity).apply {
+          orientation = LinearLayout.VERTICAL
+          setBackgroundColor(Color.rgb(5, 6, 8))
+        }
+
+        val web = WebView(activity).apply {
+          setBackgroundColor(Color.BLACK)
+          settings.javaScriptEnabled = true
+          settings.domStorageEnabled = true
+          settings.databaseEnabled = true
+          settings.loadsImagesAutomatically = true
+          settings.useWideViewPort = true
+          settings.loadWithOverviewMode = false
+          settings.setSupportZoom(false)
+          webViewClient = WebViewClient()
+          webChromeClient = WebChromeClient()
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+          cookies.setAcceptThirdPartyCookies(web, true)
+        }
+
+        val top = LinearLayout(activity).apply {
+          orientation = LinearLayout.HORIZONTAL
+          gravity = Gravity.CENTER_VERTICAL
+          setPadding(18, 10, 10, 10)
+          setBackgroundColor(Color.rgb(13, 15, 18))
+        }
+        val title = TextView(activity).apply {
+          text = "TORNPULSE • TORN"
+          setTextColor(Color.rgb(242, 244, 246))
+          textSize = 14f
+          setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+        val spacer = android.view.View(activity)
+        val back = Button(activity).apply {
+          text = "BACK"
+          setOnClickListener {
+            if (web.canGoBack()) web.goBack() else dialog.dismiss()
+          }
+        }
+        val close = Button(activity).apply {
+          text = "CLOSE"
+          setOnClickListener { dialog.dismiss() }
+        }
+        top.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        top.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
+        top.addView(back, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        top.addView(close, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        root.addView(top, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(web, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        dialog.setContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        dialog.setOnDismissListener {
+          cookies.flush()
+          web.stopLoading()
+          web.destroy()
+        }
+        dialog.show()
+        web.loadUrl(url)
+        promise.resolve(true)
+      } catch (e: Exception) {
+        promise.reject("ATTACK_BROWSER", "Unable to open TornPulse's in-app Torn browser.", e)
+      }
+    }
+  }
+
+  @ReactMethod
   fun openExternalUrl(url: String, promise: Promise) {
     val uri = Uri.parse(url)
     val browserPackages = listOf(
@@ -415,7 +520,7 @@ overlayModule = replaceOnce(
 );
 setEmbedded('OVERLAY_MODULE_KT', overlayModule);
 
-// Linking is still used for non-attack source links. Attack links use the native browser launcher.
+// Linking remains a fallback. Android attack links prefer TornPulse's persistent in-app Torn browser.
 // The user performs the attack in Torn; TornPulse never automates combat.
 app = replaceOnce(
   app,
@@ -603,23 +708,27 @@ function TargetRow({target, demo, clock, onVerify, rank}) {
   const verifying = staticAfk && target.status === 'checking';
   const liveVerified = staticAfk && !['afk','unknown','checking','error'].includes(String(target.status||''));
   const attack = async () => {
-    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player directly on Torn’s attack screen in your browser.');
+    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player in TornPulse’s built-in Torn browser. Log in once there and the session stays available for future targets.');
     const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
     try {
-      if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
+      if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) {
+        await ComfortableOverlay.openAttackBrowser(attackUrl);
+      } else if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
         await ComfortableOverlay.openExternalUrl(attackUrl);
       } else {
         await Linking.openURL(attackUrl);
       }
     } catch (_) {
       try {
-        if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
+        if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) {
+          await ComfortableOverlay.openAttackBrowser(profileUrl);
+        } else if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) {
           await ComfortableOverlay.openExternalUrl(profileUrl);
         } else {
           await Linking.openURL(profileUrl);
         }
-        Alert.alert('Attack page could not open','TornPulse opened the player profile in your browser instead. Tap Attack from there if needed.');
+        Alert.alert('Attack page could not open','TornPulse opened the player profile instead. Tap Attack from there if needed.');
       } catch (_) {
         Alert.alert('Browser needed','TornPulse could not find a supported browser. Install or enable Samsung Internet, Chrome, Firefox, Brave, Edge, Opera, Vivaldi, or DuckDuckGo.');
       }
