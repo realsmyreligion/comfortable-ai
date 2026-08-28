@@ -400,7 +400,7 @@ overlayModule = replaceOnce(
   }`,
   `  @ReactMethod
   fun openAttackBrowser(url: String, promise: Promise) {
-    val activity = currentActivity
+    val activity = appContext.currentActivity
     if (activity == null) {
       promise.reject("NO_ACTIVITY", "TornPulse could not open the in-app Torn browser.")
       return

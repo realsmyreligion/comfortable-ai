@@ -1,36 +1,36 @@
-TornPulse — In-App Attack Browser
+TornPulse — In-App Attack Browser • Build #57 Kotlin Fix
 
-WHY
-Build #56 reaches Torn's correct page.php attack endpoint, but an external browser has a separate login session from the official Torn Android app.
+WHY BUILD #57 FAILED
+The Target/WebView patch applied correctly, but the final Android compile found one React Native Kotlin compatibility issue:
+  currentActivity
+must be referenced through the module's ReactApplicationContext in this project:
+  appContext.currentActivity
 
-WHAT CHANGED
-- Keeps the current page.php attack URL:
-  https://www.torn.com/page.php?sid=attack&user2ID=<XID>
-- Sword now prefers a built-in TornPulse Torn browser on Android.
-- The built-in browser uses Android WebView persistent Torn cookies.
-- First use: log in to Torn inside the TornPulse browser window.
-- After login, close it and tap the sword again if Torn does not automatically return to the target.
-- Future sword taps reuse that Torn web session.
-- BACK and CLOSE controls are provided at the top.
-- External Samsung Internet / Chrome launcher remains as a fallback.
-- Pulse startup screen and all Target Radar features remain unchanged.
+THIS FIX
+- Changes only that native activity reference.
+- Keeps TornPulse's built-in Torn WebView attack browser.
+- Keeps persistent Torn WebView cookies/session.
+- Keeps current page.php attack URLs.
+- Keeps BACK / CLOSE controls.
+- Keeps external browser fallback.
+- Keeps ALL / level filters, LIVE BALDR, AFK CLASSIC, Verify, and Target Radar styling.
+- Keeps the animated TornPulse pulse boot screen.
+- Does not change .github/workflows/main.yml.
 
-PRIVACY
-- TornPulse does not ask for, read, or store your Torn password.
-- Login is performed directly on torn.com inside Android WebView.
-- The Torn web session is held by Android WebView cookies for this app.
-- TornPulse still uses your existing restricted API key only for read-only companion data.
+FIRST USE AFTER A SUCCESSFUL BUILD
+1. Install the APK.
+2. TARGETS -> tap a sword.
+3. Torn opens inside TornPulse.
+4. If Torn asks you to log in, log in directly on torn.com in that window.
+5. The Android WebView cookie should persist for later sword taps.
 
 INSTALL
 1. Extract this ZIP.
-2. Replace ONLY the root patch-v100-hud.cjs in GitHub.
+2. Replace ONLY root patch-v100-hud.cjs in GitHub.
 3. Leave .github/workflows/main.yml unchanged.
 4. Commit and tell ChatGPT: Done
 
-FIRST TEST
-1. Install the new APK.
-2. Open TARGETS and tap a sword.
-3. Torn opens inside TornPulse.
-4. If asked to log in, log in on the Torn page.
-5. Close the in-app window and tap the sword again.
-6. It should now land on that player's attack screen without Samsung Internet or Torn URL Manager.
+VALIDATION
+- node --check: PASS
+- Build #57 failure source identified from GitHub Actions log: unresolved currentActivity in ComfortableOverlayModule.kt.
+- Corrected reference: appContext.currentActivity.
