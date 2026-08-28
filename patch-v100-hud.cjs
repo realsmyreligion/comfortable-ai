@@ -14,7 +14,7 @@ if (!process.env.TORNPULSE_RECOVERY_MERGE) {
       'show',
       'fd11b58b81725531c0d52b6811c60d5572864a34:patch-v100-hud.cjs'
     ],
-    {encoding:'utf8'}
+    {encoding:'utf8', maxBuffer: 16 * 1024 * 1024}
   );
 
   const self = fs0.readFileSync(__filename, 'utf8');
