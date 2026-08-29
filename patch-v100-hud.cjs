@@ -699,9 +699,9 @@ async function fetchPublicTargetStatus(targetId, key) {
 }
 
 function targetListShortName(name) {
-  if (name === "Baldr's List 1") return 'SET 1';
-  if (name === "Baldr's List 2") return 'SET 2';
-  if (name === "Baldr's List 3") return 'SET 3';
+  if (name === "Baldr's List 1") return 'SET 1 • LV25+';
+  if (name === "Baldr's List 2") return 'SET 2 • LV21-24';
+  if (name === "Baldr's List 3") return 'SET 3 • LV15-20';
   if (name === "Baldr's Extra List 1") return 'EXTRA 1';
   if (name === "Baldr's Extra List 2") return 'EXTRA 2';
   if (name === "Baldr's Extra List 3") return 'EXTRA 3';
@@ -778,7 +778,7 @@ function TargetRow({target, demo, clock, rank}) {
   const hasAfk = sources.includes('AFK');
   const sourceLabel = hasBaldr && hasAfk ? 'MERGED' : hasAfk ? 'CLASSIC' : 'LIVE';
   const attack = async () => {
-    if (demo) return Alert.alert('Target Assistant demo','The sword opens this player in the official Torn app when installed, with TornPulse’s browser as the fallback.');
+    if (demo) return Alert.alert('Target Assistant demo','ATTACK opens this player in the official Torn app when installed, with TornPulse’s browser as the fallback.');
     const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
     const openPreferred = async (url) => {
@@ -805,7 +805,7 @@ function TargetRow({target, demo, clock, rank}) {
   const statLabel = (value) => hasBaldr ? compactStat(value) : '—';
   const railColor = targetStatusColor(target.status);
   const unavailable = targetUnavailable(target.status);
-  return <View style={[styles.targetRow,unavailable&&styles.targetRowUnavailable]}>
+  return <View style={[styles.targetRow,!hasBaldr&&styles.targetRowNoStats,unavailable&&styles.targetRowUnavailable]}>
     <View style={[styles.targetRail,{backgroundColor:railColor}]}/>
     <Pressable onPress={() => setExpanded(v=>!v)} style={styles.targetBody}>
       <View style={styles.targetLine1}>
@@ -815,16 +815,16 @@ function TargetRow({target, demo, clock, rank}) {
         <Text style={styles.targetTotal}>TOTAL {totalLabel}</Text>
         <Text style={[styles.targetState,{color:railColor}]}>{statusText}</Text>
       </View>
-      <View style={styles.targetLine2}>
+      {hasBaldr ? <View style={styles.targetLine2}>
         <Text style={styles.targetStat}>STR {statLabel(target.strength)}</Text>
         <Text style={styles.targetStat}>DEF {statLabel(target.defense)}</Text>
         <Text style={styles.targetStat}>SPD {statLabel(target.speed)}</Text>
         <Text style={styles.targetStat}>DEX {statLabel(target.dexterity)}</Text>
-      </View>
+      </View> : null}
       {expanded ? <View style={styles.targetExpanded}><Text style={styles.targetExpandedText}>ID {target.id}  •  {sourceLabel} INTEL  •  {target.statusDescription || statusText}</Text></View> : null}
     </Pressable>
-    <Pressable onPress={attack} disabled={unavailable} style={[styles.targetAttack,unavailable&&styles.targetAttackOff]} accessibilityLabel={(unavailable?'Unavailable target ':'Open attack page for ') + target.name} accessibilityState={{disabled:unavailable}}>
-      <Text style={[styles.targetAttackText,unavailable&&styles.targetAttackTextOff]}>⚔</Text>
+    <Pressable onPress={attack} disabled={unavailable} style={[styles.targetAttack,unavailable&&styles.targetAttackOff]} accessibilityLabel={(unavailable?'Unavailable target ':'Attack ') + target.name} accessibilityState={{disabled:unavailable}}>
+      <Text style={[styles.targetAttackText,unavailable&&styles.targetAttackTextOff]}>ATTACK</Text>
     </Pressable>
   </View>;
 }
@@ -871,7 +871,12 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
 
   const listNames = Object.keys(lists);
   const liveTargets = (lists[listName] || []).map(t => ({...t,...(statusById[t.id] || {status:'unknown',until:0,statusDescription:''}),sources:['BALDR'],staticAfk:false}));
-  const afkTargets = (demo ? [] : TRIP_AFK_TARGETS).map(t => ({...t,...(statusById[t.id] || {}),sources:['AFK'],staticAfk:true}));
+  const liveLevels = liveTargets.map(t=>Number(t.level||0)).filter(level=>level>0);
+  const liveMinLevel = liveLevels.length ? Math.min(...liveLevels) : TARGET_MIN_LEVEL;
+  const liveMaxLevel = liveLevels.length ? Math.max(...liveLevels) : 999;
+  const afkTargets = (demo ? [] : TRIP_AFK_TARGETS)
+    .filter(t => !liveLevels.length || (Number(t.level||0) >= liveMinLevel && Number(t.level||0) <= liveMaxLevel))
+    .map(t => ({...t,...(statusById[t.id] || {}),sources:['AFK'],staticAfk:true}));
   const mergedById = {};
   afkTargets.forEach(target => { mergedById[target.id] = {...target}; });
   liveTargets.forEach(target => {
@@ -892,7 +897,8 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     const info = targetGroupInfo(target.status);
     return info.key === 'ready' ? 0 : info.key === 'unchecked' ? 1 : info.key === 'hospital' ? 2 : info.key === 'jail' ? 3 : 4;
   };
-  const orderedTargets = [...statusFiltered].sort((a,b) => Number(a.level)-Number(b.level) || availabilityRank(a)-availabilityRank(b) || Number(a.total||999999999)-Number(b.total||999999999) || String(a.name).localeCompare(String(b.name)));
+  const sourceRank = (target) => Array.isArray(target.sources) && target.sources.includes('BALDR') ? 0 : 1;
+  const orderedTargets = [...statusFiltered].sort((a,b) => Number(a.level)-Number(b.level) || availabilityRank(a)-availabilityRank(b) || sourceRank(a)-sourceRank(b) || Number(a.total||999999999)-Number(b.total||999999999) || String(a.name).localeCompare(String(b.name)));
   const pageCount = Math.max(1,Math.ceil(orderedTargets.length/TARGET_PAGE_SIZE));
   const safePage = Math.min(page,pageCount-1);
   const pageStart = safePage*TARGET_PAGE_SIZE;
@@ -969,7 +975,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     setListName(listNames[nextIndex]);
     setPage(0);
     setStatusFilter('ALL');
-    setMessage('Target set changed • sources remain merged');
+    setMessage('Target set changed • classic targets matched to this set’s level range');
   }
 
   function selectLevel(level) {
@@ -1001,7 +1007,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
       <View style={{flex:1,minWidth:0}}><Text style={styles.targetEyebrow}>UNIFIED TARGET BOARD</Text><Text style={styles.targetCount}>{readyOnPage} READY <Text style={styles.targetCountMuted}>• {hospitalOnPage} HOSP • {unavailableOnPage} UNAVAILABLE • {checkedOnPage}/{pageTargets.length} CHECKED</Text></Text></View>
       <Pressable onPress={()=>scanPage(false).catch(()=>{})} disabled={scanning||loadingLists||!pageTargets.length} style={[styles.targetRefresh,(scanning||loadingLists)&&styles.targetRefreshOff]}><Text style={styles.targetRefreshText}>{scanning?'…':'↻'}</Text></Pressable>
     </View>
-    <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}>TORNPULSE INTEL  •  {eligibleTargets.length} TARGETS  •  SOURCES MERGED  •  API {apiBudget}/{TARGET_API_BUDGET}</Text></View>
+    <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}>TORNPULSE INTEL  •  {eligibleTargets.length} TARGETS  •  LIVE STATS FIRST  •  CLASSIC LEVEL-MATCHED  •  API {apiBudget}/{TARGET_API_BUDGET}</Text></View>
     <View style={styles.targetListBar}>
       <Pressable onPress={()=>changeList(-1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>‹</Text></Pressable>
       <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>TORNPULSE {targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{eligibleTargets.length} TARGETS • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
@@ -1115,8 +1121,8 @@ const targetStyles = `
   targetStateDivider:{minHeight:24,flexDirection:'row',alignItems:'center',paddingHorizontal:10,borderTopWidth:1,borderBottomWidth:1,backgroundColor:'#0A0C0F'},targetStateDot:{width:6,height:6,borderRadius:3,marginRight:7},targetStateDividerText:{fontSize:8,fontWeight:'900',letterSpacing:.8},
   targetSourceTag:{width:43,color:'#8D98A5',fontSize:7,fontWeight:'900',letterSpacing:.35},targetSourceTagAfk:{color:'#8D98A5'},targetSourceTagBoth:{color:'#A7AFB8'},
   targetColumns:{paddingHorizontal:9,paddingVertical:5,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},targetLevelDivider:{height:32,flexDirection:'row',alignItems:'center',paddingRight:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0C1016'},targetLevelAccent:{width:4,alignSelf:'stretch',backgroundColor:C.red,marginRight:9},targetLevelDividerText:{flex:1,color:'#F4F6F8',fontSize:11,fontWeight:'900',letterSpacing:1.2},targetLevelDividerCount:{color:'#A8B0BA',fontSize:8,fontWeight:'900',letterSpacing:.7},
-  targetRow:{minHeight:48,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0E1013'},targetRowAfk:{backgroundColor:'#0E1013'},targetRowUnavailable:{opacity:.42,backgroundColor:'#090A0C'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#F2F4F6',fontSize:11,fontWeight:'900'},targetNameAfk:{color:'#F2F4F6'},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:78,color:'#E8EAED',fontSize:8,fontWeight:'900',textAlign:'right'},targetState:{width:58,fontSize:8,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},targetUnavailableDivider:{minHeight:24,justifyContent:'center',paddingHorizontal:10,borderBottomWidth:1,borderTopWidth:1,borderColor:'#2A2022',backgroundColor:'#120C0D'},targetUnavailableDividerText:{color:'#9A666A',fontSize:7,fontWeight:'900',letterSpacing:.85},
-  targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:23,paddingRight:2},targetStat:{flex:1,color:'#9AA3AD',fontSize:8,fontWeight:'800'},targetStaticMeta:{color:'#8D98A5',fontSize:8,fontWeight:'900',letterSpacing:.2,flex:1},targetStaticMetaLive:{color:'#9AB9A7'},targetVerify:{width:34,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:'#30284A',backgroundColor:'#14101F'},targetVerifyBusy:{opacity:.55},targetVerifyText:{color:'#BBAAFF',fontSize:16,fontWeight:'900'},targetAttack:{width:40,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:C.line,backgroundColor:'#13161A'},targetAttackAfk:{backgroundColor:'#13161A',borderLeftColor:C.line},targetAttackOff:{opacity:.18,backgroundColor:'#0A0B0D'},targetAttackText:{fontSize:17},targetAttackTextOff:{opacity:.35},
+  targetRow:{minHeight:48,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0E1013'},targetRowNoStats:{minHeight:42},targetRowAfk:{backgroundColor:'#0E1013'},targetRowUnavailable:{opacity:.42,backgroundColor:'#090A0C'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#F2F4F6',fontSize:11,fontWeight:'900'},targetNameAfk:{color:'#F2F4F6'},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:70,color:'#E8EAED',fontSize:8,fontWeight:'900',textAlign:'right'},targetState:{width:52,fontSize:8,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},targetUnavailableDivider:{minHeight:24,justifyContent:'center',paddingHorizontal:10,borderBottomWidth:1,borderTopWidth:1,borderColor:'#2A2022',backgroundColor:'#120C0D'},targetUnavailableDividerText:{color:'#9A666A',fontSize:7,fontWeight:'900',letterSpacing:.85},
+  targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:23,paddingRight:2},targetStat:{flex:1,color:'#9AA3AD',fontSize:8,fontWeight:'800'},targetStaticMeta:{color:'#8D98A5',fontSize:8,fontWeight:'900',letterSpacing:.2,flex:1},targetStaticMetaLive:{color:'#9AB9A7'},targetVerify:{width:34,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:'#30284A',backgroundColor:'#14101F'},targetVerifyBusy:{opacity:.55},targetVerifyText:{color:'#BBAAFF',fontSize:16,fontWeight:'900'},targetAttack:{width:58,marginVertical:6,marginRight:5,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'#E14A50',borderRadius:8,backgroundColor:'#7D1F24',elevation:2},targetAttackAfk:{backgroundColor:'#7D1F24',borderColor:'#E14A50'},targetAttackOff:{opacity:.30,backgroundColor:'#24272B',borderColor:'#4B5057',elevation:0},targetAttackText:{color:'#FFFFFF',fontSize:7.5,fontWeight:'900',letterSpacing:.55},targetAttackTextOff:{color:'#9AA0A8',opacity:.9},
   targetExpanded:{marginLeft:14,marginTop:3,paddingTop:4,paddingBottom:2,borderTopWidth:1,borderColor:C.line},targetExpandedText:{color:C.muted,fontSize:8,fontWeight:'700'},targetEmpty:{padding:16,alignItems:'center'},targetEmptyTitle:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:.7},targetEmptyText:{color:C.muted,fontSize:9,lineHeight:14,textAlign:'center',marginTop:5},
   targetPageNav:{minHeight:36,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:6,borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetPageButton:{minWidth:64,paddingVertical:8,paddingHorizontal:6,alignItems:'center'},targetPageButtonOff:{opacity:.25},targetPageButtonText:{color:'#72C7FF',fontSize:8,fontWeight:'900',letterSpacing:.6},targetPageText:{color:C.muted,fontSize:8,fontWeight:'800'},
   targetDemoNote:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.55,textAlign:'center',paddingVertical:6,paddingHorizontal:8,borderTopWidth:1,borderColor:C.line}
