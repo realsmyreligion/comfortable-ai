@@ -59,6 +59,9 @@ jobs:
       - name: Apply v1.0.0 final HUD polish
         run: node patch-v100-hud.cjs
 
+      - name: Apply exact TornPulse header + Torn colors
+        run: node patch-v101-brand-colors.cjs
+
       - name: Verify v1.0.0 patches
         run: |
           grep -q "config.version = '1.0.0';" app.config.js
@@ -68,6 +71,7 @@ jobs:
           grep -q "GlowSpan" app.config.js
           grep -q "MUGGED BY" app.config.js
           grep -q "RELEASED FROM HOSPITAL" app.config.js
+          grep -q "tornpulse-header.png" app.config.js
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean

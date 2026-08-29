@@ -1,0 +1,14 @@
+TORNPULSE HEADER + TORN COLORS
+
+After extracting this ZIP:
+
+1) Upload these TWO files to the ROOT of your comfortable-ai GitHub repo:
+   - patch-v101-brand-colors.cjs
+   - tornpulse-header.png
+
+2) Open your repo's .github/workflows folder.
+   Upload main.yml there and REPLACE the existing main.yml.
+
+3) Commit the uploads.
+
+Then tell ChatGPT: Done
