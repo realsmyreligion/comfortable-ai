@@ -1,0 +1,11 @@
+TORNPULSE WORKFLOW FIX
+
+1. Extract this ZIP on your phone.
+2. In GitHub open: comfortable-ai > .github > workflows
+3. Tap Add file > Upload files.
+4. Upload the extracted main.yml from this ZIP.
+5. Replace the existing main.yml if GitHub prompts you.
+6. Commit the change.
+7. Return to ChatGPT and say: Done
+
+IMPORTANT: main.yml must be inside .github/workflows/ — NOT in the repository root.
