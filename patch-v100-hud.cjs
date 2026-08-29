@@ -195,9 +195,6 @@ app = mustReplace(
 );
 
 if (!app.includes('TORNPULSE_DASH_HUD_CONTROL')) {
-  const hudInsertAt=app.indexOf('<View style={styles.tpNextCard}>');
-  if (hudInsertAt<0) throw new Error('TornPulse cleanup patch: could not locate dashboard HUD insertion point');
-
   const dashHud=`
       {/* TORNPULSE_DASH_HUD_CONTROL */}
       {!snapshot.demo?<View style={styles.tpDashHud}>
@@ -220,7 +217,10 @@ if (!app.includes('TORNPULSE_DASH_HUD_CONTROL')) {
         </View>
       </View>:null}
 `;
-  app=app.slice(0,hudInsertAt)+dashHud+app.slice(hudInsertAt);
+  const dashStart=app.indexOf('/* TORNPULSE_MAINSTREAM_RETURNS */');
+  const dashClose=dashStart>=0?app.indexOf('    </ScrollView>',dashStart):-1;
+  if (dashStart<0 || dashClose<0) throw new Error('TornPulse cleanup patch: could not locate dashboard scroll end');
+  app=app.slice(0,dashClose)+dashHud+app.slice(dashClose);
   console.log('✓ dashboard HUD activation control');
 }
 
