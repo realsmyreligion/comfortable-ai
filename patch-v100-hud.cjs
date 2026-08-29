@@ -518,3 +518,191 @@ overlay = replaceOptionalExact(
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse mini-logo transparency patch applied.');
+
+
+// ---------------------------------------------------------------------------
+// Top-left logo toggle patch.
+// Make the expanded HUD use a much larger logo in the whole top-left corner,
+// and let tapping that top-left logo area toggle minimize / expand.
+// ---------------------------------------------------------------------------
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentExpandedLogoWidthDp = when {\n      compact -> 118\n      large -> 156\n      else -> 136\n    }\n    currentExpandedLogoHeightDp = when {\n      compact -> 20\n      large -> 28\n      else -> 24\n    }`,
+  `    currentExpandedLogoWidthDp = when {\n      compact -> 150\n      large -> 196\n      else -> 172\n    }\n    currentExpandedLogoHeightDp = when {\n      compact -> 28\n      large -> 38\n      else -> 32\n    }`,
+  'bigger top-left expanded logo'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `              event.x >= dp(4) && event.x <= dp(currentExpandedLogoWidthDp + 18) && event.y >= 0 && event.y <= dp(currentExpandedLogoHeightDp + 16)`,
+  `              event.x >= 0 && event.x <= (root.width * 0.48f) && event.y >= 0 && event.y <= dp(currentExpandedLogoHeightDp + 22)`,
+  'full top-left logo tap zone'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse top-left logo toggle patch applied.');
+
+
+// ---------------------------------------------------------------------------
+// Professional transparent HUD + persistent top-center activity ticker.
+// Keeps logo-only collapse/expand behavior while making the expanded shell
+// glassier and using the unused header space for live Torn activity.
+// ---------------------------------------------------------------------------
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function replaceAllSoft(text, oldText, newText, label) {
+  const count = text.split(oldText).length - 1;
+  if (count > 0) {
+    console.log(`✓ ${label} (${count})`);
+    return text.split(oldText).join(newText);
+  }
+  console.log(`- ${label} skipped`);
+  return text;
+}
+
+function replaceAfterMarkerSoft(text, marker, oldText, newText, label) {
+  const at = text.indexOf(marker);
+  if (at < 0) {
+    console.log(`- ${label} skipped: marker not found`);
+    return text;
+  }
+  const hit = text.indexOf(oldText, at);
+  if (hit < 0) {
+    console.log(`- ${label} skipped: target not found`);
+    return text;
+  }
+  console.log(`✓ ${label}`);
+  return text.slice(0, hit) + newText + text.slice(hit + oldText.length);
+}
+
+// Glassy main HUD shell. Keep enough opacity for readability while allowing
+// Torn / wallpaper content to remain visible through unused areas.
+overlay = replaceAllSoft(
+  overlay,
+  `intArrayOf(Color.rgb(77, 80, 83), Color.rgb(54, 57, 60))`,
+  `intArrayOf(Color.argb(178, 51, 54, 58), Color.argb(138, 30, 32, 36))`,
+  'semi-transparent graphite HUD shell'
+);
+
+// Preserve readable cards, but take some weight out of their dark fills.
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(152, 12, 13, 17))`,
+  `setColor(Color.argb(132, 12, 13, 17))`,
+  'glassier stat cards'
+);
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(146, 14, 15, 19))`,
+  `setColor(Color.argb(126, 14, 15, 19))`,
+  'glassier cooldown cards'
+);
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(118, 14, 15, 18))`,
+  `setColor(Color.argb(96, 14, 15, 18))`,
+  'glassier TCT bar'
+);
+
+// Give the center ticker the flexible header space instead of the status label.
+overlay = replaceAfterMarkerSoft(
+  overlay,
+  `statusText = makeText("CONNECTING"`,
+  `headerRow.addView(it, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))`,
+  `headerRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
+  'compact right-side status label'
+);
+
+// Move the existing Torn event view into the header at index 1: logo | ticker | status.
+{
+  const marker = `    eventTickerText = makeText("", tickerSize + 1f, Color.rgb(244, 245, 246), true).also {`;
+  const start = overlay.indexOf(marker);
+  if (start >= 0) {
+    const endMarker = `\n    }\n\n`;
+    const endAt = overlay.indexOf(endMarker, start);
+    if (endAt >= 0) {
+      const end = endAt + `\n    }`.length;
+      const replacement = `    eventTickerText = makeText("LIVE ACTIVITY", maxOf(6.5f, tickerSize), Color.rgb(220, 224, 229), true).also {\n      it.setPadding(dp(8), dp(4), dp(8), dp(4))\n      it.setSingleLine(true)\n      it.ellipsize = TextUtils.TruncateAt.MARQUEE\n      it.marqueeRepeatLimit = -1\n      it.setHorizontallyScrolling(true)\n      it.isSelected = true\n      it.textAlignment = View.TEXT_ALIGNMENT_CENTER\n      it.visibility = if (hudCollapsed) View.GONE else View.VISIBLE\n      it.background = GradientDrawable().apply {\n        shape = GradientDrawable.RECTANGLE\n        cornerRadius = dp(8).toFloat()\n        setColor(Color.argb(96, 8, 9, 12))\n        setStroke(dp(1), Color.argb(90, 188, 194, 202))\n      }\n      headerRow.addView(it, 1, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {\n        leftMargin = dp(8)\n        rightMargin = dp(8)\n      })\n    }`;
+      overlay = overlay.slice(0, start) + replacement + overlay.slice(end);
+      console.log('✓ top-center activity ticker layout');
+    } else {
+      console.log('- top-center activity ticker layout skipped: close not found');
+    }
+  } else {
+    console.log('- top-center activity ticker layout skipped: marker not found');
+  }
+}
+
+// Persistent activity feed. Priority: fresh HUD alert -> latest incoming attack ->
+// current Torn status. This uses data TornPulse already reads, so no new API scope
+// or background request is introduced.
+overlay = replaceKotlinFunction(
+  overlay,
+  `  private fun renderEventTicker() `,
+  `  private fun renderEventTicker() {
+    val view = eventTickerText ?: return
+    if (hudCollapsed) {
+      view.visibility = View.GONE
+      return
+    }
+
+    val activeEvent = eventTickerMessage?.takeIf {
+      it.isNotBlank() && SystemClock.elapsedRealtime() < eventTickerUntilElapsed
+    }
+
+    var display: String
+    var color = Color.rgb(205, 210, 217)
+
+    if (activeEvent != null) {
+      display = "ALERT  •  $activeEvent"
+      color = eventTickerColor
+    } else {
+      val snap = snapshot
+      if (snap == null) {
+        display = "TORNPULSE  •  CONNECTING"
+        color = Color.rgb(170, 177, 187)
+      } else {
+        val latest = snap.latestAttack
+        if (latest != null) {
+          val who = latest.attackerName ?: if (latest.isStealthed) "UNKNOWN / STEALTH" else "UNKNOWN ATTACKER"
+          val nowUnix = currentTornEpochSeconds() ?: (System.currentTimeMillis() / 1000L)
+          val age = if (latest.ended > 0L) "  •  \${formatAge(max(0L, nowUnix - latest.ended).toInt())}" else ""
+          display = "LAST INCOMING  •  $who  •  \${latest.result}$age"
+          color = Color.rgb(227, 83, 96)
+        } else if (!snap.attackAccess) {
+          display = "ACTIVITY  •  LIMITED API KEY FOR INCOMING ATTACKS"
+          color = Color.rgb(215, 165, 68)
+        } else {
+          val liveStatus = snap.statusDescription.ifBlank { "OKAY" }
+          display = "LIVE  •  $liveStatus"
+          color = Color.rgb(111, 208, 141)
+        }
+      }
+    }
+
+    val marquee = if (display.length > 34) "   $display      •      $display   " else display
+    if (view.text.toString() != marquee) {
+      view.text = marquee
+      view.isSelected = false
+      view.isSelected = true
+    }
+    view.setTextColor(color)
+    view.background = GradientDrawable().apply {
+      shape = GradientDrawable.RECTANGLE
+      cornerRadius = dp(8).toFloat()
+      setColor(Color.argb(96, 8, 9, 12))
+      setStroke(dp(1), Color.argb(105, Color.red(color), Color.green(color), Color.blue(color)))
+    }
+    view.visibility = View.VISIBLE
+  }`,
+  'persistent professional activity ticker'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse professional transparent activity HUD applied.');
