@@ -1923,8 +1923,8 @@ overlay = staticReplaceOnce(
 
 // Make the attack wording a little shorter so more of it fits without motion.
 overlay = overlay.replace(
-  `display = "LAST INCOMING  •  $who  •  ${latest.result}$age"`,
-  `display = "LAST ATTACK  •  $who  •  ${latest.result}$age"`
+  `display = "LAST INCOMING  •  $who  •  \${latest.result}$age"`,
+  `display = "LAST ATTACK  •  $who  •  \${latest.result}$age"`
 );
 
 // Hard verification so this cannot silently fall back to the racing marquee.
