@@ -303,6 +303,122 @@ app = replaceStyle(app,'coolValue',"fontSize:8.8,fontWeight:'900'");
 app = replaceStyle(app,'coolLabel',"fontSize:6.5,fontWeight:'900',letterSpacing:.4");
 app = replaceStyle(app,'coolState',"fontSize:6.5,fontWeight:'900',letterSpacing:.35");
 
+
+// ---------------------------------------------------------------------------
+// Dashboard top-strip readability pass:
+// - show current/max values (e.g. 45/150), never percentages
+// - keep every metric/cooldown label on one line and fitting cleanly
+// ---------------------------------------------------------------------------
+app = mustReplace(
+  app,
+  `<Text numberOfLines={1} style={styles.tpRefMetricValue}>{clockValue || (pct+'%')}</Text>`,
+  `<Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.tpRefMetricValue}>{clockValue || (bar ? (Math.floor(projectBar(bar).projected)+'/'+projectBar(bar).maximum) : '')}</Text>`,
+  'raw current/max dashboard metric values'
+);
+
+app = softReplace(
+  app,
+  `<Text numberOfLines={1} style={styles.tpRefMetricLabel}>{label}</Text>`,
+  `<Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.tpRefMetricLabel}>{label}</Text>`,
+  'fit dashboard metric labels'
+);
+
+app = softReplace(
+  app,
+  `<Text numberOfLines={1} style={styles.tpCooldownLabel}>{label}</Text><Text numberOfLines={1} style={[styles.tpRefCoolValue,{color:ready?'#72E35C':accent}]}>{ready?'READY':formatDuration(seconds)}</Text>`,
+  `<Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.tpCooldownLabel}>{label}</Text><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.tpRefCoolValue,{color:ready?'#72E35C':accent}]}>{ready?'READY':formatDuration(seconds)}</Text>`,
+  'fit cooldown labels and values'
+);
+
+app = softReplace(
+  app,
+  `<View style={{flex:1,minWidth:0}}><Text style={styles.tpCooldownLabel}>SCANNER</Text><Text style={[styles.tpRefCoolValue,{color:'#72E35C'}]}>ON</Text></View>`,
+  `<View style={{flex:1,minWidth:0}}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.tpCooldownLabel}>SCANNER</Text><Text numberOfLines={1} style={[styles.tpRefCoolValue,{color:'#72E35C'}]}>ON</Text></View>`,
+  'fit scanner label'
+);
+
+// Give the text more room than the emoji/icon-heavy previous pass.
+app = replaceStyle(app,'tpRefMetric',"flex:1,paddingHorizontal:7,paddingVertical:10,borderRightWidth:1,borderColor:'#292F36'");
+app = replaceStyle(app,'tpRefMetricHead',"flexDirection:'row',alignItems:'center',minHeight:28");
+app = replaceStyle(app,'tpRefMetricBadge',"width:27,height:27,borderRadius:8,borderWidth:1,alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpRefMetricIcon',"fontSize:14.5,fontWeight:'900'");
+app = replaceStyle(app,'tpRefMetricLabel',"flex:1,color:'#A7AFB8',fontSize:6.6,fontWeight:'900',letterSpacing:.18,marginLeft:5");
+app = replaceStyle(app,'tpRefMetricValue',"color:'#F5F6F8',fontSize:14.2,fontWeight:'900',marginTop:7,letterSpacing:-.15");
+
+app = replaceStyle(app,'tpRefCooldown',"flex:1,minHeight:64,borderRightWidth:1,borderColor:'#292F36',backgroundColor:'#0A0D11',paddingHorizontal:7,paddingVertical:8,flexDirection:'row',alignItems:'center'");
+app = replaceStyle(app,'tpRefCoolIcon',"width:27,height:27,borderRadius:14,borderWidth:1,alignItems:'center',justifyContent:'center',marginRight:6");
+app = replaceStyle(app,'tpRefCoolIconText',"fontSize:13.2,fontWeight:'900'");
+app = replaceStyle(app,'tpCooldownLabel',"color:'#A7AFB8',fontSize:6.5,fontWeight:'900',letterSpacing:.15");
+app = replaceStyle(app,'tpRefCoolValue',"fontSize:8.3,fontWeight:'900',marginTop:3");
+
+
+
+// ---------------------------------------------------------------------------
+// Torn-style grey polish pass:
+// - top bars use current/max values and fit cleanly
+// - icon language goes back to cleaner Torn-like symbols
+// - overall dashboard shifts from black to charcoal grey with trim colors
+// - heartbeat under TORNPULSE gets a sturdier visual treatment
+// ---------------------------------------------------------------------------
+
+// Cleaner icon language (less emoji-heavy, closer to the Torn reference).
+app = softReplace(app, `label="HEALTH" icon="❤"`, `label="HEALTH" icon="♥︎"`, 'torn health icon');
+app = softReplace(app, `label="NERVE" icon="🏃"`, `label="NERVE" icon="✦"`, 'torn nerve icon');
+app = softReplace(app, `label="TORN TIME" icon="🕘"`, `label="TORN TIME" icon="◷"`, 'torn time icon');
+app = softReplace(app, `icon="💊" label="DRUG"`, `icon="◆" label="DRUG"`, 'torn drug icon');
+app = softReplace(app, `icon="🥤" label="BOOSTER"`, `icon="▰" label="BOOSTER"`, 'torn booster icon');
+app = softReplace(app, `>◉</Text><View style={{flex:1,minWidth:0}}><Text style={styles.tpCooldownLabel}>SCANNER</Text>`, `>◎</Text><View style={{flex:1,minWidth:0}}><Text style={styles.tpCooldownLabel}>SCANNER</Text>`, 'torn scanner icon');
+
+// Show bars as 45 / 150 style values instead of percentages.
+app = softReplace(
+  app,
+  `>{clockValue || (bar ? (Math.floor(projectBar(bar).projected)+'/'+projectBar(bar).maximum) : '')}</Text>`,
+  `>{clockValue || (bar ? (Math.floor(projectBar(bar).projected)+' / '+projectBar(bar).maximum) : '')}</Text>`,
+  'spaced current max values'
+);
+
+// A little more room and cleaner fitting in the top dashboard strip.
+app = replaceStyle(app,'tpRefMetricStrip',"minHeight:112,flexDirection:'row',borderWidth:1,borderColor:'#4A4E55',borderRadius:16,backgroundColor:'#2B2F34',overflow:'hidden',marginBottom:11");
+app = replaceStyle(app,'tpRefMetric',"flex:1,paddingHorizontal:8,paddingVertical:11,borderRightWidth:1,borderColor:'#454A50',backgroundColor:'#30343A'");
+app = replaceStyle(app,'tpRefMetricHead',"flexDirection:'row',alignItems:'center',minHeight:30");
+app = replaceStyle(app,'tpRefMetricBadge',"width:29,height:29,borderRadius:9,borderWidth:1.5,alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpRefMetricIcon',"fontSize:15,fontWeight:'900'");
+app = replaceStyle(app,'tpRefMetricLabel',"flex:1,color:'#CDD2D8',fontSize:6.9,fontWeight:'900',letterSpacing:.22,marginLeft:6");
+app = replaceStyle(app,'tpRefMetricValue',"color:'#F6F7F8',fontSize:15.3,fontWeight:'900',marginTop:9,letterSpacing:-.2");
+app = replaceStyle(app,'tpRefTrack',"height:5,borderRadius:4,backgroundColor:'#555B63',overflow:'hidden',marginTop:10");
+app = replaceStyle(app,'tpRefMetricSub',"color:'#B9C0C8',fontSize:7.2,fontWeight:'800',marginTop:8");
+
+app = replaceStyle(app,'tpCooldownStrip',"flexDirection:'row',gap:0,marginBottom:11,borderWidth:1,borderColor:'#4A4E55',borderRadius:16,backgroundColor:'#2B2F34',overflow:'hidden'");
+app = replaceStyle(app,'tpRefCooldown',"flex:1,minHeight:72,borderRightWidth:1,borderColor:'#454A50',backgroundColor:'#30343A',paddingHorizontal:8,paddingVertical:9,flexDirection:'row',alignItems:'center'");
+app = replaceStyle(app,'tpRefCoolIcon',"width:32,height:32,borderRadius:16,borderWidth:1.5,alignItems:'center',justifyContent:'center',marginRight:7");
+app = replaceStyle(app,'tpRefCoolIconText',"fontSize:14.2,fontWeight:'900'");
+app = replaceStyle(app,'tpCooldownLabel',"color:'#CDD2D8',fontSize:6.8,fontWeight:'900',letterSpacing:.18");
+app = replaceStyle(app,'tpRefCoolValue',"fontSize:9.0,fontWeight:'900',marginTop:4");
+
+// Grey main theme with colored trims across the dashboard.
+app = replaceStyle(app,'tpRadarClone',"borderWidth:1,borderColor:'#4A4E55',borderRadius:16,backgroundColor:'#262A2F',marginBottom:11,overflow:'hidden'");
+app = replaceStyle(app,'tpRadarCloneHead',"minHeight:60,flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:10,backgroundColor:'#2D3136'");
+app = replaceStyle(app,'tpRadarInner',"marginHorizontal:11,marginBottom:11,borderWidth:1,borderColor:'#444950',borderRadius:12,overflow:'hidden',backgroundColor:'#2F3439'");
+app = replaceStyle(app,'tpRadarSummary',"minHeight:54,flexDirection:'row',borderBottomWidth:1,borderColor:'#464B52',backgroundColor:'#343A40'");
+app = replaceStyle(app,'targetRow',"minHeight:58,flexDirection:'row',borderBottomWidth:1,borderColor:'#454A50',backgroundColor:'#2E3338'");
+app = replaceStyle(app,'targetRowCompact',"minHeight:54,backgroundColor:'#2E3338'");
+app = replaceStyle(app,'targetStat',"flex:1,color:'#C9D0D7',fontSize:7.2,fontWeight:'800'");
+app = replaceStyle(app,'tpLowerCard',"flex:1,borderWidth:1,borderColor:'#4A4E55',borderRadius:14,backgroundColor:'#2B2F34',padding:10");
+app = replaceStyle(app,'tpDashHud',"minHeight:138,flexGrow:1,marginTop:8,marginBottom:10,borderWidth:1,borderColor:'#486A50',borderRadius:16,backgroundColor:'#243029',paddingHorizontal:14,paddingVertical:16,flexDirection:'row',alignItems:'stretch',justifyContent:'space-between'");
+app = replaceStyle(app,'tpBottomNav',"height:72,flexDirection:'row',alignItems:'stretch',backgroundColor:'#202327',borderTopWidth:1,borderColor:'#444950',paddingHorizontal:8,paddingTop:4,paddingBottom:Platform.OS==='android'?12:7");
+
+// Heartbeat under the wordmark: fix sizing/placement and strengthen the lines.
+app = replaceStyle(app,'tpTopBar',"height:82,flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:12,paddingHorizontal:6,position:'relative'");
+app = replaceStyle(app,'tpBrandWrap',"flex:1,alignItems:'center',justifyContent:'center',paddingTop:1");
+app = replaceStyle(app,'tpBrandPulse',"alignItems:'center',justifyContent:'center',height:18,marginTop:4,marginBottom:2");
+app = replaceStyle(app,'tpBrandBeat',"color:'#F1454B',fontSize:15,fontWeight:'900',letterSpacing:1.25,lineHeight:15,textAlign:'center'");
+app = replaceStyle(app,'tpHeartbeat',"width:56,height:18,position:'relative',marginTop:4,marginBottom:2,alignSelf:'center'");
+app = replaceStyle(app,'tpBeatSeg',"position:'absolute',height:3,borderRadius:2,backgroundColor:'#F1454B'");
+app = replaceStyle(app,'tpHeaderRule',"position:'absolute',left:-11,right:-11,bottom:0,height:1,backgroundColor:'#A92B31'");
+
+// If the old text pulse is still present anywhere, make sure it's replaced by the proper component.
+app = softReplace(app, `<Text style={styles.tpBrandBeat}>⌁⌁</Text>`, `<TPHeartbeat/>`, 'replace broken text pulse with heartbeat component');
+
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
 console.log('✓ TornPulse dashboard + HUD utility cleanup applied');
