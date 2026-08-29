@@ -1100,3 +1100,96 @@ overlay = restyleGradientAfterMarker(
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse max-visibility minimized TP patch applied.');
+
+
+// ---------------------------------------------------------------------------
+// Smoky Transparent HUD redo.
+// The previous passes hit the wrong visual layer too lightly. This pass
+// intentionally re-skins the collapsed and expanded HUD into a smoked-glass
+// black look: no flat gray block, just translucent dark glass everywhere.
+// ---------------------------------------------------------------------------
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+// Keep the minimized TP prominent, but let it sit on a very faint smoky pill.
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 94\n      large -> 122\n      else -> 108\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 38\n      large -> 50\n      else -> 44\n    }`,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 96\n      large -> 126\n      else -> 112\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 40\n      large -> 52\n      else -> 46\n    }`,
+  'smoky HUD minimized TP sizing'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `      compact -> 102\n      large -> 132\n      else -> 116`,
+  `      compact -> 106\n      large -> 138\n      else -> 122`,
+  'smoky HUD minimized shell sizing'
+);
+
+// Redo the collapsed pill itself as a smoky translucent black instead of gray.
+overlay = restyleGradientAfterMarker(
+  overlay,
+  'background = if (hudCollapsed) GradientDrawable().apply {',
+  24,
+  '42, 8, 9, 12',
+  '0, 0, 0, 0',
+  'smoky translucent minimized TP pill'
+);
+
+// Redo the expanded shell from gray to smoky black translucent glass.
+overlay = replaceAllSoft(
+  overlay,
+  `intArrayOf(Color.argb(164, 49, 52, 56), Color.argb(122, 28, 30, 34))`,
+  `intArrayOf(Color.argb(120, 8, 9, 12), Color.argb(82, 4, 5, 8))`,
+  'smoky expanded shell gradient'
+);
+overlay = replaceAllSoft(
+  overlay,
+  `intArrayOf(Color.argb(178, 51, 54, 58), Color.argb(138, 30, 32, 36))`,
+  `intArrayOf(Color.argb(120, 8, 9, 12), Color.argb(82, 4, 5, 8))`,
+  'fallback smoky expanded shell gradient'
+);
+
+// Inner panels/chips also become smoked glass instead of opaque gray.
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(152, 12, 13, 17))`,
+  `setColor(Color.argb(96, 8, 9, 12))`,
+  'smoky stat-card backgrounds'
+);
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(196, 12, 13, 17))`,
+  `setColor(Color.argb(96, 8, 9, 12))`,
+  'fallback smoky stat-card backgrounds'
+);
+
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(146, 14, 15, 19))`,
+  `setColor(Color.argb(84, 9, 10, 13))`,
+  'smoky cooldown chip backgrounds'
+);
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(190, 14, 15, 19))`,
+  `setColor(Color.argb(84, 9, 10, 13))`,
+  'fallback smoky cooldown chip backgrounds'
+);
+
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(118, 14, 15, 18))`,
+  `setColor(Color.argb(72, 9, 10, 13))`,
+  'smoky ticker/TCT row backgrounds'
+);
+overlay = replaceAllSoft(
+  overlay,
+  `setColor(Color.argb(156, 14, 15, 18))`,
+  `setColor(Color.argb(72, 9, 10, 13))`,
+  'fallback smoky ticker/TCT row backgrounds'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse Smoky Transparent HUD patch applied.');
