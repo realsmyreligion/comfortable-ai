@@ -194,27 +194,9 @@ app = mustReplace(
   'simplified bottom nav with HUD'
 );
 
-function matchingViewEnd(text,start) {
-  const re=/<\/?View\b[^>]*>/g;
-  re.lastIndex=start;
-  let depth=0, seen=false, match;
-  while ((match=re.exec(text))) {
-    const tag=match[0];
-    if (tag.startsWith('</View')) {
-      depth--;
-    } else {
-      seen=true;
-      if (!tag.endsWith('/>')) depth++;
-    }
-    if (seen && depth===0) return re.lastIndex;
-  }
-  return -1;
-}
-
 if (!app.includes('TORNPULSE_DASH_HUD_CONTROL')) {
-  const lowerStart=app.indexOf('<View style={styles.tpLowerGrid}>');
-  const lowerEnd=lowerStart>=0?matchingViewEnd(app,lowerStart):-1;
-  if (lowerStart<0 || lowerEnd<0) throw new Error('TornPulse cleanup patch: could not locate dashboard lower cards');
+  const hudInsertAt=app.indexOf('<View style={styles.tpNextCard}>');
+  if (hudInsertAt<0) throw new Error('TornPulse cleanup patch: could not locate dashboard HUD insertion point');
 
   const dashHud=`
       {/* TORNPULSE_DASH_HUD_CONTROL */}
@@ -238,7 +220,7 @@ if (!app.includes('TORNPULSE_DASH_HUD_CONTROL')) {
         </View>
       </View>:null}
 `;
-  app=app.slice(0,lowerEnd)+dashHud+app.slice(lowerEnd);
+  app=app.slice(0,hudInsertAt)+dashHud+app.slice(hudInsertAt);
   console.log('✓ dashboard HUD activation control');
 }
 
