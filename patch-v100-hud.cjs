@@ -601,6 +601,96 @@ ktSoftReplace(
   'stat row spacing'
 );
 
+
+// ---------------------------------------------------------------------------
+// Final wordmark + HUD pass
+// - stronger TornPulse wordmark matching the provided art direction
+// - rebuild the heartbeat line so it is clean and untangled
+// - reface the HUD page controls and the native floating overlay
+// ---------------------------------------------------------------------------
+
+// Main wordmark: closer to the poster feel.
+app = replaceStyle(app,'tpBrand',"color:'#F6F7F8',fontSize:31,fontWeight:'900',fontStyle:'italic',letterSpacing:-1.15,textShadowColor:'rgba(0,0,0,0.55)',textShadowOffset:{width:0,height:2},textShadowRadius:6");
+app = replaceStyle(app,'tpBrandAccent',"color:'#D71F28'");
+app = replaceStyle(app,'tpBrandWrap',"flex:1,alignItems:'center',justifyContent:'center',paddingTop:0,paddingHorizontal:8");
+app = replaceStyle(app,'tpTopBar',"height:86,flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:13,paddingHorizontal:5,position:'relative'");
+app = replaceStyle(app,'tpTopMenu',"width:44,height:44,borderRadius:12,alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpTopMenuText',"color:'#F2F4F6',fontSize:26,fontWeight:'700',lineHeight:29,textAlign:'center'");
+app = replaceStyle(app,'tpHeartbeat',"width:92,height:20,position:'relative',marginTop:4,marginBottom:2,alignSelf:'center'");
+app = replaceStyle(app,'tpBeatSeg',"position:'absolute',height:3,borderRadius:2,backgroundColor:'#D71F28'");
+app = replaceStyle(app,'tpHeaderRule',"position:'absolute',left:-11,right:-11,bottom:0,height:1.2,backgroundColor:'#A91F26'");
+
+const hbRegex = /function TPHeartbeat\(\)\s*\{[\s\S]*?\n\}/;
+const cleanHeartbeat = `function TPHeartbeat() {
+  return <View style={styles.tpHeartbeat}>
+    <View style={[styles.tpBeatSeg,{left:0,top:10,width:24}]}/>
+    <View style={[styles.tpBeatSeg,{left:23,top:10,width:10,transform:[{rotate:'-30deg'}]}]}/>
+    <View style={[styles.tpBeatSeg,{left:30,top:5,width:12,transform:[{rotate:'60deg'}]}]}/>
+    <View style={[styles.tpBeatSeg,{left:39,top:10,width:10,transform:[{rotate:'-66deg'}]}]}/>
+    <View style={[styles.tpBeatSeg,{left:47,top:10,width:10,transform:[{rotate:'34deg'}]}]}/>
+    <View style={[styles.tpBeatSeg,{left:55,top:10,width:10,transform:[{rotate:'-52deg'}]}]}/>
+    <View style={[styles.tpBeatSeg,{left:63,top:10,width:29}]}/>
+  </View>;
+}`;
+if (hbRegex.test(app)) {
+  app = app.replace(hbRegex, cleanHeartbeat);
+  console.log('✓ rebuilt clean heartbeat component');
+} else {
+  console.log('- heartbeat component regex skipped');
+}
+
+// HUD settings page / dashboard HUD card: cleaner and more premium.
+app = replaceStyle(app,'tpDashHud',"minHeight:126,flexGrow:1,marginTop:8,marginBottom:10,borderWidth:1,borderColor:'#565C63',borderRadius:16,backgroundColor:'#2E3237',paddingHorizontal:14,paddingVertical:14,flexDirection:'row',alignItems:'stretch',justifyContent:'space-between'");
+app = replaceStyle(app,'tpDashHudHead',"flexDirection:'row',alignItems:'center',marginBottom:2");
+app = replaceStyle(app,'tpDashHudKicker',"color:'#B0B7BE',fontSize:7.5,fontWeight:'900',letterSpacing:.9");
+app = replaceStyle(app,'tpDashHudDot',"width:6,height:6,borderRadius:3,backgroundColor:'#8B9096',marginLeft:8,marginRight:4");
+app = replaceStyle(app,'tpDashHudState',"color:'#AAB1B8',fontSize:7.0,fontWeight:'900',letterSpacing:.5");
+app = replaceStyle(app,'tpDashHudTitle',"color:'#F5F6F7',fontSize:15.8,fontWeight:'900',marginTop:7");
+app = replaceStyle(app,'tpDashHudCopy',"color:'#C0C6CC',fontSize:8.2,fontWeight:'700',marginTop:6,lineHeight:13");
+app = replaceStyle(app,'tpDashHudToggle',"height:40,borderWidth:1,borderColor:'#688470',borderRadius:10,backgroundColor:'#323A35',alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudToggleStop',"borderColor:'#A85358',backgroundColor:'#4C3134'");
+app = replaceStyle(app,'tpDashHudManage',"height:32,borderWidth:1,borderColor:'#5A6067',borderRadius:9,backgroundColor:'#383D42',alignItems:'center',justifyContent:'center'");
+
+app = replaceStyle(app,'tpHeroHud',"borderWidth:1,borderColor:'#565C63',borderRadius:17,backgroundColor:'#2D3136',padding:16,marginBottom:11");
+app = replaceStyle(app,'tpHudHeroTop',"flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:10");
+app = replaceStyle(app,'tpHudHeroKicker',"color:'#AEB4BB',fontSize:7.2,fontWeight:'900',letterSpacing:.82");
+app = replaceStyle(app,'tpHudHeroTitle',"color:'#F5F6F7',fontSize:22,fontWeight:'900',marginTop:4");
+app = replaceStyle(app,'tpHudHeroCopy',"color:'#C2C8CE',fontSize:9.2,fontWeight:'700',lineHeight:14.5,marginBottom:13");
+app = replaceStyle(app,'tpHudLamp',"width:10,height:10,borderRadius:5,backgroundColor:'#7B8086'");
+app = replaceStyle(app,'tpHudMainButton',"minHeight:47,borderWidth:1,borderColor:'#656D74',borderRadius:12,backgroundColor:'#3A3F45',alignItems:'center',justifyContent:'center',paddingHorizontal:12");
+app = replaceStyle(app,'tpHudMainButtonStop',"borderColor:'#A95559',backgroundColor:'#53363A'");
+app = replaceStyle(app,'tpHudMainButtonText',"color:'#F4F5F6',fontSize:8.25,fontWeight:'900',letterSpacing:.65");
+app = replaceStyle(app,'tpHudUtilityRow',"minHeight:35,paddingVertical:5");
+app = softReplace(app, 'FLOATING HUD', 'FLOATING OVERLAY', 'HUD label polish');
+app = softReplace(app, 'HUD ACTIVE', 'OVERLAY ACTIVE', 'HUD active title polish');
+app = softReplace(app, 'HUD STANDBY', 'OVERLAY READY', 'HUD standby title polish');
+app = softReplace(app, 'HUD SETTINGS  ›', 'OVERLAY SETTINGS  ›', 'HUD settings label polish');
+app = softReplace(app, 'Launch, stop, or manage the overlay right from Dashboard.', 'Launch, stop, or tune the overlay right from Dashboard.', 'dashboard overlay copy');
+
+// Native overlay: smaller, cleaner, and more Torn-like.
+ktReplaceWhen('minWidthDp', `      compact -> 168\n      large -> 228\n      else -> 198`);
+ktReplaceWhen('collapsedWidthDp', `      compact -> 34\n      large -> 46\n      else -> 40`);
+ktReplaceWhen('logoSize', `      compact -> 15\n      large -> 20\n      else -> 17`);
+ktReplaceWhen('statLabelSize', `      compact -> 6.2f\n      large -> 7.9f\n      else -> 6.9f`);
+ktReplaceWhen('barsSize', `      compact -> 10.8f\n      large -> 14.4f\n      else -> 12.3f`);
+ktReplaceWhen('cooldownSize', `      compact -> 6.2f\n      large -> 7.8f\n      else -> 6.8f`);
+ktReplaceWhen('tickerSize', `      compact -> 6.2f\n      large -> 7.8f\n      else -> 6.8f`);
+ktReplaceWhen('detailSize', `      compact -> 6.2f\n      large -> 7.8f\n      else -> 6.8f`);
+
+// Refine the overlay palette around charcoal gray with restrained red accents.
+ktSoftReplace('Color.rgb(50, 53, 57)', 'Color.rgb(58, 61, 66)', 'overlay shell top refinement');
+ktSoftReplace('Color.rgb(31, 34, 38)', 'Color.rgb(36, 39, 43)', 'overlay shell bottom refinement');
+ktSoftReplace('Color.argb(190, 198, 45, 49)', 'Color.argb(215, 205, 34, 40)', 'overlay red accent refinement');
+ktSoftReplace('Color.argb(205, 43, 46, 50)', 'Color.argb(215, 50, 54, 58)', 'overlay chip background refinement');
+ktSoftReplace('Color.argb(74, 190, 195, 200)', 'Color.argb(96, 202, 206, 212)', 'overlay chip border refinement');
+ktSoftReplace('Color.argb(190, 39, 42, 46)', 'Color.argb(208, 46, 49, 53)', 'overlay clock strip refinement');
+ktSoftReplace('Color.argb(62, 190, 195, 200)', 'Color.argb(86, 202, 206, 212)', 'overlay clock border refinement');
+
+// Tighter but still readable chip / row spacing.
+ktSoftReplace('setPadding(dp(3), dp(3), dp(3), dp(3))', 'setPadding(dp(2), dp(2), dp(2), dp(2))', 'overlay compact chip padding');
+ktSoftReplace('setPadding(dp(5), dp(3), dp(5), dp(3))', 'setPadding(dp(4), dp(2), dp(4), dp(2))', 'overlay clock strip padding');
+ktSoftReplace('setPadding(0, dp(4), 0, 0)', 'setPadding(0, dp(3), 0, 0)', 'overlay stats row tightening');
+
 setEmbedded('OVERLAY_SERVICE_KT', kt);
 console.log('✓ clean native floating HUD reface');
 
