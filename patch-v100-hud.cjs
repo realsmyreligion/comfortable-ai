@@ -1193,3 +1193,228 @@ overlay = replaceAllSoft(
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse Smoky Transparent HUD patch applied.');
+
+
+// ===========================================================================
+// FINAL VISUAL REDESIGN — concept lock-in
+// Dashboard reference: smoky-black glass, clean red trim, official TornPulse
+// artwork, compact live radar, professional spacing.
+// HUD reference: official TornPulse wordmark, centered activity ticker, glassy
+// resource cells, translucent utility row, and a large TP minimized button.
+// ===========================================================================
+
+function finalStyle(text, key, body) {
+  const re = new RegExp(`${key}:\\{[^}]+\\}`);
+  if (!re.test(text)) {
+    console.log(`- final style ${key} skipped`);
+    return text;
+  }
+  console.log(`✓ final style ${key}`);
+  return text.replace(re, `${key}:{${body}}`);
+}
+
+function finalPalette(text, key, value) {
+  const re = new RegExp(`${key}\\s*:\\s*['\"](?:rgba\\([^)]*\\)|#[0-9A-Fa-f]{6,8})['\"]`);
+  if (!re.test(text)) {
+    console.log(`- final palette ${key} skipped`);
+    return text;
+  }
+  console.log(`✓ final palette ${key}`);
+  return text.replace(re, `${key}:'${value}'`);
+}
+
+app = extractEmbedded('APP_JS').value;
+
+// App-wide black/glass palette. Keep Torn resource color language intact.
+app = finalPalette(app, 'bg', '#020304');
+app = finalPalette(app, 'surface', 'rgba(7,9,12,0.94)');
+app = finalPalette(app, 'surface2', 'rgba(10,12,16,0.88)');
+app = finalPalette(app, 'line', '#252A31');
+app = finalPalette(app, 'line2', '#353B44');
+app = finalPalette(app, 'text', '#F5F6F8');
+app = finalPalette(app, 'muted', '#919AA5');
+app = finalPalette(app, 'red', '#E3343C');
+app = finalPalette(app, 'redDark', '#22090C');
+
+// Main shell / header: near-black, clean and minimal around the real logo.
+app = finalStyle(app, 'tpShell', "flex:1,backgroundColor:'#020304'");
+app = finalStyle(app, 'tpShellInner', "flex:1,backgroundColor:'#020304'");
+app = finalStyle(app, 'tpScrollContent', "paddingHorizontal:10,paddingTop:Platform.OS==='android'?20:6,paddingBottom:16");
+app = finalStyle(app, 'tpTopBar', "height:92,flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:10,paddingHorizontal:4,position:'relative'");
+app = finalStyle(app, 'tpBottomNav', "height:66,flexDirection:'row',alignItems:'stretch',backgroundColor:'rgba(4,6,8,0.98)',borderTopWidth:1,borderColor:'#22272E',paddingHorizontal:4,paddingBottom:Platform.OS==='android'?3:8");
+
+// Glass cards — translucent smoky black, thin cool border, soft red details.
+app = finalStyle(app, 'tpCard', "borderWidth:1,borderColor:'#2A3038',borderRadius:18,backgroundColor:'rgba(8,10,13,0.86)',padding:12,marginBottom:10");
+app = finalStyle(app, 'tpRefMetricStrip', "minHeight:104,flexDirection:'row',borderWidth:1,borderColor:'#30363E',borderRadius:18,backgroundColor:'rgba(8,10,13,0.82)',overflow:'hidden',marginBottom:10");
+app = finalStyle(app, 'tpRefMetric', "flex:1,paddingHorizontal:9,paddingVertical:11,borderRightWidth:1,borderColor:'rgba(62,68,77,0.68)',backgroundColor:'rgba(5,7,10,0.42)'");
+app = finalStyle(app, 'tpRefMetricLast', "borderRightWidth:0");
+app = finalStyle(app, 'tpRefMetricHead', "flexDirection:'row',alignItems:'center',minHeight:22");
+app = finalStyle(app, 'tpRefMetricIcon', "fontSize:18,fontWeight:'900',marginRight:5");
+app = finalStyle(app, 'tpRefMetricLabel', "color:'#A8B0BA',fontSize:7.5,fontWeight:'900',letterSpacing:.6");
+app = finalStyle(app, 'tpRefMetricValue', "color:'#F7F8FA',fontSize:17,fontWeight:'900',marginTop:8");
+app = finalStyle(app, 'tpRefTrack', "height:6,borderRadius:6,backgroundColor:'rgba(74,80,90,0.46)',overflow:'hidden',marginTop:10");
+app = finalStyle(app, 'tpRefFill', "height:'100%',borderRadius:6");
+app = finalStyle(app, 'tpRefMetricSub', "color:'#929BA6',fontSize:7.5,fontWeight:'800',marginTop:7");
+
+// Drug / Booster / Medical / Scanner row.
+app = finalStyle(app, 'tpCooldownStrip', "flexDirection:'row',gap:0,marginBottom:10,borderWidth:1,borderColor:'#30363E',borderRadius:18,backgroundColor:'rgba(8,10,13,0.82)',overflow:'hidden'");
+app = finalStyle(app, 'tpCooldownMini', "flex:1,minHeight:70,borderRightWidth:1,borderColor:'rgba(62,68,77,0.68)',backgroundColor:'rgba(5,7,10,0.38)',paddingHorizontal:8,paddingVertical:9,flexDirection:'row',alignItems:'center'");
+app = finalStyle(app, 'tpCooldownLabel', "color:'#AEB6C0',fontSize:7.5,fontWeight:'900',letterSpacing:.5");
+app = finalStyle(app, 'tpCooldownValue', "color:'#F4F6F8',fontSize:11,fontWeight:'900',marginTop:3");
+app = finalStyle(app, 'tpCooldownIcon', "fontSize:21,fontWeight:'900',marginRight:7");
+
+// Target Radar — very close to the approved concept, without changing scanner logic.
+app = finalStyle(app, 'tpRadarClone', "borderWidth:1,borderColor:'#30363E',borderRadius:19,backgroundColor:'rgba(7,9,12,0.88)',overflow:'hidden',marginBottom:10");
+app = finalStyle(app, 'tpRadarCloneHead', "minHeight:72,flexDirection:'row',alignItems:'center',paddingHorizontal:14,paddingVertical:12,backgroundColor:'rgba(9,11,15,0.56)'");
+app = finalStyle(app, 'tpRadarCloneTitle', "color:'#F6F7F9',fontSize:16,fontWeight:'900',letterSpacing:.35");
+app = finalStyle(app, 'tpRadarCloneCopy', "color:'#A3ABB6',fontSize:8.5,fontWeight:'700',marginTop:4");
+app = finalStyle(app, 'tpRadarViewAll', "height:38,borderWidth:1,borderColor:'#E3343C',borderRadius:11,alignItems:'center',justifyContent:'center',paddingHorizontal:13,backgroundColor:'rgba(50,8,12,0.44)'");
+app = finalStyle(app, 'tpRadarViewAllText', "color:'#FF5B62',fontSize:8,fontWeight:'900',letterSpacing:.7");
+app = finalStyle(app, 'tpRadarSummary', "minHeight:68,flexDirection:'row',borderTopWidth:1,borderBottomWidth:1,borderColor:'#2A3038',backgroundColor:'rgba(10,12,16,0.72)'");
+app = finalStyle(app, 'tpRadarSummaryCell', "flex:1,alignItems:'center',justifyContent:'center',borderRightWidth:1,borderColor:'rgba(62,68,77,0.58)'");
+app = finalStyle(app, 'tpRadarSummaryLast', "borderRightWidth:0");
+app = finalStyle(app, 'tpRadarSummaryValue', "color:'#EEF1F4',fontSize:16,fontWeight:'900'");
+app = finalStyle(app, 'tpRadarSummaryLabel', "color:'#818A96',fontSize:6.5,fontWeight:'900',letterSpacing:.65,marginTop:3");
+app = finalStyle(app, 'tpRadarFooter', "height:42,flexDirection:'row',alignItems:'center',justifyContent:'center',borderTopWidth:1,borderColor:'#2A3038',backgroundColor:'rgba(6,8,11,0.70)'");
+app = finalStyle(app, 'tpRadarFooterText', "color:'#9CA5AF',fontSize:8,fontWeight:'900',letterSpacing:.5");
+app = finalStyle(app, 'tpRadarFooterArrow', "color:'#D8DCE1',fontSize:22,fontWeight:'900',position:'absolute',right:13");
+
+// Target rows: black, thin separators, outlined attack button until actually ready.
+app = finalStyle(app, 'targetRow', "minHeight:61,flexDirection:'row',borderBottomWidth:1,borderColor:'#252B32',backgroundColor:'rgba(4,6,9,0.54)'");
+app = finalStyle(app, 'targetBody', "flex:1,paddingLeft:9,paddingTop:7,paddingBottom:7,paddingRight:4");
+app = finalStyle(app, 'targetName', "flex:1,color:'#F6F7F9',fontSize:12.5,fontWeight:'900'");
+app = finalStyle(app, 'targetLv', "width:36,color:'#F04A51',fontSize:9,fontWeight:'900',textAlign:'right'");
+app = finalStyle(app, 'targetTotal', "width:74,color:'#ECEFF2',fontSize:8.5,fontWeight:'900',textAlign:'right'");
+app = finalStyle(app, 'targetStat', "flex:1,color:'#A6AFBA',fontSize:8.5,fontWeight:'800'");
+app = finalStyle(app, 'targetAttack', "width:76,marginVertical:8,marginRight:8,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'#71343A',borderRadius:11,backgroundColor:'rgba(27,8,11,0.60)',elevation:0");
+app = finalStyle(app, 'targetAttackReady', "borderColor:'#F0444D',backgroundColor:'rgba(126,23,30,0.78)',elevation:3");
+app = finalStyle(app, 'targetAttackText', "color:'#FFFFFF',fontSize:8,fontWeight:'900',letterSpacing:.7");
+
+// Quick actions / lower cards / scanner / HUD shortcut.
+app = finalStyle(app, 'tpQuick', "flex:1,minHeight:78,borderWidth:1,borderColor:'#30363E',borderRadius:14,backgroundColor:'rgba(7,9,12,0.78)',alignItems:'center',justifyContent:'center'");
+app = finalStyle(app, 'tpQuickIcon', "fontSize:23,fontWeight:'900'");
+app = finalStyle(app, 'tpQuickLabel', "color:'#B1B8C2',fontSize:7.5,fontWeight:'900',letterSpacing:.65,marginTop:6");
+app = finalStyle(app, 'tpLowerCard', "flex:1,borderWidth:1,borderColor:'#30363E',borderRadius:16,backgroundColor:'rgba(7,9,12,0.82)',padding:11");
+app = finalStyle(app, 'tpScannerButton', "height:32,borderRadius:9,borderWidth:1,borderColor:'#315D39',backgroundColor:'rgba(11,31,16,0.54)',alignItems:'center',justifyContent:'center',marginTop:8");
+app = finalStyle(app, 'tpHudShortcut', "minHeight:74,borderWidth:1,borderColor:'#3A414B',borderRadius:16,backgroundColor:'rgba(7,9,12,0.82)',padding:12,marginBottom:9,flexDirection:'row',alignItems:'center',justifyContent:'space-between'");
+
+// Later page-specific styles added by the branding/HUD passes. These are all
+// optional so nearby source revisions remain build-safe.
+for (const [name, props] of [
+  ['pHudHero', {backgroundColor:"'rgba(7,9,12,0.82)'", borderColor:"'#30363E'", borderRadius:'18'}],
+  ['pDashHud', {backgroundColor:"'rgba(7,9,12,0.82)'", borderColor:"'#30363E'", borderRadius:'18'}],
+  ['pHudShortcut', {backgroundColor:"'rgba(7,9,12,0.82)'", borderColor:"'#30363E'", borderRadius:'16'}],
+  ['pHeaderImageWrap', {backgroundColor:"'transparent'"}],
+]) {
+  app = updateStyleObject(app, name, block => {
+    for (const [prop, value] of Object.entries(props)) block = setStyleProp(block, prop, value);
+    return block;
+  }, `final ${name} glass styling`);
+}
+
+setEmbedded('APP_JS', app);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse final dashboard concept styling applied.');
+
+// ---------------------------------------------------------------------------
+// Native floating HUD — IMPORTANT: style BOTH root-background assignments.
+// The old gray rectangle survived because applyCollapsedState() assigned a
+// second gray root background after the first shell had already been styled.
+// This pass removes SkylineDrawable/gray at the real root and replaces both
+// paths with translucent smoky-black glass.
+// ---------------------------------------------------------------------------
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+const smokyRootExpression = `if (hudCollapsed) GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(22).toFloat()
+        setColor(Color.argb(42, 3, 4, 7))
+        setStroke(dp(1), Color.argb(62, 227, 52, 60))
+      } else GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(20).toFloat()
+        setColor(Color.argb(138, 3, 4, 7))
+        setStroke(dp(1), Color.argb(86, 227, 52, 60))
+      }`;
+
+// Initial root construction background.
+overlay = replaceRegexSoft(
+  overlay,
+  /background = if \(hudCollapsed\) GradientDrawable\(\)\.apply \{[\s\S]*?\n\s*\} else SkylineDrawable\(resources\.displayMetrics\.density\)/g,
+  `background = ${smokyRootExpression}`,
+  'final smoky initial HUD root'
+);
+
+// Runtime collapsed/expanded background. This is the layer that kept bringing
+// the gray rectangle back after every previous cosmetic pass.
+overlay = replaceRegexSoft(
+  overlay,
+  /root\.background = if \(hudCollapsed\) GradientDrawable\(\)\.apply \{[\s\S]*?\n\s*\} else SkylineDrawable\(resources\.displayMetrics\.density\)/g,
+  `root.background = ${smokyRootExpression}`,
+  'final smoky runtime HUD root'
+);
+
+// Also catch a later version where the expanded half was already converted
+// from SkylineDrawable into a GradientDrawable.
+overlay = replaceRegexSoft(
+  overlay,
+  /root\.background = if \(hudCollapsed\) GradientDrawable\(\)\.apply \{[\s\S]*?\n\s*\} else GradientDrawable\(\)\.apply \{[\s\S]*?\n\s*\}/g,
+  `root.background = ${smokyRootExpression}`,
+  'final smoky runtime HUD root gradient variant'
+);
+
+// Glassy inner cells. No flat gray panels anywhere.
+for (const [oldValue, newValue, label] of [
+  ['Color.argb(96, 8, 9, 12)', 'Color.argb(78, 3, 4, 7)', 'final stat glass'],
+  ['Color.argb(84, 9, 10, 13)', 'Color.argb(68, 3, 4, 7)', 'final utility glass'],
+  ['Color.argb(72, 9, 10, 13)', 'Color.argb(58, 3, 4, 7)', 'final ticker glass'],
+  ['Color.argb(120, 8, 9, 12)', 'Color.argb(105, 3, 4, 7)', 'final shell glass high'],
+  ['Color.argb(82, 4, 5, 8)', 'Color.argb(70, 1, 2, 4)', 'final shell glass low'],
+  ['Color.argb(248, 48, 51, 56)', 'Color.argb(42, 3, 4, 7)', 'remove legacy collapsed gray'],
+  ['Color.argb(252, 12, 13, 16)', 'Color.argb(42, 3, 4, 7)', 'remove legacy dark-solid collapsed'],
+]) {
+  overlay = replaceAllSoft(overlay, oldValue, newValue, label);
+}
+
+// Refine the activity ticker to match the concept bar.
+overlay = restyleGradientAfterMarker(
+  overlay,
+  'eventTickerText = makeText(',
+  12,
+  '66, 3, 4, 7',
+  '72, 227, 52, 60',
+  'final activity ticker glass'
+);
+
+// Resource colors stay aligned with the established TornPulse/Torn language.
+overlay = replaceAllSoft(overlay, 'Color.rgb(52, 152, 219)', 'Color.rgb(74, 144, 226)', 'final Life blue');
+overlay = replaceAllSoft(overlay, 'Color.rgb(103, 213, 45)', 'Color.rgb(139, 195, 74)', 'final Energy green');
+overlay = replaceAllSoft(overlay, 'Color.rgb(255, 90, 56)', 'Color.rgb(231, 76, 60)', 'final Nerve red');
+
+// Keep the official logo artwork large and dominant, matching the concept.
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentExpandedLogoWidthDp = when {\n      compact -> 186\n      large -> 236\n      else -> 208\n    }\n    currentExpandedLogoHeightDp = when {\n      compact -> 34\n      large -> 46\n      else -> 40\n    }`,
+  `    currentExpandedLogoWidthDp = when {\n      compact -> 198\n      large -> 250\n      else -> 220\n    }\n    currentExpandedLogoHeightDp = when {\n      compact -> 36\n      large -> 48\n      else -> 42\n    }`,
+  'final large official TornPulse HUD logo'
+);
+
+// Minimized TP: noticeable, clean, and only a faint smoky-black backing.
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 96\n      large -> 126\n      else -> 112\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 40\n      large -> 52\n      else -> 46\n    }`,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 100\n      large -> 132\n      else -> 118\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 42\n      large -> 54\n      else -> 48\n    }`,
+  'final minimized TP sizing'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `      compact -> 106\n      large -> 138\n      else -> 122`,
+  `      compact -> 110\n      large -> 144\n      else -> 128`,
+  'final minimized HUD shell width'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse FINAL professional app + HUD redesign applied.');
