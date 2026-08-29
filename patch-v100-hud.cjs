@@ -106,7 +106,7 @@ const newCompact = `  /* TORNPULSE_COMPACT_RADAR */
     return <View style={styles.tpRadarClone}>
       <View style={styles.tpRadarCloneHead}>
         <View style={styles.tpRadarTitleIcon}><Text style={styles.tpRadarTitleIconText}>◎</Text></View>
-        <View style={{flex:1,minWidth:0}}><Text style={styles.tpRadarCloneTitle}>TARGET RADAR</Text><Text style={styles.tpRadarCloneCopy}>{baldrCount} total • live targets • ready to hit</Text></View></View>
+        <View style={{flex:1,minWidth:0}}><Text style={styles.tpRadarCloneTitle}>TARGET RADAR</Text><Text style={styles.tpRadarCloneCopy}>{baldrCount} total • live targets • ready to hit</Text></View>
         <Pressable onPress={onViewAll} style={styles.tpRadarViewAll}><Text style={styles.tpRadarViewAllText}>VIEW ALL  ›</Text></Pressable>
       </View>
       <View style={styles.tpRadarInner}>
