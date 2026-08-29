@@ -1423,3 +1423,440 @@ overlay = replaceOptionalExact(
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse FINAL professional app + HUD redesign applied.');
+// ===========================================================================
+// TORNPULSE HUD CONCEPT REBUILD
+// This is intentionally structural, not another cosmetic color pass.
+// It runs LAST and rebuilds the native overlay's actual root + card layout.
+// ===========================================================================
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function finalHudBraceBlock(text, marker, replacement, label) {
+  const start = text.indexOf(marker);
+  if (start < 0) throw new Error(`TornPulse HUD rebuild: ${label} marker not found`);
+  const open = text.indexOf('{', start);
+  if (open < 0) throw new Error(`TornPulse HUD rebuild: ${label} opening brace not found`);
+  let depth = 1;
+  let end = -1;
+  for (let i = open + 1; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') {
+      depth--;
+      if (depth === 0) { end = i + 1; break; }
+    }
+  }
+  if (end < 0) throw new Error(`TornPulse HUD rebuild: ${label} closing brace not found`);
+  console.log(`✓ HUD REBUILD ${label}`);
+  return text.slice(0, start) + replacement + text.slice(end);
+}
+
+function finalHudSection(text, startMarker, endMarker, replacement, label) {
+  const start = text.indexOf(startMarker);
+  if (start < 0) throw new Error(`TornPulse HUD rebuild: ${label} start not found`);
+  const end = text.indexOf(endMarker, start);
+  if (end < 0) throw new Error(`TornPulse HUD rebuild: ${label} end not found`);
+  console.log(`✓ HUD REBUILD ${label}`);
+  return text.slice(0, start) + replacement + text.slice(end);
+}
+
+function finalHudRegexOne(text, regex, replacement, label) {
+  const matches = text.match(regex);
+  if (!matches) throw new Error(`TornPulse HUD rebuild: ${label} not found`);
+  console.log(`✓ HUD REBUILD ${label}`);
+  return text.replace(regex, replacement);
+}
+
+// A dedicated footer reference lets the compact TP-only state hide EVERYTHING
+// except the TP artwork.
+if (!overlay.includes('private var hudFooterView: TextView? = null')) {
+  const fieldAnchor = '  private var tornHourCountdownText: TextView? = null';
+  if (!overlay.includes(fieldAnchor)) throw new Error('TornPulse HUD rebuild: TCT field anchor not found');
+  overlay = overlay.replace(
+    fieldAnchor,
+    fieldAnchor + '\n  private var hudFooterView: TextView? = null'
+  );
+  console.log('✓ HUD REBUILD footer field');
+}
+
+// Give the concept HUD enough horizontal room for a real four-column layout.
+overlay = finalHudRegexOne(
+  overlay,
+  /    val minWidthDp = when \{\s*compact -> \d+\s*large -> \d+\s*else -> \d+\s*\}/,
+  `    val minWidthDp = when {
+      compact -> 286
+      large -> 348
+      else -> 320
+    }`,
+  'expanded HUD width'
+);
+
+overlay = finalHudRegexOne(
+  overlay,
+  /    val collapsedWidthDp = when \{\s*compact -> \d+\s*large -> \d+\s*else -> \d+\s*\}/,
+  `    val collapsedWidthDp = when {
+      compact -> 100
+      large -> 126
+      else -> 114
+    }`,
+  'TP-only collapsed width'
+);
+
+// Make the real supplied TornPulse wordmark the dominant header art.
+overlay = finalHudRegexOne(
+  overlay,
+  /    currentExpandedLogoWidthDp = when \{\s*compact -> \d+\s*large -> \d+\s*else -> \d+\s*\}/,
+  `    currentExpandedLogoWidthDp = when {
+      compact -> 188
+      large -> 248
+      else -> 220
+    }`,
+  'expanded wordmark width'
+);
+overlay = finalHudRegexOne(
+  overlay,
+  /    currentExpandedLogoHeightDp = when \{\s*compact -> \d+\s*large -> \d+\s*else -> \d+\s*\}/,
+  `    currentExpandedLogoHeightDp = when {
+      compact -> 35
+      large -> 47
+      else -> 41
+    }`,
+  'expanded wordmark height'
+);
+overlay = finalHudRegexOne(
+  overlay,
+  /    currentCollapsedLogoWidthDp = when \{\s*compact -> \d+\s*large -> \d+\s*else -> \d+\s*\}/,
+  `    currentCollapsedLogoWidthDp = when {
+      compact -> 96
+      large -> 122
+      else -> 110
+    }`,
+  'TP emblem width'
+);
+overlay = finalHudRegexOne(
+  overlay,
+  /    currentCollapsedLogoHeightDp = when \{\s*compact -> \d+\s*large -> \d+\s*else -> \d+\s*\}/,
+  `    currentCollapsedLogoHeightDp = when {
+      compact -> 39
+      large -> 50
+      else -> 45
+    }`,
+  'TP emblem height'
+);
+
+// ROOT SHELL: this is the part previous builds failed to touch.
+// Collapsed = literally transparent. Expanded = smoky black glass only.
+overlay = finalHudBraceBlock(
+  overlay,
+  '    val root = LinearLayout(this).apply {',
+  `    val root = LinearLayout(this).apply {
+      // TORNPULSE_HUD_CONCEPT_REBUILD
+      orientation = LinearLayout.VERTICAL
+      setPadding(
+        if (hudCollapsed) 0 else dp(8),
+        if (hudCollapsed) 0 else dp(7),
+        if (hudCollapsed) 0 else dp(8),
+        if (hudCollapsed) 0 else dp(7)
+      )
+      minimumWidth = dp(if (hudCollapsed) collapsedWidthDp else minWidthDp)
+      elevation = if (hudCollapsed) 0f else dp(8).toFloat()
+      background = if (hudCollapsed) null else GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(Color.argb(168, 3, 4, 7), Color.argb(122, 0, 1, 3))
+      ).apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(19).toFloat()
+        setStroke(dp(1), Color.argb(108, 227, 52, 60))
+      }
+    }`,
+  'native transparent/glass root'
+);
+
+// Red tech rail instead of the old neutral/gray divider.
+overlay = finalHudBraceBlock(
+  overlay,
+  '    val accentRail = View(this).apply {',
+  `    val accentRail = View(this).apply {
+      setBackgroundColor(Color.argb(155, 227, 52, 60))
+      visibility = if (hudCollapsed) View.GONE else View.VISIBLE
+    }`,
+  'red header rail'
+);
+
+// Rebuild the three resource cards themselves.
+overlay = replaceKotlinFunction(
+  overlay,
+  '    fun makeStatColumn(',
+  `    fun makeStatColumn(label: String, color: Int): Triple<LinearLayout, TextView, TextView> {
+      val column = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(6), dp(7), dp(6), dp(6))
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(10).toFloat()
+          setColor(Color.argb(92, 5, 7, 10))
+          setStroke(dp(1), Color.argb(100, Color.red(color), Color.green(color), Color.blue(color)))
+        }
+      }
+      val labelView = makeText(label, maxOf(7f, statLabelSize + 0.5f), color, true).apply {
+        letterSpacing = 0.06f
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      val valueView = makeText("-- / --", maxOf(11f, barsSize - 1f), Color.rgb(247, 248, 250), true).apply {
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        setPadding(0, dp(4), 0, 0)
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      val timerView = makeText("--", maxOf(6.5f, statLabelSize - 1f), Color.rgb(152, 161, 172), true).apply {
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        setPadding(0, dp(3), 0, 0)
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      val accent = View(this).apply { setBackgroundColor(color) }
+      column.addView(labelView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      column.addView(valueView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      column.addView(timerView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      column.addView(accent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(5) })
+      return Triple(column, valueView, timerView)
+    }`,
+  'concept resource cards'
+);
+
+// TORN TIME becomes a real fourth sibling card instead of a separate gray bar.
+overlay = finalHudSection(
+  overlay,
+  '    val tornClockRow = LinearLayout(this).apply {',
+  '    val statContainer = LinearLayout(this).apply {',
+  `    val tornClockRow = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER
+      setPadding(dp(6), dp(7), dp(6), dp(6))
+      visibility = if (hudCollapsed) View.GONE else View.VISIBLE
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(10).toFloat()
+        setColor(Color.argb(92, 5, 7, 10))
+        setStroke(dp(1), Color.argb(96, 227, 52, 60))
+      }
+    }
+    makeText("TORN TIME", maxOf(7f, cooldownSize - 0.5f), Color.rgb(190, 196, 204), true).also {
+      it.letterSpacing = 0.06f
+      it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornClockTimeText = makeText("TCT --:--:--", maxOf(9f, barsSize - 3f), Color.rgb(247, 248, 250), true).also {
+      it.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      it.setPadding(0, dp(4), 0, 0)
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornHourCountdownText = makeText("HOUR --:--:--", maxOf(6.5f, cooldownSize - 1f), Color.rgb(152, 161, 172), true).also {
+      it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      it.setPadding(0, dp(3), 0, 0)
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    val timeAccent = View(this).apply { setBackgroundColor(Color.rgb(227, 52, 60)) }
+    tornClockRow.addView(timeAccent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(5) })
+    tornClockRowView = tornClockRow
+
+`,
+  'fourth Torn Time card'
+);
+
+// Put HEALTH / ENERGY / NERVE / TORN TIME in one actual four-column strip.
+overlay = finalHudSection(
+  overlay,
+  '    val lifeStat = makeStatColumn(',
+  '    val cooldownRow = LinearLayout(this).apply {',
+  `    val lifeStat = makeStatColumn("HEALTH", Color.rgb(74, 144, 226))
+    val energyStat = makeStatColumn("ENERGY", Color.rgb(139, 195, 74))
+    val nerveStat = makeStatColumn("NERVE", Color.rgb(231, 76, 60))
+    statContainer.addView(lifeStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(2) })
+    statContainer.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
+    statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
+    statContainer.addView(tornClockRow, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })
+    lifeValueText = lifeStat.second
+    energyValueText = energyStat.second
+    nerveValueText = nerveStat.second
+    lifeCooldownText = lifeStat.third
+    energyCooldownText = energyStat.third
+    nerveCooldownText = nerveStat.third
+    statsRow = statContainer
+    root.addView(statContainer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+      topMargin = dp(6)
+    })
+
+`,
+  'four-column vital strip'
+);
+
+// Utility cards become the second four-column strip.
+overlay = replaceKotlinFunction(
+  overlay,
+  '    fun makeCooldownChip(',
+  `    fun makeCooldownChip(label: String, labelColor: Int): Pair<LinearLayout, TextView> {
+      val chip = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(5), dp(7), dp(5), dp(6))
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(10).toFloat()
+          setColor(Color.argb(78, 4, 6, 9))
+          setStroke(dp(1), Color.argb(82, Color.red(labelColor), Color.green(labelColor), Color.blue(labelColor)))
+        }
+      }
+      val labelView = makeText(label, maxOf(6.5f, cooldownSize - 0.5f), labelColor, true).apply {
+        letterSpacing = 0.06f
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      val valueView = makeText("--", maxOf(8f, cooldownSize + 0.5f), Color.rgb(240, 243, 246), true).apply {
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        setPadding(0, dp(4), 0, 0)
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      chip.addView(labelView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      chip.addView(valueView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      return Pair(chip, valueView)
+    }`,
+  'concept utility cards'
+);
+
+overlay = finalHudSection(
+  overlay,
+  '    val drugChip = makeCooldownChip(',
+  '    eventTickerText = makeText(',
+  `    val drugChip = makeCooldownChip("DRUG", Color.rgb(173, 123, 255))
+    val boosterChip = makeCooldownChip("BOOSTER", Color.rgb(226, 169, 72))
+    val medicalChip = makeCooldownChip("MEDICAL", Color.rgb(111, 208, 141))
+    val scannerChip = makeCooldownChip("SCANNER", Color.rgb(111, 208, 141))
+    scannerChip.second.text = "ON"
+    scannerChip.second.setTextColor(Color.rgb(111, 208, 141))
+
+    cooldownRow.addView(drugChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(2) })
+    cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
+    cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
+    cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })
+
+    drugCooldownText = drugChip.second
+    boosterCooldownText = boosterChip.second
+    medicalCooldownText = medicalChip.second
+    cooldownRowView = cooldownRow
+    root.addView(cooldownRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+      topMargin = dp(5)
+    })
+
+    hudFooterView = makeText("●  FLOATING HUD  •  ON SCREEN", maxOf(6.5f, cooldownSize - 1f), Color.rgb(111, 208, 141), true).also {
+      it.letterSpacing = 0.08f
+      it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      it.setPadding(dp(3), dp(6), dp(3), 0)
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      it.visibility = if (hudCollapsed) View.GONE else View.VISIBLE
+      root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+
+`,
+  'four-column utility strip + HUD footer'
+);
+
+// The runtime state switch is rebuilt completely so it can NEVER restore the
+// old graphite rectangle after collapse/expand.
+overlay = replaceKotlinFunction(
+  overlay,
+  '  private fun applyCollapsedState()',
+  `  private fun applyCollapsedState() {
+    val root = overlayView ?: return
+    val visible = if (hudCollapsed) View.GONE else View.VISIBLE
+
+    statsRow?.visibility = visible
+    cooldownRowView?.visibility = visible
+    tornClockRowView?.visibility = visible
+    statusText?.visibility = visible
+    accentRailView?.visibility = visible
+    hudFooterView?.visibility = visible
+    detailText?.visibility = View.GONE
+
+    headerRowView?.gravity = if (hudCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
+    logoViewRef?.contentDescription = if (hudCollapsed) "Expand TornPulse HUD" else "Collapse TornPulse HUD"
+
+    logoViewRef?.let { logo ->
+      logo.setImageBitmap(if (hudCollapsed) decodeInlineLogo(HUD_TP_BASE64) else decodeInlineLogo(HUD_WORDMARK_BASE64))
+      val targetWidth = dp(if (hudCollapsed) currentCollapsedLogoWidthDp else currentExpandedLogoWidthDp)
+      val targetHeight = dp(if (hudCollapsed) currentCollapsedLogoHeightDp else currentExpandedLogoHeightDp)
+      val logoParams = logo.layoutParams
+      logoParams.width = targetWidth
+      logoParams.height = targetHeight
+      logo.layoutParams = logoParams
+    }
+
+    root.setPadding(
+      if (hudCollapsed) 0 else dp(8),
+      if (hudCollapsed) 0 else dp(7),
+      if (hudCollapsed) 0 else dp(8),
+      if (hudCollapsed) 0 else dp(7)
+    )
+    root.minimumWidth = dp(if (hudCollapsed) currentCollapsedLogoWidthDp else currentMinWidthDp)
+    root.elevation = if (hudCollapsed) 0f else dp(8).toFloat()
+
+    root.background = if (hudCollapsed) null else GradientDrawable(
+      GradientDrawable.Orientation.TOP_BOTTOM,
+      intArrayOf(Color.argb(168, 3, 4, 7), Color.argb(122, 0, 1, 3))
+    ).apply {
+      shape = GradientDrawable.RECTANGLE
+      cornerRadius = dp(19).toFloat()
+      setStroke(dp(1), Color.argb(108, 227, 52, 60))
+    }
+
+    if (hudCollapsed) eventTickerText?.visibility = View.GONE else renderEventTicker()
+
+    val lp = params
+    if (lp != null) {
+      val display = resources.displayMetrics
+      val targetWidth = dp(if (hudCollapsed) currentCollapsedLogoWidthDp else currentMinWidthDp)
+      lp.x = min(max(0, lp.x), max(0, display.widthPixels - targetWidth))
+      try { windowManager.updateViewLayout(root, lp) } catch (_: Exception) {}
+    }
+    root.requestLayout()
+  }`,
+  'true TP-only collapsed state'
+);
+
+// Clear the extra footer reference during service teardown.
+if (overlay.includes('    tornHourCountdownText = null') && !overlay.includes('    hudFooterView = null')) {
+  overlay = overlay.replace(
+    '    tornHourCountdownText = null',
+    '    tornHourCountdownText = null\n    hudFooterView = null'
+  );
+  console.log('✓ HUD REBUILD clear footer reference');
+}
+
+// Hard verification: fail the build rather than silently ship the gray HUD again.
+if (overlay.includes('intArrayOf(Color.rgb(77, 80, 83), Color.rgb(54, 57, 60))')) {
+  throw new Error('TornPulse HUD rebuild verification: legacy graphite root is still present');
+}
+if (!overlay.includes('TORNPULSE_HUD_CONCEPT_REBUILD')) {
+  throw new Error('TornPulse HUD rebuild verification: structural marker missing');
+}
+if (!overlay.includes('val scannerChip = makeCooldownChip("SCANNER"')) {
+  throw new Error('TornPulse HUD rebuild verification: four-card utility row missing');
+}
+if (!overlay.includes('statContainer.addView(tornClockRow')) {
+  throw new Error('TornPulse HUD rebuild verification: Torn Time fourth card missing');
+}
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TORNPULSE HUD CONCEPT REBUILD — structural native overlay replacement applied.');
