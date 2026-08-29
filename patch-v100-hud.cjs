@@ -419,6 +419,191 @@ app = replaceStyle(app,'tpHeaderRule',"position:'absolute',left:-11,right:-11,bo
 // If the old text pulse is still present anywhere, make sure it's replaced by the proper component.
 app = softReplace(app, `<Text style={styles.tpBrandBeat}>⌁⌁</Text>`, `<TPHeartbeat/>`, 'replace broken text pulse with heartbeat component');
 
+
+// ---------------------------------------------------------------------------
+// Navigation + HUD clean reface
+// - remove bottom page tabs entirely
+// - top-left becomes refresh on Dashboard / back on sub-pages
+// - top-right three dots opens Settings (former More page)
+// - clean the in-app HUD control surfaces
+// - slim/reface the native Android overlay
+// ---------------------------------------------------------------------------
+
+// Remove the bottom navigation from every page. Navigation is now contextual.
+const bottomNavCount = (app.match(/<TPBottomNav\b/g) || []).length;
+app = app.replace(/<TPBottomNav\b[^>]*\/>/g, '');
+console.log(`✓ removed bottom navigation (${bottomNavCount} placements)`);
+
+// Replace the top bar with one clean navigation model.
+const topBarStart = app.indexOf('function TPTopBar(');
+const topBarEndBase = topBarStart >= 0 ? app.indexOf('\n}\n', topBarStart) : -1;
+if (topBarStart < 0 || topBarEndBase < 0) {
+  throw new Error('TornPulse clean HUD patch: TPTopBar function not found');
+}
+const topBarEnd = topBarEndBase + 3;
+const cleanTopBar = `function TPTopBar({snapshot,onRefresh,onMenu=()=>{},onBack=null,refreshing=false}) {
+  const leftAction=onBack||onRefresh;
+  return <View style={styles.tpTopBar}>
+    <Pressable onPress={leftAction} style={styles.tpTopMenu} accessibilityLabel={onBack?'Back to Dashboard':'Refresh TornPulse'}>
+      <Text style={styles.tpTopMenuText}>{onBack?'‹':refreshing?'…':'↻'}</Text>
+    </Pressable>
+    <View style={styles.tpBrandWrap}>
+      <Text style={styles.tpBrand}>TORN<Text style={styles.tpBrandAccent}>PULSE</Text></Text>
+      <TPHeartbeat/>
+    </View>
+    <Pressable onPress={onMenu} style={styles.tpTopMenu} accessibilityLabel="Open Settings">
+      <Text style={styles.tpTopMenuText}>⋮</Text>
+    </Pressable>
+    <View style={styles.tpHeaderRule}/>
+  </View>;
+}
+`;
+app = app.slice(0, topBarStart) + cleanTopBar + app.slice(topBarEnd);
+console.log('✓ clean contextual top bar');
+
+function wirePageTopBar(page, withBack) {
+  const pageMarker = `activePage === '${page}'`;
+  const pageAt = app.indexOf(pageMarker);
+  if (pageAt < 0) {
+    console.log(`- ${page} top bar wiring skipped`);
+    return;
+  }
+  const tagStart = app.indexOf('<TPTopBar ', pageAt);
+  const tagEndBase = tagStart >= 0 ? app.indexOf('/>', tagStart) : -1;
+  if (tagStart < 0 || tagEndBase < 0) {
+    console.log(`- ${page} TPTopBar tag skipped`);
+    return;
+  }
+  const tagEnd = tagEndBase + 2;
+  let tag = app.slice(tagStart, tagEnd);
+  if (!tag.includes('onMenu=')) {
+    tag = tag.slice(0, -2) + ` onMenu={()=>setActivePage('MORE')}/>`;
+  }
+  if (withBack && !tag.includes('onBack=')) {
+    tag = tag.slice(0, -2) + ` onBack={()=>setActivePage('DASHBOARD')}/>`;
+  }
+  app = app.slice(0, tagStart) + tag + app.slice(tagEnd);
+  console.log(`✓ ${page} top bar wired`);
+}
+
+wirePageTopBar('DASHBOARD', false);
+wirePageTopBar('TARGETS', true);
+wirePageTopBar('STATUS', true);
+wirePageTopBar('HUD', true);
+wirePageTopBar('MORE', true);
+
+// More is now the Settings destination behind the top-right menu.
+app = softReplace(
+  app,
+  `<Text style={styles.tpPageTitle}>MORE</Text>`,
+  `<Text style={styles.tpPageTitle}>SETTINGS</Text>`,
+  'rename More page to Settings'
+);
+app = softReplace(
+  app,
+  `Alerts, connection and app controls live here instead of crowding your dashboard.`,
+  `Alerts, connection, HUD controls and app preferences live here.`,
+  'settings page description'
+);
+
+// Bottom-nav style fallback: make sure it cannot reserve screen space.
+app = replaceStyle(app,'tpBottomNav',"display:'none',height:0,minHeight:0,padding:0,margin:0,borderWidth:0");
+app = replaceStyle(app,'tpScrollContent',"flexGrow:1,paddingHorizontal:11,paddingTop:Platform.OS==='android'?24:5,paddingBottom:24");
+app = replaceStyle(app,'tpTargetScrollContent',"paddingHorizontal:11,paddingTop:Platform.OS==='android'?24:5,paddingBottom:24");
+
+// Cleaner top bar/navigation treatment.
+app = replaceStyle(app,'tpTopBar',"height:80,flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:12,paddingHorizontal:5,position:'relative'");
+app = replaceStyle(app,'tpTopMenu',"width:44,height:44,borderRadius:12,alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpTopMenuText',"color:'#E7EAED',fontSize:25,fontWeight:'700',lineHeight:29,textAlign:'center'");
+app = replaceStyle(app,'tpBrandWrap',"flex:1,alignItems:'center',justifyContent:'center',paddingTop:1");
+app = replaceStyle(app,'tpHeartbeat',"width:58,height:17,position:'relative',marginTop:3,marginBottom:1,alignSelf:'center'");
+app = replaceStyle(app,'tpBeatSeg',"position:'absolute',height:2.5,borderRadius:2,backgroundColor:'#D53136'");
+
+// Dashboard HUD card: neutral graphite shell with status color used only as an accent.
+app = replaceStyle(app,'tpDashHud',"minHeight:122,flexGrow:1,marginTop:8,marginBottom:10,borderWidth:1,borderColor:'#555B62',borderRadius:16,backgroundColor:'#2B2F34',paddingHorizontal:14,paddingVertical:14,flexDirection:'row',alignItems:'stretch',justifyContent:'space-between'");
+app = replaceStyle(app,'tpDashHudKicker',"color:'#ADB4BB',fontSize:7.4,fontWeight:'900',letterSpacing:.9");
+app = replaceStyle(app,'tpDashHudTitle',"color:'#F5F6F7',fontSize:15.5,fontWeight:'900',marginTop:7");
+app = replaceStyle(app,'tpDashHudCopy',"color:'#B6BDC4',fontSize:8.1,fontWeight:'700',marginTop:6,lineHeight:13");
+app = replaceStyle(app,'tpDashHudActions',"width:118,gap:8,justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudToggle',"height:40,borderWidth:1,borderColor:'#5A7B62',borderRadius:10,backgroundColor:'#303A33',alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudManage',"height:32,borderWidth:1,borderColor:'#555B62',borderRadius:9,backgroundColor:'#34383D',alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudManageText',"color:'#CDD2D7',fontSize:6.9,fontWeight:'900',letterSpacing:.38");
+
+// HUD page: clean control-console look.
+app = replaceStyle(app,'tpHeroHud',"borderWidth:1,borderColor:'#555B62',borderRadius:17,backgroundColor:'#2B2F34',padding:16,marginBottom:10");
+app = replaceStyle(app,'tpHudHeroTop',"flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:10");
+app = replaceStyle(app,'tpHudHeroKicker',"color:'#AEB5BC',fontSize:7.2,fontWeight:'900',letterSpacing:.8");
+app = replaceStyle(app,'tpHudHeroTitle',"fontSize:21,fontWeight:'900',marginTop:3");
+app = replaceStyle(app,'tpHudHeroCopy',"color:'#C3C8CD',fontSize:9.2,fontWeight:'700',lineHeight:14.5,marginBottom:13");
+app = replaceStyle(app,'tpHudLamp',"width:10,height:10,borderRadius:5,backgroundColor:'#777D84'");
+app = replaceStyle(app,'tpHudLampOn',"backgroundColor:'#6FD57B'");
+app = replaceStyle(app,'tpHudMainButton',"minHeight:46,borderWidth:1,borderColor:'#667078',borderRadius:12,backgroundColor:'#353A3F',alignItems:'center',justifyContent:'center',paddingHorizontal:12");
+app = replaceStyle(app,'tpHudMainButtonStop',"borderColor:'#A95559',backgroundColor:'#493033'");
+app = replaceStyle(app,'tpHudMainButtonText',"color:'#F4F5F6',fontSize:8.2,fontWeight:'900',letterSpacing:.65");
+app = replaceStyle(app,'tpHudUtilityRow',"minHeight:34,paddingVertical:4");
+
+// Native overlay reface.
+let kt = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function ktSoftReplace(oldText,newText,label) {
+  if (kt.includes(newText)) return;
+  const count = kt.split(oldText).length - 1;
+  if (!count) {
+    console.log(`- native ${label} skipped`);
+    return;
+  }
+  kt = kt.split(oldText).join(newText);
+  console.log(`✓ native ${label}`);
+}
+function ktReplaceWhen(name, body) {
+  const re = new RegExp(`    val ${name} = when \\\\{[\\\\s\\\\S]*?\\\\n    \\\\}`);
+  if (!re.test(kt)) {
+    console.log(`- native ${name} sizing skipped`);
+    return;
+  }
+  kt = kt.replace(re, `    val ${name} = when {\n${body}\n    }`);
+  console.log(`✓ native ${name} sizing`);
+}
+
+// Slimmer default footprint while keeping all values readable.
+ktReplaceWhen('minWidthDp', `      compact -> 178\n      large -> 238\n      else -> 208`);
+ktReplaceWhen('collapsedWidthDp', `      compact -> 38\n      large -> 48\n      else -> 42`);
+ktReplaceWhen('logoSize', `      compact -> 16\n      large -> 21\n      else -> 18`);
+ktReplaceWhen('statLabelSize', `      compact -> 6.5f\n      large -> 8f\n      else -> 7f`);
+ktReplaceWhen('barsSize', `      compact -> 11.5f\n      large -> 15f\n      else -> 13f`);
+ktReplaceWhen('cooldownSize', `      compact -> 6.5f\n      large -> 8f\n      else -> 7f`);
+ktReplaceWhen('tickerSize', `      compact -> 6.5f\n      large -> 8f\n      else -> 7f`);
+ktReplaceWhen('detailSize', `      compact -> 6.5f\n      large -> 8f\n      else -> 7f`);
+
+// Graphite shell: gray is primary; red/green remain restrained state accents.
+ktSoftReplace('Color.rgb(77, 80, 83)', 'Color.rgb(50, 53, 57)', 'graphite shell top');
+ktSoftReplace('Color.rgb(54, 57, 60)', 'Color.rgb(31, 34, 38)', 'graphite shell bottom');
+ktSoftReplace('Color.argb(85, 225, 228, 231)', 'Color.argb(190, 198, 45, 49)', 'thin Torn red accent');
+ktSoftReplace('Color.argb(118, 31, 33, 36)', 'Color.argb(205, 43, 46, 50)', 'cooldown chip background');
+ktSoftReplace('Color.argb(72, 220, 223, 226)', 'Color.argb(74, 190, 195, 200)', 'cooldown chip border');
+ktSoftReplace('Color.argb(96, 27, 29, 32)', 'Color.argb(190, 39, 42, 46)', 'clock strip background');
+ktSoftReplace('Color.argb(64, 220, 223, 226)', 'Color.argb(62, 190, 195, 200)', 'clock strip border');
+
+// Tighter spacing inside the live overlay.
+ktSoftReplace(
+  'setPadding(dp(4), dp(4), dp(4), dp(4))',
+  'setPadding(dp(3), dp(3), dp(3), dp(3))',
+  'cooldown chip padding'
+);
+ktSoftReplace(
+  'setPadding(dp(6), dp(4), dp(6), dp(4))',
+  'setPadding(dp(5), dp(3), dp(5), dp(3))',
+  'Torn clock row padding'
+);
+ktSoftReplace(
+  'setPadding(0, dp(5), 0, dp(1))',
+  'setPadding(0, dp(4), 0, 0)',
+  'stat row spacing'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', kt);
+console.log('✓ clean native floating HUD reface');
+
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
 console.log('✓ TornPulse dashboard + HUD utility cleanup applied');
