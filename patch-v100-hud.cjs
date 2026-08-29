@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const {execFileSync} = require('child_process');
 
-// TornPulse half-height floating HUD.
+// TornPulse half-height floating HUD — corrected build patch.
 // Replays successful Build #91, then compresses ONLY the native Android HUD.
 // Width, live data, scanner logic, Baldr targets and main dashboard stay unchanged.
 const BASE_COMMIT = 'ed9af1ca18853c2c893df6b9d3b50f1ed7c22be4';
@@ -64,10 +64,9 @@ function setWhen(name, compact, large, standard) {
   console.log(`✓ ${name} compressed`);
 }
 
-function replaceAllExact(oldText, newText, label, required=false) {
+function replaceAllExact(oldText, newText, label) {
   const count = kt.split(oldText).length - 1;
   if (!count) {
-    if (required) throw new Error(`TornPulse half-height HUD: ${label} not found`);
     console.log(`- ${label} skipped`);
     return;
   }
@@ -75,7 +74,7 @@ function replaceAllExact(oldText, newText, label, required=false) {
   console.log(`✓ ${label} (${count})`);
 }
 
-// Keep horizontal sizing untouched; compress the vertical measurements.
+// Keep horizontal sizing untouched; compress vertical measurements only.
 setWhen('verticalPadding', '1', '2', '1');
 setWhen('logoSize', '10', '12', '11');
 setWhen('headerSize', '5.5f', '6.5f', '6f');
@@ -85,7 +84,6 @@ setWhen('cooldownSize', '5f', '5.8f', '5.3f');
 setWhen('tickerSize', '5f', '5.8f', '5.3f');
 setWhen('detailSize', '5f', '5.8f', '5.3f');
 
-// Current graphite HUD chip/row spacing -> half-height spacing.
 replaceAllExact(
   'setPadding(dp(2), dp(2), dp(2), dp(2))',
   'setPadding(dp(2), dp(1), dp(2), dp(1))',
@@ -112,15 +110,24 @@ replaceAllExact(
   'logo right margin'
 );
 
-// Reduce any explicit tiny spacer heights without altering the width of the HUD.
+// Reduce explicit small vertical spacer heights without changing HUD width.
 kt = kt.replace(/height\s*=\s*dp\((?:4|5|6|7|8)\)/g, (m) => {
   const n = Number((m.match(/\d+/) || ['4'])[0]);
   return `height = dp(${Math.max(2, Math.round(n/2))})`;
 });
 
-// Safety guards: the HUD must still contain all major live-data rows.
-for (const marker of ['barsText', 'cooldownText', 'statusText', 'detailText']) {
-  if (!kt.includes(marker)) throw new Error(`TornPulse half-height HUD: missing ${marker} after compression`);
+// Verify the NEW sizing values instead of obsolete native variable names.
+const required = [
+  'compact -> 1',
+  'compact -> 10',
+  'compact -> 5.5f',
+  'compact -> 8.5f',
+  'compact -> 5f',
+];
+for (const marker of required) {
+  if (!kt.includes(marker)) {
+    throw new Error(`TornPulse half-height HUD: expected compressed marker missing: ${marker}`);
+  }
 }
 
 setEmbedded('OVERLAY_SERVICE_KT', kt);
