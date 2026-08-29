@@ -649,6 +649,14 @@ function targetUnavailable(status) {
   return ['hospital','jail','travel','fallen','federal'].includes(String(status||''));
 }
 
+function targetStatusConfirmed(status) {
+  return ['okay','hospital','jail','travel','fallen','federal'].includes(String(status||''));
+}
+
+function targetNeedsLiveCheck(status) {
+  return !targetStatusConfirmed(status);
+}
+
 function targetStatusText(target, clock) {
   if (!target) return '?';
   if (target.status === 'hospital' && Number(target.until) > 0) {
@@ -771,7 +779,7 @@ function targetStatusFilterMatch(target, filter) {
   return true;
 }
 
-function TargetRow({target, demo, clock, rank}) {
+function TargetRow({target, demo, clock, rank, onStatusUpdate}) {
   const [expanded,setExpanded] = useState(false);
   const sources = Array.isArray(target.sources) ? target.sources : (target.staticAfk ? ['AFK'] : ['BALDR']);
   const hasBaldr = sources.includes('BALDR');
@@ -779,6 +787,19 @@ function TargetRow({target, demo, clock, rank}) {
   const sourceLabel = hasBaldr && hasAfk ? 'MERGED' : hasAfk ? 'CLASSIC' : 'LIVE';
   const attack = async () => {
     if (demo) return Alert.alert('Target Assistant demo','ATTACK opens this player in the official Torn app when installed, with TornPulse’s browser as the fallback.');
+    if (target.status !== 'okay') return;
+    const key = await getApiKey();
+    if (!key) return Alert.alert('Connect Torn first','TornPulse needs your restricted Torn API key to confirm this target is still attackable.');
+    try {
+      const liveCheck = await fetchPublicTargetStatus(target.id,key);
+      if (onStatusUpdate) onStatusUpdate(target.id,liveCheck);
+      if (liveCheck.status !== 'okay') {
+        const reason = liveCheck.status === 'hospital' ? 'in the hospital' : liveCheck.status === 'jail' ? 'in jail' : liveCheck.status === 'travel' ? 'traveling' : liveCheck.status === 'fallen' ? 'fallen' : liveCheck.status === 'federal' ? 'federal' : 'not confirmed READY';
+        return Alert.alert('Target unavailable',target.name + ' is currently ' + reason + '. TornPulse has disabled this target.');
+      }
+    } catch (e) {
+      return Alert.alert('Could not verify target','TornPulse could not confirm this player is READY. Refresh the radar and try again.');
+    }
     const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
     const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
     const openPreferred = async (url) => {
@@ -805,7 +826,9 @@ function TargetRow({target, demo, clock, rank}) {
   const statLabel = (value) => hasBaldr ? compactStat(value) : '—';
   const railColor = targetStatusColor(target.status);
   const unavailable = targetUnavailable(target.status);
-  return <View style={[styles.targetRow,!hasBaldr&&styles.targetRowNoStats,unavailable&&styles.targetRowUnavailable]}>
+  const attackable = demo || target.status === 'okay';
+  const pending = !demo && !attackable && !unavailable;
+  return <View style={[styles.targetRow,!hasBaldr&&styles.targetRowNoStats,pending&&styles.targetRowPending,unavailable&&styles.targetRowUnavailable]}>
     <View style={[styles.targetRail,{backgroundColor:railColor}]}/>
     <Pressable onPress={() => setExpanded(v=>!v)} style={styles.targetBody}>
       <View style={styles.targetLine1}>
@@ -823,8 +846,8 @@ function TargetRow({target, demo, clock, rank}) {
       </View> : null}
       {expanded ? <View style={styles.targetExpanded}><Text style={styles.targetExpandedText}>ID {target.id}  •  {sourceLabel} INTEL  •  {target.statusDescription || statusText}</Text></View> : null}
     </Pressable>
-    <Pressable onPress={attack} disabled={unavailable} style={[styles.targetAttack,unavailable&&styles.targetAttackOff]} accessibilityLabel={(unavailable?'Unavailable target ':'Attack ') + target.name} accessibilityState={{disabled:unavailable}}>
-      <Text style={[styles.targetAttackText,unavailable&&styles.targetAttackTextOff]}>ATTACK</Text>
+    <Pressable onPress={attack} disabled={!attackable} style={[styles.targetAttack,attackable&&styles.targetAttackReady,!attackable&&styles.targetAttackOff]} accessibilityLabel={(attackable?'Attack ':'Unavailable target ') + target.name} accessibilityState={{disabled:!attackable}}>
+      <Text style={[styles.targetAttackText,!attackable&&styles.targetAttackTextOff]}>ATTACK</Text>
     </Pressable>
   </View>;
 }
@@ -841,6 +864,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   const [message,setMessage] = useState('');
   const [scanVersion,setScanVersion] = useState(0);
   const scanLogRef = useRef([]);
+  const autoScanKeyRef = useRef('');
 
   useEffect(() => {
     if (demo) return;
@@ -938,7 +962,8 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
       setMessage('API headroom reserved • ' + wait + 's');
       return;
     }
-    const candidates = pageTargets.slice(0,budget);
+    const scanPool = auto ? pageTargets.filter(t => targetNeedsLiveCheck(t.status)) : pageTargets;
+    const candidates = scanPool.slice(0,budget);
     if (!candidates.length) return;
     setScanning(true);
     setMessage('Checking ' + candidates.length + ' targets…');
@@ -968,6 +993,21 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     } finally { setScanning(false); }
   }
 
+  function applyTargetStatus(id,result) {
+    setStatusById(prev => ({...prev,[id]:result}));
+    setScanVersion(v=>v+1);
+  }
+
+  const autoPendingIds = pageTargets.filter(t => targetNeedsLiveCheck(t.status)).map(t=>String(t.id)).join(',');
+  useEffect(() => {
+    if (demo || loadingLists || scanning || !listName || !autoPendingIds) return;
+    const autoKey = listName + '|' + String(levelFilter) + '|' + String(safePage) + '|' + autoPendingIds;
+    if (autoScanKeyRef.current === autoKey) return;
+    autoScanKeyRef.current = autoKey;
+    const timer = setTimeout(() => { scanPage(true).catch(()=>{}); }, 220);
+    return () => clearTimeout(timer);
+  }, [demo,loadingLists,scanning,listName,levelFilter,safePage,autoPendingIds]);
+
   function changeList(delta) {
     if (!listNames.length) return;
     const current = Math.max(0,listNames.indexOf(listName));
@@ -993,7 +1033,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     const nextPage = Math.max(0,Math.min(pageCount-1,safePage+delta));
     if (nextPage === safePage) return;
     setPage(nextPage);
-    setMessage('Page ' + (nextPage+1) + ' • refresh for current status');
+    setMessage('Page ' + (nextPage+1) + ' • checking live status');
   }
 
   const levelScopeLabel = allLevelsSelected ? 'ALL LEVELS' : ('LEVEL ' + levelFilter);
@@ -1007,7 +1047,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
       <View style={{flex:1,minWidth:0}}><Text style={styles.targetEyebrow}>UNIFIED TARGET BOARD</Text><Text style={styles.targetCount}>{readyOnPage} READY <Text style={styles.targetCountMuted}>• {hospitalOnPage} HOSP • {unavailableOnPage} UNAVAILABLE • {checkedOnPage}/{pageTargets.length} CHECKED</Text></Text></View>
       <Pressable onPress={()=>scanPage(false).catch(()=>{})} disabled={scanning||loadingLists||!pageTargets.length} style={[styles.targetRefresh,(scanning||loadingLists)&&styles.targetRefreshOff]}><Text style={styles.targetRefreshText}>{scanning?'…':'↻'}</Text></Pressable>
     </View>
-    <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}>TORNPULSE INTEL  •  {eligibleTargets.length} TARGETS  •  LIVE STATS FIRST  •  CLASSIC LEVEL-MATCHED  •  API {apiBudget}/{TARGET_API_BUDGET}</Text></View>
+    <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}>TORNPULSE INTEL  •  {eligibleTargets.length} TARGETS  •  AUTO STATUS CHECK  •  LIVE STATS FIRST  •  API {apiBudget}/{TARGET_API_BUDGET}</Text></View>
     <View style={styles.targetListBar}>
       <Pressable onPress={()=>changeList(-1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>‹</Text></Pressable>
       <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>TORNPULSE {targetListShortName(listName)}</Text><Text style={styles.targetListMeta}>{eligibleTargets.length} TARGETS • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
@@ -1026,7 +1066,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     <View style={styles.targetColumns}><Text style={styles.targetColumnsText}>PLAYER                 LV       TOTAL          STATE</Text></View>
     {pageTargets.length ? <>{shownGroups.map(group => <View key={'level-'+group.level}>
       <View style={styles.targetLevelDivider}><View style={styles.targetLevelAccent}/><Text style={styles.targetLevelDividerText}>LEVEL {group.level}</Text><Text style={styles.targetLevelDividerCount}>{group.targets.length} SHOWN</Text></View>
-      {group.targets.map((target,index) => { const info=targetGroupInfo(target.status); const previous=index>0?targetGroupInfo(group.targets[index-1].status):null; return <View key={target.id}>{(!previous||previous.key!==info.key) ? <View style={[styles.targetStateDivider,{borderColor:info.color}]}><View style={[styles.targetStateDot,{backgroundColor:info.color}]}/><Text style={[styles.targetStateDividerText,{color:info.color}]}>{info.label}</Text></View> : null}<TargetRow target={target} demo={demo} clock={clock} rank={pageStart+pageTargets.indexOf(target)+1}/></View>; })}
+      {group.targets.map((target,index) => { const info=targetGroupInfo(target.status); const previous=index>0?targetGroupInfo(group.targets[index-1].status):null; return <View key={target.id}>{(!previous||previous.key!==info.key) ? <View style={[styles.targetStateDivider,{borderColor:info.color}]}><View style={[styles.targetStateDot,{backgroundColor:info.color}]}/><Text style={[styles.targetStateDividerText,{color:info.color}]}>{info.label}</Text></View> : null}<TargetRow target={target} demo={demo} clock={clock} rank={pageStart+pageTargets.indexOf(target)+1} onStatusUpdate={applyTargetStatus}/></View>; })}
     </View>)}</> : <View style={styles.targetEmpty}><Text style={styles.targetEmptyTitle}>{emptyTitle}</Text><Text style={styles.targetEmptyText}>{emptyText}</Text></View>}
     {pageCount>1 ? <View style={styles.targetPageNav}>
       <Pressable onPress={()=>changePage(-1)} disabled={safePage<=0} style={[styles.targetPageButton,safePage<=0&&styles.targetPageButtonOff]}><Text style={styles.targetPageButtonText}>‹ PREV</Text></Pressable>
@@ -1121,8 +1161,8 @@ const targetStyles = `
   targetStateDivider:{minHeight:24,flexDirection:'row',alignItems:'center',paddingHorizontal:10,borderTopWidth:1,borderBottomWidth:1,backgroundColor:'#0A0C0F'},targetStateDot:{width:6,height:6,borderRadius:3,marginRight:7},targetStateDividerText:{fontSize:8,fontWeight:'900',letterSpacing:.8},
   targetSourceTag:{width:43,color:'#8D98A5',fontSize:7,fontWeight:'900',letterSpacing:.35},targetSourceTagAfk:{color:'#8D98A5'},targetSourceTagBoth:{color:'#A7AFB8'},
   targetColumns:{paddingHorizontal:9,paddingVertical:5,backgroundColor:C.bg},targetColumnsText:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.25},targetLevelDivider:{height:32,flexDirection:'row',alignItems:'center',paddingRight:9,borderTopWidth:1,borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0C1016'},targetLevelAccent:{width:4,alignSelf:'stretch',backgroundColor:C.red,marginRight:9},targetLevelDividerText:{flex:1,color:'#F4F6F8',fontSize:11,fontWeight:'900',letterSpacing:1.2},targetLevelDividerCount:{color:'#A8B0BA',fontSize:8,fontWeight:'900',letterSpacing:.7},
-  targetRow:{minHeight:48,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0E1013'},targetRowNoStats:{minHeight:42},targetRowAfk:{backgroundColor:'#0E1013'},targetRowUnavailable:{opacity:.42,backgroundColor:'#090A0C'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#F2F4F6',fontSize:11,fontWeight:'900'},targetNameAfk:{color:'#F2F4F6'},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:70,color:'#E8EAED',fontSize:8,fontWeight:'900',textAlign:'right'},targetState:{width:52,fontSize:8,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},targetUnavailableDivider:{minHeight:24,justifyContent:'center',paddingHorizontal:10,borderBottomWidth:1,borderTopWidth:1,borderColor:'#2A2022',backgroundColor:'#120C0D'},targetUnavailableDividerText:{color:'#9A666A',fontSize:7,fontWeight:'900',letterSpacing:.85},
-  targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:23,paddingRight:2},targetStat:{flex:1,color:'#9AA3AD',fontSize:8,fontWeight:'800'},targetStaticMeta:{color:'#8D98A5',fontSize:8,fontWeight:'900',letterSpacing:.2,flex:1},targetStaticMetaLive:{color:'#9AB9A7'},targetVerify:{width:34,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:'#30284A',backgroundColor:'#14101F'},targetVerifyBusy:{opacity:.55},targetVerifyText:{color:'#BBAAFF',fontSize:16,fontWeight:'900'},targetAttack:{width:58,marginVertical:6,marginRight:5,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'#E14A50',borderRadius:8,backgroundColor:'#7D1F24',elevation:2},targetAttackAfk:{backgroundColor:'#7D1F24',borderColor:'#E14A50'},targetAttackOff:{opacity:.30,backgroundColor:'#24272B',borderColor:'#4B5057',elevation:0},targetAttackText:{color:'#FFFFFF',fontSize:7.5,fontWeight:'900',letterSpacing:.55},targetAttackTextOff:{color:'#9AA0A8',opacity:.9},
+  targetRow:{minHeight:48,flexDirection:'row',borderBottomWidth:1,borderColor:C.line,backgroundColor:'#0E1013'},targetRowNoStats:{minHeight:42},targetRowAfk:{backgroundColor:'#0E1013'},targetRowPending:{opacity:.68,backgroundColor:'#0B0D10'},targetRowUnavailable:{opacity:.34,backgroundColor:'#090A0C'},targetRail:{width:3,alignSelf:'stretch',opacity:.9},targetBody:{flex:1,paddingLeft:7,paddingTop:4,paddingBottom:4,paddingRight:4},targetLine1:{height:21,flexDirection:'row',alignItems:'center'},targetRank:{width:23,color:'#606A76',fontSize:7,fontWeight:'900',letterSpacing:.3},targetStatus:{width:14,fontSize:10,fontWeight:'900'},targetName:{flex:1,color:'#F2F4F6',fontSize:11,fontWeight:'900'},targetNameAfk:{color:'#F2F4F6'},targetLv:{width:30,color:C.red,fontSize:9,fontWeight:'900',textAlign:'right'},targetTotal:{width:70,color:'#E8EAED',fontSize:8,fontWeight:'900',textAlign:'right'},targetState:{width:52,fontSize:8,fontWeight:'900',textAlign:'right'},targetStateReady:{color:C.green},targetStateAfk:{color:'#B6A5FF'},targetUnavailableDivider:{minHeight:24,justifyContent:'center',paddingHorizontal:10,borderBottomWidth:1,borderTopWidth:1,borderColor:'#2A2022',backgroundColor:'#120C0D'},targetUnavailableDividerText:{color:'#9A666A',fontSize:7,fontWeight:'900',letterSpacing:.85},
+  targetLine2:{height:17,flexDirection:'row',alignItems:'center',paddingLeft:23,paddingRight:2},targetStat:{flex:1,color:'#9AA3AD',fontSize:8,fontWeight:'800'},targetStaticMeta:{color:'#8D98A5',fontSize:8,fontWeight:'900',letterSpacing:.2,flex:1},targetStaticMetaLive:{color:'#9AB9A7'},targetVerify:{width:34,alignItems:'center',justifyContent:'center',borderLeftWidth:1,borderColor:'#30284A',backgroundColor:'#14101F'},targetVerifyBusy:{opacity:.55},targetVerifyText:{color:'#BBAAFF',fontSize:16,fontWeight:'900'},targetAttack:{width:58,marginVertical:6,marginRight:5,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'#4B5057',borderRadius:8,backgroundColor:'#24272B',elevation:0},targetAttackReady:{borderColor:'#E14A50',backgroundColor:'#7D1F24',elevation:2},targetAttackAfk:{backgroundColor:'#7D1F24',borderColor:'#E14A50'},targetAttackOff:{opacity:.38,backgroundColor:'#24272B',borderColor:'#4B5057',elevation:0},targetAttackText:{color:'#FFFFFF',fontSize:7.5,fontWeight:'900',letterSpacing:.55},targetAttackTextOff:{color:'#9AA0A8',opacity:.9},
   targetExpanded:{marginLeft:14,marginTop:3,paddingTop:4,paddingBottom:2,borderTopWidth:1,borderColor:C.line},targetExpandedText:{color:C.muted,fontSize:8,fontWeight:'700'},targetEmpty:{padding:16,alignItems:'center'},targetEmptyTitle:{color:C.text,fontSize:10,fontWeight:'900',letterSpacing:.7},targetEmptyText:{color:C.muted,fontSize:9,lineHeight:14,textAlign:'center',marginTop:5},
   targetPageNav:{minHeight:36,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:6,borderTopWidth:1,borderColor:C.line,backgroundColor:C.bg},targetPageButton:{minWidth:64,paddingVertical:8,paddingHorizontal:6,alignItems:'center'},targetPageButtonOff:{opacity:.25},targetPageButtonText:{color:'#72C7FF',fontSize:8,fontWeight:'900',letterSpacing:.6},targetPageText:{color:C.muted,fontSize:8,fontWeight:'800'},
   targetDemoNote:{color:C.muted,fontSize:8,fontWeight:'800',letterSpacing:.55,textAlign:'center',paddingVertical:6,paddingHorizontal:8,borderTopWidth:1,borderColor:C.line}

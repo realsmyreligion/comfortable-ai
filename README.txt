@@ -1,32 +1,16 @@
-TornPulse — ATTACK Button + Real Stats + Set Fix
+TornPulse — Live Status Attack Gate
 
 WHAT CHANGED
-• Replaces the small sword icon with a clear red ATTACK button.
-• Unavailable Hospital/Jail/Away rows keep ATTACK disabled and visibly dimmed.
-• Baldr-backed/live targets show TOTAL plus real STR / DEF / SPD / DEX values.
-• Classic-only targets no longer waste a second row showing STR — / DEF — / SPD — / DEX —. If split stats are not available, the stat row is hidden.
-• Fixed the apparent SET 1 / SET 2 duplication.
+• Visible target pages automatically check live Torn status.
+• STATUS UNKNOWN / CHECKING targets are temporarily faded and ATTACK is disabled.
+• Only confirmed READY players receive the bright red active ATTACK button.
+• Hospital / Jail / Travel / Fallen / Federal targets fade further and remain disabled.
+• ATTACK performs one final live status check immediately before opening Torn.
+• If a previously READY player has become unavailable, TornPulse updates the row and does not open the attack page.
+• Existing stat layout, set filtering, launcher-icon splash, HUD symbols, and Torn-app-first routing remain intact.
 
-WHY SET 1 / SET 2 LOOKED THE SAME
-The live source sets are different, but the same Classic target pool was being merged into every set. Because those Classic targets are low-level, they sorted to the front and hid the selected set's real targets on the first page.
-
-NEW SET BEHAVIOR
-• Classic targets are matched to the level range of the selected live set.
-• Real live/stat-backed targets are prioritized before Classic-only targets within the same level/status.
-• SET 1 is labelled LV25+.
-• SET 2 is labelled LV21-24.
-• SET 3 is labelled LV15-20.
-• Existing Extra/DOMINO sets remain available.
-
-PRESERVED
-• Unified Target Radar.
-• Level and status filters.
-• READY vs Hospital/Jail/Away visual separation.
-• Official Torn app first for ATTACK.
-• Browser fallbacks.
-• TornPulse graphite/red/steel styling.
-• Real launcher-icon pulse startup.
-• HUD 💊 / 🥤 / ✚ indicators.
+WHY
+A target can be listed in the source but currently be in Hospital. Build #63 allowed unknown (?) rows to be attacked before a live status refresh. This patch removes that gap.
 
 INSTALL
 1. Extract this ZIP.
