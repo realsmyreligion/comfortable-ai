@@ -1063,3 +1063,40 @@ fs.writeFileSync(
   Buffer.from(PAGE_HEADER_BASE64_FINAL, 'base64')
 );
 console.log('✅ Replaced shared tornpulse-header.png with new TornPulse header on all pages.');
+
+
+// ---------------------------------------------------------------------------
+// Max-visibility minimized TP patch.
+// - Make the minimized TP emblem much bigger so it stands out on screen.
+// - Remove the gray collapsed background as much as possible.
+// ---------------------------------------------------------------------------
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 76\n      large -> 100\n      else -> 88\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 28\n      large -> 36\n      else -> 32\n    }`,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 94\n      large -> 122\n      else -> 108\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 38\n      large -> 50\n      else -> 44\n    }`,
+  'oversized minimized TP emblem'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `      compact -> 82\n      large -> 108\n      else -> 94`,
+  `      compact -> 102\n      large -> 132\n      else -> 116`,
+  'larger minimized shell for oversized TP emblem'
+);
+
+// Make the collapsed pill essentially invisible.
+overlay = restyleGradientAfterMarker(
+  overlay,
+  'background = if (hudCollapsed) GradientDrawable().apply {',
+  22,
+  '0, 0, 0, 0',
+  '0, 0, 0, 0',
+  'remove collapsed gray TP background'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse max-visibility minimized TP patch applied.');
