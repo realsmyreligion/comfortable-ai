@@ -127,9 +127,21 @@ const newCompact = `  /* TORNPULSE_COMPACT_RADAR */
 app = mustReplace(app, oldCompact, newCompact, 'shorter dashboard target radar');
 
 // Remove Quick Actions block completely.
-const quickBlock = `      <View style={styles.tpCard}><TPSectionTitle>QUICK ACTIONS</TPSectionTitle><View style={styles.tpQuickGrid}><TPQuickAction icon="◎" label="TARGETS" onPress={()=>setActivePage('TARGETS')}/><TPQuickAction icon="⌁" label="STATUS" accent="#5A9CF5" onPress={()=>setActivePage('STATUS')}/><TPQuickAction icon="▥" label="STATS" accent="#B36CFF" onPress={()=>setActivePage('STATS')}/><TPQuickAction icon="⚙" label="SETTINGS" accent="#A8ADB5" onPress={()=>setActivePage('MORE')}/></View></View>
-`;
-app = mustReplace(app, quickBlock, '', 'remove Quick Actions block');
+// Use structural markers instead of exact whitespace/text matching so this survives
+// the previous reference/precision patches.
+const quickTitle = '<TPSectionTitle>QUICK ACTIONS</TPSectionTitle>';
+const quickAt = app.indexOf(quickTitle);
+if (quickAt < 0) {
+  console.log('- Quick Actions already absent');
+} else {
+  const quickStart = app.lastIndexOf('<View style={styles.tpCard}>', quickAt);
+  let quickEnd = app.indexOf('</View></View>', quickAt);
+  if (quickStart < 0 || quickEnd < 0) throw new Error('TornPulse cleanup patch: could not safely locate Quick Actions container');
+  quickEnd += '</View></View>'.length;
+  if (app[quickEnd] === '\n') quickEnd += 1;
+  app = app.slice(0, quickStart) + app.slice(quickEnd);
+  console.log('✓ remove Quick Actions block');
+}
 
 // Tighten dashboard and radar styling.
 app = replaceStyle(app,'tpRadarCloneHead',"minHeight:58,flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:9");
