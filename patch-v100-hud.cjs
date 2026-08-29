@@ -320,28 +320,28 @@ kt = replaceOnce(kt, "    nerveCooldownText = null\n    cooldownRowView = null\n
 // TornPulse polish — keep the floating HUD out of the way while TornPulse itself is foregrounded.
 kt = replaceOnce(
   kt,
-  `    const val ACTION_START = "com.comfortableai.torncopilot.START_HUD"\n    const val ACTION_STOP = "com.comfortableai.torncopilot.STOP_HUD"\n    const val EXTRA_API_KEY = "comfortable_api_key"`,
-  `    const val ACTION_START = "com.comfortableai.torncopilot.START_HUD"\n    const val ACTION_STOP = "com.comfortableai.torncopilot.STOP_HUD"\n    const val ACTION_HOST_VISIBILITY = "com.comfortableai.torncopilot.HOST_VISIBILITY"\n    const val EXTRA_API_KEY = "comfortable_api_key"\n    const val EXTRA_HOST_VISIBLE = "comfortable_host_visible"`,
+  `    const val ACTION_STOP = "com.comfortableai.torncopilot.STOP_HUD"`,
+  `    const val ACTION_STOP = "com.comfortableai.torncopilot.STOP_HUD"\n    const val ACTION_HOST_VISIBILITY = "com.comfortableai.torncopilot.HOST_VISIBILITY"\n    const val EXTRA_HOST_VISIBLE = "comfortable_host_visible"`,
   'HUD host-visibility action constants'
 );
 kt = replaceOnce(
   kt,
-  `    if (intent?.action == ACTION_STOP) {\n      stopSelf()\n      return START_NOT_STICKY\n    }\n\n    startAsForeground()`,
-  `    if (intent?.action == ACTION_STOP) {\n      stopSelf()\n      return START_NOT_STICKY\n    }\n    if (intent?.action == ACTION_HOST_VISIBILITY) {\n      val hostVisible = intent.getBooleanExtra(EXTRA_HOST_VISIBLE, false)\n      handler.post { overlayView?.visibility = if (hostVisible) View.GONE else View.VISIBLE }\n      return START_NOT_STICKY\n    }\n\n    startAsForeground()`,
+  `    startAsForeground()`,
+  `    if (intent?.action == ACTION_HOST_VISIBILITY) {\n      val hostVisible = intent.getBooleanExtra(EXTRA_HOST_VISIBLE, false)\n      handler.post { overlayView?.visibility = if (hostVisible) View.GONE else View.VISIBLE }\n      return START_NOT_STICKY\n    }\n\n    startAsForeground()`,
   'HUD hide over TornPulse foreground'
 );
 
 app = replaceOnce(
   app,
-  `  useEffect(() => {\n    const sub = AppState.addEventListener('change', state => {\n      if (state !== 'active') return;\n      finishPendingHudStart().catch(()=>{});\n      if (ComfortableOverlay?.isRunning) ComfortableOverlay.isRunning().then(v => setHudRunning(Boolean(v))).catch(()=>{});\n      if (!snapshot?.demo) getApiKey().then(key => key ? sync(key, false).catch(()=>{}) : null);\n    });\n    return () => sub.remove();\n  }, [snapshot?.demo, settings]);`,
-  `  useEffect(() => {\n    if (ComfortableOverlay?.setHostVisible) ComfortableOverlay.setHostVisible(true).catch(()=>{});\n    const sub = AppState.addEventListener('change', state => {\n      const hostVisible = state === 'active';\n      if (ComfortableOverlay?.setHostVisible) ComfortableOverlay.setHostVisible(hostVisible).catch(()=>{});\n      if (!hostVisible) return;\n      finishPendingHudStart().catch(()=>{});\n      if (ComfortableOverlay?.isRunning) ComfortableOverlay.isRunning().then(v => setHudRunning(Boolean(v))).catch(()=>{});\n      if (!snapshot?.demo) getApiKey().then(key => key ? sync(key, false).catch(()=>{}) : null);\n    });\n    return () => {\n      sub.remove();\n      if (ComfortableOverlay?.setHostVisible) ComfortableOverlay.setHostVisible(false).catch(()=>{});\n    };\n  }, [snapshot?.demo, settings]);`,
+  `  useEffect(() => {\n    const sub = AppState.addEventListener('change', state => {\n      if (state !== 'active') return;\n      finishPendingHudStart().catch(()=>{});\n      refreshSystemState().catch(()=>{});\n      if (ComfortableOverlay?.isRunning) ComfortableOverlay.isRunning().then(v=>setHudRunning(Boolean(v))).catch(()=>{});\n      if (!snapshot?.demo) getApiKey().then(key=>key?sync(key,false).catch(()=>{}):null);\n    });\n    return () => sub.remove();\n  }, [snapshot?.demo, settings]);`,
+  `  useEffect(() => {\n    if (ComfortableOverlay?.setHostVisible) ComfortableOverlay.setHostVisible(true).catch(()=>{});\n    const sub = AppState.addEventListener('change', state => {\n      const hostVisible = state === 'active';\n      if (ComfortableOverlay?.setHostVisible) ComfortableOverlay.setHostVisible(hostVisible).catch(()=>{});\n      if (!hostVisible) return;\n      finishPendingHudStart().catch(()=>{});\n      refreshSystemState().catch(()=>{});\n      if (ComfortableOverlay?.isRunning) ComfortableOverlay.isRunning().then(v=>setHudRunning(Boolean(v))).catch(()=>{});\n      if (!snapshot?.demo) getApiKey().then(key=>key?sync(key,false).catch(()=>{}):null);\n    });\n    return () => {\n      sub.remove();\n      if (ComfortableOverlay?.setHostVisible) ComfortableOverlay.setHostVisible(false).catch(()=>{});\n    };\n  }, [snapshot?.demo, settings]);`,
   'hide floating HUD while TornPulse is foregrounded'
 );
 
-const hudStartMarker = `      await ComfortableOverlay.startHud(key);\n      setHudRunning(true);`;
+const hudStartMarker = `      await ComfortableOverlay.startHud(key);\n      setOverlayReady(true);`;
 const hudStartCount = app.split(hudStartMarker).length - 1;
 if (hudStartCount !== 2) throw new Error(`TornPulse v1.0 HUD patch: expected 2 HUD start markers, found ${hudStartCount}`);
-app = app.split(hudStartMarker).join(`      await ComfortableOverlay.startHud(key);\n      if (ComfortableOverlay?.setHostVisible) await ComfortableOverlay.setHostVisible(true).catch(()=>{});\n      setHudRunning(true);`);
+app = app.split(hudStartMarker).join(`      await ComfortableOverlay.startHud(key);\n      if (ComfortableOverlay?.setHostVisible) await ComfortableOverlay.setHostVisible(true).catch(()=>{});\n      setOverlayReady(true);`);
 
 setEmbedded('APP_JS', app);
 
