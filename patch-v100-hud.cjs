@@ -56,20 +56,24 @@ function replaceExact(text, oldText, newText, label) {
 let overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
 
 if (!overlay.includes('import android.graphics.BitmapFactory')) {
-  overlay = replaceExact(
-    overlay,
-    `import android.graphics.Canvas\nimport android.graphics.Color`,
-    `import android.graphics.BitmapFactory\nimport android.graphics.Canvas\nimport android.graphics.Color`,
-    'BitmapFactory import'
-  );
+  if (overlay.includes('import android.graphics.Canvas')) {
+    overlay = overlay.replace('import android.graphics.Canvas', 'import android.graphics.BitmapFactory\nimport android.graphics.Canvas');
+  } else if (overlay.includes('import android.graphics.Color')) {
+    overlay = overlay.replace('import android.graphics.Color', 'import android.graphics.BitmapFactory\nimport android.graphics.Color');
+  } else {
+    throw new Error('TornPulse slick HUD: no graphics import anchor found');
+  }
+  console.log('✓ BitmapFactory import');
 }
 if (!overlay.includes('import android.util.Base64')) {
-  overlay = replaceExact(
-    overlay,
-    `import android.text.style.UpdateAppearance`,
-    `import android.text.style.UpdateAppearance\nimport android.util.Base64`,
-    'Base64 import'
-  );
+  if (overlay.includes('import android.text.style.UpdateAppearance')) {
+    overlay = overlay.replace('import android.text.style.UpdateAppearance', 'import android.text.style.UpdateAppearance\nimport android.util.Base64');
+  } else if (overlay.includes('import android.widget.ImageView')) {
+    overlay = overlay.replace('import android.widget.ImageView', 'import android.util.Base64\nimport android.widget.ImageView');
+  } else {
+    throw new Error('TornPulse slick HUD: no Base64 import anchor found');
+  }
+  console.log('✓ Base64 import');
 }
 
 if (!overlay.includes('private const val HUD_WORDMARK_BASE64')) {
