@@ -246,20 +246,76 @@ overlay = replaceKotlinFunction(
   'slick cooldown chips'
 );
 
-overlay = replaceAfterMarker(overlay, 'val tornClockRow = LinearLayout(this).apply {', 'cornerRadius = dp(6).toFloat()', 'cornerRadius = dp(8).toFloat()', 'TCT row radius');
-overlay = replaceAfterMarker(overlay, 'val tornClockRow = LinearLayout(this).apply {', 'setColor(Color.argb(96, 27, 29, 32))', 'setColor(Color.argb(156, 14, 15, 18))', 'TCT row background');
-overlay = replaceAfterMarker(overlay, 'val tornClockRow = LinearLayout(this).apply {', 'setStroke(dp(1), Color.argb(64, 220, 223, 226))', 'setStroke(dp(1), Color.argb(132, 213, 47, 50))', 'TCT row border');
+function restyleGradientAfterMarker(text, marker, radiusDp, fillArgb, strokeArgb, label) {
+  const at = text.indexOf(marker);
+  if (at < 0) {
+    console.log(`- ${label} skipped: marker not found`);
+    return text;
+  }
+  const end = Math.min(text.length, at + 1800);
+  let block = text.slice(at, end);
+  let changed = 0;
 
-overlay = replaceAfterMarker(overlay, 'background = if (hudCollapsed) GradientDrawable().apply {', 'cornerRadius = dp(12).toFloat()', 'cornerRadius = dp(14).toFloat()', 'minimized pill radius');
-overlay = replaceAfterMarker(overlay, 'background = if (hudCollapsed) GradientDrawable().apply {', 'setColor(Color.argb(248, 48, 51, 56))', 'setColor(Color.argb(252, 12, 13, 16))', 'minimized pill background');
-overlay = replaceAfterMarker(overlay, 'background = if (hudCollapsed) GradientDrawable().apply {', 'setStroke(dp(1), Color.argb(165, 213, 47, 50))', 'setStroke(dp(1), Color.argb(220, 230, 52, 58))', 'minimized pill border');
+  const radiusRe = /cornerRadius\s*=\s*dp\(\d+\)\.toFloat\(\)/;
+  if (radiusRe.test(block)) {
+    block = block.replace(radiusRe, `cornerRadius = dp(${radiusDp}).toFloat()`);
+    changed++;
+  }
 
-overlay = replaceExact(
+  const fillRe = /setColor\(Color\.argb\([^\n)]*\)\)/;
+  if (fillRe.test(block)) {
+    block = block.replace(fillRe, `setColor(Color.argb(${fillArgb}))`);
+    changed++;
+  }
+
+  const strokeRe = /setStroke\(dp\(1\),\s*Color\.argb\([^\n)]*\)\)/;
+  if (strokeRe.test(block)) {
+    block = block.replace(strokeRe, `setStroke(dp(1), Color.argb(${strokeArgb}))`);
+    changed++;
+  }
+
+  if (changed > 0) console.log(`✓ ${label} (${changed}/3 style fields)`);
+  else console.log(`- ${label} skipped: compatible gradient fields not found`);
+  return text.slice(0, at) + block + text.slice(end);
+}
+
+overlay = restyleGradientAfterMarker(
   overlay,
-  `    logoViewRef?.let { logo ->\n      val targetLogoDp = if (hudCollapsed) currentCollapsedLogoSizeDp else currentExpandedLogoSizeDp\n      val targetLogoPx = dp(targetLogoDp)\n      val logoParams = logo.layoutParams\n      if (logoParams.width != targetLogoPx || logoParams.height != targetLogoPx) {\n        logoParams.width = targetLogoPx\n        logoParams.height = targetLogoPx\n        logo.layoutParams = logoParams\n      }\n    }`,
-  `    logoViewRef?.let { logo ->\n      logo.setImageBitmap(if (hudCollapsed) decodeInlineLogo(HUD_TP_BASE64) else decodeInlineLogo(HUD_WORDMARK_BASE64))\n      val targetLogoWidthPx = dp(if (hudCollapsed) currentCollapsedLogoWidthDp else currentExpandedLogoWidthDp)\n      val targetLogoHeightPx = dp(if (hudCollapsed) currentCollapsedLogoHeightDp else currentExpandedLogoHeightDp)\n      val logoParams = logo.layoutParams\n      if (logoParams.width != targetLogoWidthPx || logoParams.height != targetLogoHeightPx) {\n        logoParams.width = targetLogoWidthPx\n        logoParams.height = targetLogoHeightPx\n        logo.layoutParams = logoParams\n      }\n    }`,
-  'swap emblem/wordmark on minimize'
+  'val tornClockRow = LinearLayout(this).apply {',
+  8,
+  '156, 14, 15, 18',
+  '132, 213, 47, 50',
+  'themed TCT row'
 );
+
+overlay = restyleGradientAfterMarker(
+  overlay,
+  'background = if (hudCollapsed) GradientDrawable().apply {',
+  14,
+  '252, 12, 13, 16',
+  '220, 230, 52, 58',
+  'sleek minimized TP pill'
+);
+
+{
+  const marker = '    logoViewRef?.let { logo ->';
+  const start = overlay.indexOf(marker);
+  if (start >= 0) {
+    const close = overlay.indexOf('\n    }', start);
+    if (close >= 0) {
+      const end = close + '\n    }'.length;
+      const replacement = `    logoViewRef?.let { logo ->\n      logo.setImageBitmap(if (hudCollapsed) decodeInlineLogo(HUD_TP_BASE64) else decodeInlineLogo(HUD_WORDMARK_BASE64))\n      val targetLogoWidthPx = dp(if (hudCollapsed) currentCollapsedLogoWidthDp else currentExpandedLogoWidthDp)\n      val targetLogoHeightPx = dp(if (hudCollapsed) currentCollapsedLogoHeightDp else currentExpandedLogoHeightDp)\n      val logoParams = logo.layoutParams\n      if (logoParams.width != targetLogoWidthPx || logoParams.height != targetLogoHeightPx) {\n        logoParams.width = targetLogoWidthPx\n        logoParams.height = targetLogoHeightPx\n        logo.layoutParams = logoParams\n      }\n    }`;
+      overlay = overlay.slice(0, start) + replacement + overlay.slice(end);
+      console.log('✓ swap emblem/wordmark on minimize');
+    } else {
+      console.log('- swap emblem/wordmark on minimize skipped: close not found');
+    }
+  } else if (overlay.includes('decodeInlineLogo(HUD_TP_BASE64)')) {
+    console.log('✓ swap emblem/wordmark on minimize already present');
+  } else {
+    console.log('- swap emblem/wordmark on minimize skipped: marker not found');
+  }
+}
 
 for (const needle of [
   'HUD_WORDMARK_BASE64',
