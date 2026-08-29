@@ -777,14 +777,41 @@ async function fetchPublicTargetStatus(targetId, key) {
 }
 
 function targetListShortName(name) {
-  if (name === "Baldr's List 1") return 'SET 1';
+  if (name === "Baldr's List 3") return 'SET 1';
   if (name === "Baldr's List 2") return 'SET 2';
-  if (name === "Baldr's List 3") return 'SET 3';
+  if (name === "Baldr's List 1") return 'SET 3';
   if (name === "Baldr's Extra List 1") return 'EXTRA 1';
   if (name === "Baldr's Extra List 2") return 'EXTRA 2';
   if (name === "Baldr's Extra List 3") return 'EXTRA 3';
   if (name === "Baldr's DOMINO List") return 'DOMINO';
   return String(name || 'TARGETS').replace("Baldr's ",'').toUpperCase();
+}
+
+function targetSetRole(name) {
+  if (name === "Baldr's List 3") return 'LOW LEVEL';
+  if (name === "Baldr's List 2") return 'MID LEVEL';
+  if (name === "Baldr's List 1") return 'HIGH LEVEL';
+  return '';
+}
+
+function targetOrderedListNames(source) {
+  const names = Object.keys(source || {});
+  const preferred = [
+    "Baldr's List 3",
+    "Baldr's List 2",
+    "Baldr's List 1",
+    "Baldr's Extra List 1",
+    "Baldr's Extra List 2",
+    "Baldr's Extra List 3",
+    "Baldr's DOMINO List",
+  ];
+  return [...names].sort((a,b) => {
+    const ai = preferred.indexOf(a);
+    const bi = preferred.indexOf(b);
+    const ar = ai < 0 ? 999 : ai;
+    const br = bi < 0 ? 999 : bi;
+    return ar-br || String(a).localeCompare(String(b));
+  });
 }
 
 function TornPulsePageTabs({active,onChange}) {
@@ -951,7 +978,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
           normalized[name] = rows.map(normalizeBaldrTarget).filter(t => t.id > 0);
         });
         if (!live) return;
-        const names = Object.keys(normalized);
+        const names = targetOrderedListNames(normalized);
         if (!names.length) throw new Error('No Baldr target lists were returned.');
         setLists(normalized);
         setListName(names[0]);
@@ -963,7 +990,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     return () => { live = false; };
   }, [demo]);
 
-  const listNames = Object.keys(lists);
+  const listNames = targetOrderedListNames(lists);
   const liveTargets = (lists[listName] || []).map(t => ({...t,...(statusById[t.id] || {status:'unknown',until:0,statusDescription:'',checkedAt:0,checking:false}),sources:['BALDR'],staticAfk:false}));
   const liveLevels = liveTargets.map(t=>Number(t.level||0)).filter(level=>level>0);
   const liveMinLevel = liveLevels.length ? Math.min(...liveLevels) : TARGET_MIN_LEVEL;
@@ -981,8 +1008,10 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
   });
   const unifiedTargets = Object.values(mergedById);
   const eligibleTargets = unifiedTargets.filter(t => Number(t.level||0) >= TARGET_MIN_LEVEL);
-  const maxSourceLevel = Math.max(TARGET_MIN_LEVEL,...eligibleTargets.map(t=>Number(t.level||TARGET_MIN_LEVEL)));
-  const visibleLevels = Array.from({length:Math.max(1,maxSourceLevel-TARGET_MIN_LEVEL+1)},(_,i)=>i+TARGET_MIN_LEVEL);
+  const eligibleLevels = eligibleTargets.map(t=>Number(t.level||0)).filter(level=>level>0);
+  const minSourceLevel = eligibleLevels.length ? Math.min(...eligibleLevels) : TARGET_MIN_LEVEL;
+  const maxSourceLevel = eligibleLevels.length ? Math.max(...eligibleLevels) : minSourceLevel;
+  const visibleLevels = Array.from({length:Math.max(1,maxSourceLevel-minSourceLevel+1)},(_,i)=>i+minSourceLevel);
   const levelCounts = visibleLevels.reduce((map,level)=>{ map[level]=eligibleTargets.filter(t=>Number(t.level)===level).length; return map; },{});
   const allLevelsSelected = levelFilter === 'ALL';
   const levelFiltered = allLevelsSelected ? eligibleTargets : eligibleTargets.filter(t => Number(t.level) === Number(levelFilter));
@@ -1134,7 +1163,7 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     setListName(listNames[nextIndex]);
     setPage(0);
     setStatusFilter('ALL');
-    setMessage('Target set changed • classic targets matched to this set’s level range');
+    setMessage('Target set changed • low → mid → high progression');
   }
 
   function selectLevel(level) {
@@ -1169,11 +1198,11 @@ function TargetAssistant({demo=false, clock=Date.now()}) {
     <View style={styles.targetUnifiedLegend}><Text style={styles.targetUnifiedLegendText}>AUTO 60S  •  LAST {lastScanLabel}  •  {unknownOnPage} NEED CHECK  •  API {apiBudget}/{TARGET_API_BUDGET}</Text>{message ? <Text numberOfLines={1} style={styles.targetScanMessage}>{message}</Text> : null}</View>
     <View style={styles.targetListBar}>
       <Pressable onPress={()=>changeList(-1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>‹</Text></Pressable>
-      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>TORNPULSE {targetListShortName(listName)}{liveRangeLabel ? (' • ' + liveRangeLabel) : ''}</Text><Text style={styles.targetListMeta}>{eligibleTargets.length} TARGETS • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
+      <View style={styles.targetListNameWrap}><Text numberOfLines={1} style={styles.targetListName}>TORNPULSE {targetListShortName(listName)}{liveRangeLabel ? (' • ' + liveRangeLabel) : ''}</Text><Text style={styles.targetListMeta}>{targetSetRole(listName) ? (targetSetRole(listName) + ' • ') : ''}{eligibleTargets.length} TARGETS • {levelScopeLabel} • PAGE {safePage+1}/{pageCount}</Text></View>
       <Pressable onPress={()=>changeList(1)} style={styles.targetListArrow}><Text style={styles.targetListArrowText}>›</Text></Pressable>
     </View>
     <View style={styles.targetLevelWrap}>
-      <Text style={styles.targetLevelLabel}>LEVEL • ALL OR PICK ONE</Text>
+      <Text style={styles.targetLevelLabel}>LEVEL • THIS SET</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.targetLevelScroll}>
         <Pressable onPress={()=>selectLevel('ALL')} style={[styles.targetLevelChip,styles.targetLevelChipAll,allLevelsSelected&&styles.targetLevelChipOn]}><Text style={[styles.targetLevelChipText,allLevelsSelected&&styles.targetLevelChipTextOn]}>ALL</Text><Text style={[styles.targetLevelChipCount,allLevelsSelected&&styles.targetLevelChipCountOn]}>{eligibleTargets.length}</Text></Pressable>
         {visibleLevels.map(level => { const count=Number(levelCounts[level]||0); return <Pressable key={level} onPress={()=>selectLevel(level)} style={[styles.targetLevelChip,count===0&&styles.targetLevelChipEmpty,Number(levelFilter)===level&&styles.targetLevelChipOn]}><Text style={[styles.targetLevelChipText,Number(levelFilter)===level&&styles.targetLevelChipTextOn]}>{level}</Text><Text style={[styles.targetLevelChipCount,Number(levelFilter)===level&&styles.targetLevelChipCountOn]}>{count||'–'}</Text></Pressable>; })}
