@@ -1,11 +1,15 @@
-TORNPULSE WORKFLOW FIX
+TORNPULSE - OLD METHOD FIX
 
 1. Extract this ZIP on your phone.
-2. In GitHub open: comfortable-ai > .github > workflows
-3. Tap Add file > Upload files.
-4. Upload the extracted main.yml from this ZIP.
-5. Replace the existing main.yml if GitHub prompts you.
-6. Commit the change.
-7. Return to ChatGPT and say: Done
+2. Open your comfortable-ai repository on GitHub.
+3. Stay in the ROOT / main folder of the repository.
+4. Upload BOTH extracted files:
+   - patch-v100-hud.cjs
+   - tornpulse-header.png
+5. GitHub should replace the existing files with the same names.
+6. Commit the upload.
 
-IMPORTANT: main.yml must be inside .github/workflows/ — NOT in the repository root.
+DO NOT edit or upload main.yml.
+DO NOT go into .github/workflows.
+
+The existing workflow already runs patch-v100-hud.cjs, so replacing that file automatically applies this change in the next build.
