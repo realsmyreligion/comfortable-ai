@@ -1526,7 +1526,7 @@ const mainstreamStyles = `
   tpChoiceRow:{flexDirection:'row',gap:7,marginTop:7},tpChoice:{flex:1,height:34,borderWidth:1,borderColor:'#33383E',borderRadius:9,backgroundColor:'#15181D',alignItems:'center',justifyContent:'center'},tpChoiceOn:{borderColor:'#E34A4F',backgroundColor:'#211013'},tpChoiceText:{color:'#D8DBDF',fontSize:8.5,fontWeight:'900'},tpOutlineButton:{height:40,borderWidth:1,borderColor:'#5A3437',borderRadius:10,alignItems:'center',justifyContent:'center',marginTop:12},tpOutlineButtonText:{color:'#E66A6F',fontSize:8.5,fontWeight:'900',letterSpacing:.7},
 `;
 if (!app.includes('tpShell:{flex:1')) {
-  app=replaceOnce(app,'const styles = StyleSheet.create({','const styles = StyleSheet.create({'+mainstreamStyles,'mainstream styles');
+  app=replaceOnce(app,'const styles=StyleSheet.create({','const styles=StyleSheet.create({'+mainstreamStyles,'mainstream styles');
 }
 
 setEmbedded('APP_JS',app);
