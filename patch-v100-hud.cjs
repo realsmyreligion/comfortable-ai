@@ -1327,3 +1327,209 @@ fs.writeFileSync(FILE,src,'utf8');
 console.log('\nTornPulse live Baldr-style Target Assistant applied successfully.');
 
 })();
+
+
+// ================================================================
+// TornPulse Mainstream App Shell — compact Play-Store-style overhaul
+// ================================================================
+;(() => {
+const fs = require('fs');
+const FILE = 'app.config.js';
+let src = fs.readFileSync(FILE, 'utf8');
+
+function extractEmbedded(name) {
+  const prefix = `const ${name} = `;
+  const start = src.indexOf(prefix);
+  if (start < 0) throw new Error(`TornPulse Mainstream UI: could not find ${name}`);
+  const valueStart = start + prefix.length;
+  if (src[valueStart] !== '"') throw new Error(`TornPulse Mainstream UI: ${name} is not a JSON string`);
+  let i = valueStart + 1;
+  let escaped = false;
+  for (; i < src.length; i++) {
+    const ch = src[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') break;
+  }
+  if (i >= src.length || src[i + 1] !== ';') throw new Error(`TornPulse Mainstream UI: could not parse ${name}`);
+  return {start:valueStart, end:i + 1, value:JSON.parse(src.slice(valueStart, i + 1))};
+}
+function setEmbedded(name, value) {
+  const found = extractEmbedded(name);
+  src = src.slice(0, found.start) + JSON.stringify(value) + src.slice(found.end);
+}
+function replaceOnce(text, oldText, newText, label) {
+  if (text.includes(newText)) return text;
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) throw new Error(`TornPulse Mainstream UI: expected 1 match for ${label}, found ${count}`);
+  return text.replace(oldText,newText);
+}
+
+let app = extractEmbedded('APP_JS').value;
+
+const mainstreamComponents = `
+/* TORNPULSE_MAINSTREAM_COMPONENTS */
+function tpPct(bar) {
+  try { return Math.max(0,Math.min(100,Math.round(projectBar(bar).percent || 0))); } catch (_) { return 0; }
+}
+function tpCurrent(bar) {
+  try { return Math.floor(projectBar(bar).projected || 0); } catch (_) { return Number(bar?.current || 0); }
+}
+function tpMax(bar) { return Number(bar?.maximum || 0); }
+function tpTornClock(nowMs=Date.now()) {
+  const d=new Date(nowMs);
+  const hh=String(d.getUTCHours()).padStart(2,'0');
+  const mm=String(d.getUTCMinutes()).padStart(2,'0');
+  const ss=String(d.getUTCSeconds()).padStart(2,'0');
+  return hh+':'+mm+':'+ss;
+}
+function tpHourCountdown(nowMs=Date.now()) {
+  const d=new Date(nowMs);
+  const elapsed=d.getUTCMinutes()*60+d.getUTCSeconds();
+  const left=elapsed===0?0:3600-elapsed;
+  const mm=String(Math.floor(left/60)).padStart(2,'0');
+  const ss=String(left%60).padStart(2,'0');
+  return mm+':'+ss;
+}
+function tpStatusState(snapshot) {
+  return String(snapshot?.status?.state || snapshot?.statusDescription || 'Okay');
+}
+function TPTopBar({snapshot,onRefresh,refreshing=false}) {
+  return <View style={styles.tpTopBar}>
+    <View style={styles.tpBrandWrap}><View style={styles.tpBrandPulse}/><Text style={styles.tpBrand}>TORN<Text style={styles.tpBrandAccent}>PULSE</Text></Text></View>
+    <Pressable onPress={onRefresh} style={styles.tpTopIcon}><Text style={styles.tpTopIconText}>{refreshing?'…':'↻'}</Text></Pressable>
+  </View>;
+}
+function TPBottomNav({active,onChange}) {
+  const tabs=[['DASHBOARD','⌂','HOME'],['TARGETS','◎','TARGETS'],['STATUS','♥','STATUS'],['HUD','◉','HUD'],['MORE','•••','MORE']];
+  return <View style={styles.tpBottomNav}>{tabs.map(([key,icon,label])=><Pressable key={key} onPress={()=>onChange(key)} style={styles.tpBottomItem}><Text style={[styles.tpBottomIcon,active===key&&styles.tpBottomIconOn]}>{icon}</Text><Text style={[styles.tpBottomLabel,active===key&&styles.tpBottomLabelOn]}>{label}</Text></Pressable>)}</View>;
+}
+function TPMetric({label,icon,bar,accent}) {
+  const p=tpPct(bar), current=tpCurrent(bar), maximum=tpMax(bar);
+  return <View style={styles.tpMetric}><View style={styles.tpMetricHead}><Text style={[styles.tpMetricIcon,{color:accent}]}>{icon}</Text><Text style={styles.tpMetricLabel}>{label}</Text></View><Text style={styles.tpMetricValue}>{current}<Text style={styles.tpMetricMax}> / {maximum}</Text></Text><View style={styles.tpMetricTrack}><View style={[styles.tpMetricFill,{width:p+'%',backgroundColor:accent}]}/></View><Text style={[styles.tpMetricPct,{color:accent}]}>{p}%</Text></View>;
+}
+function TPCooldownMini({icon,label,seconds,accent}) {
+  const ready=Number(seconds||0)<=0;
+  return <View style={styles.tpCooldownMini}><Text style={[styles.tpCooldownIcon,{color:accent}]}>{icon}</Text><View style={{flex:1}}><Text style={styles.tpCooldownLabel}>{label}</Text><Text numberOfLines={1} style={[styles.tpCooldownValue,{color:ready?'#63D983':accent}]}>{ready?'READY':formatDuration(seconds)}</Text></View></View>;
+}
+function TPQuickAction({icon,label,onPress,accent='#E34A4F'}) {
+  return <Pressable onPress={onPress} style={styles.tpQuick}><Text style={[styles.tpQuickIcon,{color:accent}]}>{icon}</Text><Text style={styles.tpQuickLabel}>{label}</Text></Pressable>;
+}
+function TPSectionTitle({children,right}) { return <View style={styles.tpSectionHead}><Text style={styles.tpSectionTitle}>{children}</Text>{right||null}</View>; }
+function TPInfoRow({label,value,tone='default'}) {
+  const color=tone==='good'?'#63D983':tone==='warn'?'#E0AA48':tone==='bad'?'#EB5A5E':'#F2F4F6';
+  return <View style={styles.tpInfoRow}><Text style={styles.tpInfoLabel}>{label}</Text><Text style={[styles.tpInfoValue,{color}]}>{value}</Text></View>;
+}
+`;
+
+if (!app.includes('TORNPULSE_MAINSTREAM_COMPONENTS')) {
+  app = replaceOnce(app,'function TornPulsePageTabs({active,onChange}) {',mainstreamComponents+'\nfunction TornPulsePageTabs({active,onChange}) {','mainstream components');
+}
+
+const mainstreamReturns = `/* TORNPULSE_MAINSTREAM_RETURNS */
+  if (activePage === 'DASHBOARD') return <SafeAreaView style={styles.tpShell}><StatusBar style="light"/><View style={styles.tpShellInner}>
+    <ScrollView style={styles.tpScroll} contentContainerStyle={styles.tpScrollContent} showsVerticalScrollIndicator={false}>
+      <TPTopBar snapshot={snapshot} refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync()}/>
+      {error?<View style={styles.tpError}><Text style={styles.tpErrorText}>{error}</Text></View>:null}
+      <View style={styles.tpMetricGrid}>
+        {snapshot.life?<TPMetric label="HEALTH" icon="♥" bar={snapshot.life} accent="#5A9CF5"/>:null}
+        <TPMetric label="ENERGY" icon="ϟ" bar={snapshot.energy} accent="#64D87A"/>
+        <TPMetric label="NERVE" icon="✦" bar={snapshot.nerve} accent="#B36CFF"/>
+      </View>
+      <View style={styles.tpCooldownStrip}>
+        <TPCooldownMini icon="💊" label="DRUG" seconds={cooldownRemaining(snapshot.cooldowns.drug,snapshot.fetchedAt,clock)} accent="#5A9CF5"/>
+        <TPCooldownMini icon="🥤" label="BOOSTER" seconds={cooldownRemaining(snapshot.cooldowns.booster,snapshot.fetchedAt,clock)} accent="#64D87A"/>
+        <TPCooldownMini icon="✚" label="MEDICAL" seconds={cooldownRemaining(snapshot.cooldowns.medical,snapshot.fetchedAt,clock)} accent="#EB5A5E"/>
+      </View>
+      <View style={styles.tpStatusStrip}>
+        <View style={styles.tpStatusCell}><Text style={styles.tpStatusMini}>TORN TIME</Text><Text style={styles.tpStatusBig}>{tpTornClock(clock)}</Text><Text style={styles.tpStatusSub}>hour in {tpHourCountdown(clock)}</Text></View>
+        <View style={styles.tpStatusDivider}/>
+        <View style={styles.tpStatusCell}><Text style={styles.tpStatusMini}>STATUS</Text><Text numberOfLines={1} style={[styles.tpStatusBig,{color:tpStatusState(snapshot).toLowerCase().includes('okay')?'#63D983':'#E0AA48'}]}>{tpStatusState(snapshot).toUpperCase()}</Text><Text style={styles.tpStatusSub}>{snapshot.demo?'demo':'live Torn data'}</Text></View>
+        <View style={styles.tpStatusDivider}/>
+        <View style={styles.tpStatusCell}><Text style={styles.tpStatusMini}>HUD</Text><Text style={[styles.tpStatusBig,{color:hudRunning?'#63D983':'#9AA1AA'}]}>{hudRunning?'ACTIVE':'OFF'}</Text><Text style={styles.tpStatusSub}>floating overlay</Text></View>
+      </View>
+      <View style={styles.tpCard}>
+        <TPSectionTitle right={<Pressable onPress={()=>setActivePage('TARGETS')}><Text style={styles.tpSeeAll}>VIEW ALL ›</Text></Pressable>}>TARGET RADAR</TPSectionTitle>
+        <Text style={styles.tpCardCopy}>Live status, real battle stats and READY-only attack routing.</Text>
+        <View style={styles.tpSetPreview}><Pressable onPress={()=>setActivePage('TARGETS')} style={styles.tpSetPill}><Text style={styles.tpSetNumber}>SET 1</Text><Text style={styles.tpSetMeta}>LOW</Text></Pressable><Pressable onPress={()=>setActivePage('TARGETS')} style={styles.tpSetPill}><Text style={styles.tpSetNumber}>SET 2</Text><Text style={styles.tpSetMeta}>MID</Text></Pressable><Pressable onPress={()=>setActivePage('TARGETS')} style={styles.tpSetPill}><Text style={styles.tpSetNumber}>SET 3</Text><Text style={styles.tpSetMeta}>HIGH</Text></Pressable></View>
+        <Pressable onPress={()=>setActivePage('TARGETS')} style={styles.tpRadarButton}><Text style={styles.tpRadarButtonText}>◎  OPEN TARGET RADAR</Text></Pressable>
+      </View>
+      <View style={styles.tpCard}>
+        <TPSectionTitle>QUICK ACTIONS</TPSectionTitle>
+        <View style={styles.tpQuickGrid}><TPQuickAction icon="◎" label="TARGETS" onPress={()=>setActivePage('TARGETS')}/><TPQuickAction icon="♥" label="STATUS" accent="#5A9CF5" onPress={()=>setActivePage('STATUS')}/><TPQuickAction icon="◉" label="HUD" accent="#64D87A" onPress={()=>setActivePage('HUD')}/><TPQuickAction icon="⚙" label="MORE" accent="#A8ADB5" onPress={()=>setActivePage('MORE')}/></View>
+      </View>
+      <View style={styles.tpNextCard}><View style={{flex:1}}><Text style={styles.tpNextKicker}>NEXT MOVE</Text><Text style={styles.tpNextTitle}>{next?.title||'READY'}</Text><Text numberOfLines={2} style={styles.tpNextCopy}>{next?.detail||'TornPulse is synced and watching your timers.'}</Text></View><Text style={styles.tpNextArrow}>›</Text></View>
+    </ScrollView>
+    <TPBottomNav active="DASHBOARD" onChange={setActivePage}/>
+  </View></SafeAreaView>;
+
+  if (activePage === 'TARGETS') return <SafeAreaView style={styles.tpShell}><StatusBar style="light"/><View style={styles.tpShellInner}>
+    <ScrollView style={styles.tpScroll} contentContainerStyle={styles.tpTargetScrollContent} showsVerticalScrollIndicator={false}>
+      <TPTopBar snapshot={snapshot} refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync()}/>
+      <View style={styles.tpPageHeading}><Text style={styles.tpPageKicker}>TORNPULSE INTELLIGENCE</Text><Text style={styles.tpPageTitle}>TARGET RADAR</Text><Text style={styles.tpPageCopy}>Low → mid → high target sets with live availability and battle stats.</Text></View>
+      <TargetAssistant demo={Boolean(snapshot.demo)} clock={clock}/>
+    </ScrollView>
+    <TPBottomNav active="TARGETS" onChange={setActivePage}/>
+  </View></SafeAreaView>;
+
+  if (activePage === 'STATUS') return <SafeAreaView style={styles.tpShell}><StatusBar style="light"/><View style={styles.tpShellInner}>
+    <ScrollView style={styles.tpScroll} contentContainerStyle={styles.tpScrollContent} showsVerticalScrollIndicator={false}>
+      <TPTopBar snapshot={snapshot} refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync()}/>
+      <View style={styles.tpPageHeading}><Text style={styles.tpPageKicker}>LIVE PLAYER DATA</Text><Text style={styles.tpPageTitle}>STATUS</Text><Text style={styles.tpPageCopy}>Everything that can stop, cap or delay your next move.</Text></View>
+      <View style={styles.tpMetricGrid}>{snapshot.life?<TPMetric label="HEALTH" icon="♥" bar={snapshot.life} accent="#5A9CF5"/>:null}<TPMetric label="ENERGY" icon="ϟ" bar={snapshot.energy} accent="#64D87A"/><TPMetric label="NERVE" icon="✦" bar={snapshot.nerve} accent="#B36CFF"/></View>
+      <View style={styles.tpCard}><TPSectionTitle>TORN STATUS</TPSectionTitle><TPInfoRow label="Current state" value={tpStatusState(snapshot)} tone={tpStatusState(snapshot).toLowerCase().includes('okay')?'good':'warn'}/><TPInfoRow label="Torn time" value={tpTornClock(clock)}/><TPInfoRow label="Next hour" value={tpHourCountdown(clock)}/><TPInfoRow label="Last sync" value={new Date(snapshot.fetchedAt).toLocaleTimeString()}/></View>
+      <View style={styles.tpCard}><TPSectionTitle>COOLDOWNS</TPSectionTitle><TPInfoRow label="Drug" value={cooldownRemaining(snapshot.cooldowns.drug,snapshot.fetchedAt,clock)<=0?'READY':formatDuration(cooldownRemaining(snapshot.cooldowns.drug,snapshot.fetchedAt,clock))} tone={cooldownRemaining(snapshot.cooldowns.drug,snapshot.fetchedAt,clock)<=0?'good':'warn'}/><TPInfoRow label="Booster" value={cooldownRemaining(snapshot.cooldowns.booster,snapshot.fetchedAt,clock)<=0?'READY':formatDuration(cooldownRemaining(snapshot.cooldowns.booster,snapshot.fetchedAt,clock))} tone={cooldownRemaining(snapshot.cooldowns.booster,snapshot.fetchedAt,clock)<=0?'good':'warn'}/><TPInfoRow label="Medical" value={cooldownRemaining(snapshot.cooldowns.medical,snapshot.fetchedAt,clock)<=0?'READY':formatDuration(cooldownRemaining(snapshot.cooldowns.medical,snapshot.fetchedAt,clock))} tone={cooldownRemaining(snapshot.cooldowns.medical,snapshot.fetchedAt,clock)<=0?'good':'warn'}/></View>
+      <View style={styles.tpNextCard}><View style={{flex:1}}><Text style={styles.tpNextKicker}>TORNPULSE RECOMMENDS</Text><Text style={styles.tpNextTitle}>{next?.title||'READY'}</Text><Text style={styles.tpNextCopy}>{next?.detail||'No urgent timer action right now.'}</Text></View></View>
+    </ScrollView><TPBottomNav active="STATUS" onChange={setActivePage}/>
+  </View></SafeAreaView>;
+
+  if (activePage === 'HUD') return <SafeAreaView style={styles.tpShell}><StatusBar style="light"/><View style={styles.tpShellInner}>
+    <ScrollView style={styles.tpScroll} contentContainerStyle={styles.tpScrollContent} showsVerticalScrollIndicator={false}>
+      <TPTopBar snapshot={snapshot} refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync()}/>
+      <View style={styles.tpPageHeading}><Text style={styles.tpPageKicker}>ANDROID OVERLAY</Text><Text style={styles.tpPageTitle}>FLOATING HUD</Text><Text style={styles.tpPageCopy}>Keep TornPulse visible over Torn without cluttering the app itself.</Text></View>
+      <View style={styles.tpHeroHud}><View style={styles.tpHudHeroTop}><View><Text style={styles.tpHudHeroKicker}>HUD STATUS</Text><Text style={[styles.tpHudHeroTitle,{color:hudRunning?'#63D983':'#F2F4F6'}]}>{hudRunning?'ACTIVE':'READY'}</Text></View><View style={[styles.tpHudLamp,hudRunning&&styles.tpHudLampOn]}/></View><Text style={styles.tpHudHeroCopy}>Health, Energy, Nerve, Torn clock and cooldown symbols stay available while you use Torn or other apps.</Text>{!snapshot.demo?<Pressable onPress={hudRunning?stopHud:startHud} disabled={hudBusy} style={[styles.tpHudMainButton,hudRunning&&styles.tpHudMainButtonStop]}><Text style={styles.tpHudMainButtonText}>{hudBusy?'WORKING…':hudRunning?'STOP FLOATING HUD':'START FLOATING HUD'}</Text></Pressable>:<Text style={styles.tpDemoNotice}>HUD controls are disabled in demo mode.</Text>}</View>
+      <View style={styles.tpCard}><TPSectionTitle>HUD BEHAVIOR</TPSectionTitle><TPInfoRow label="Inside TornPulse" value="HIDDEN" tone="good"/><TPInfoRow label="Over Torn / other apps" value={hudRunning?'VISIBLE':'OFF'} tone={hudRunning?'good':'default'}/><TPInfoRow label="Auto-refresh" value="60s"/><TPInfoRow label="Torn clock" value="SYNCED" tone="good"/></View>
+    </ScrollView><TPBottomNav active="HUD" onChange={setActivePage}/>
+  </View></SafeAreaView>;
+
+  if (activePage === 'MORE') return <SafeAreaView style={styles.tpShell}><StatusBar style="light"/><View style={styles.tpShellInner}>
+    <ScrollView style={styles.tpScroll} contentContainerStyle={styles.tpScrollContent} showsVerticalScrollIndicator={false}>
+      <TPTopBar snapshot={snapshot} refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync()}/>
+      <View style={styles.tpPageHeading}><Text style={styles.tpPageKicker}>TORNPULSE</Text><Text style={styles.tpPageTitle}>MORE</Text><Text style={styles.tpPageCopy}>Alerts, connection and app controls live here instead of crowding your dashboard.</Text></View>
+      <View style={styles.tpCard}><TPSectionTitle>ALERT BUFFER</TPSectionTitle><Text style={styles.tpCardCopy}>Energy warning</Text><View style={styles.tpChoiceRow}>{[10,15,20,30].map(v=><Pressable key={'e'+v} onPress={()=>setSetting('energyWarningMinutes',v)} style={[styles.tpChoice,settings.energyWarningMinutes===v&&styles.tpChoiceOn]}><Text style={styles.tpChoiceText}>{v}m</Text></Pressable>)}</View><Text style={[styles.tpCardCopy,{marginTop:12}]}>Nerve warning</Text><View style={styles.tpChoiceRow}>{[10,15,20,30].map(v=><Pressable key={'n'+v} onPress={()=>setSetting('nerveWarningMinutes',v)} style={[styles.tpChoice,settings.nerveWarningMinutes===v&&styles.tpChoiceOn]}><Text style={styles.tpChoiceText}>{v}m</Text></Pressable>)}</View></View>
+      <View style={styles.tpCard}><TPSectionTitle>CONNECTION</TPSectionTitle><TPInfoRow label="Torn API" value={snapshot.demo?'DEMO':'CONNECTED'} tone={snapshot.demo?'warn':'good'}/><TPInfoRow label="Version" value="1.0.0"/><TPInfoRow label="Last sync" value={new Date(snapshot.fetchedAt).toLocaleTimeString()}/>{snapshot.demo?<Pressable onPress={()=>setSnapshot(null)} style={styles.tpOutlineButton}><Text style={styles.tpOutlineButtonText}>EXIT DEMO</Text></Pressable>:<Pressable onPress={disconnect} style={styles.tpOutlineButton}><Text style={styles.tpOutlineButtonText}>DISCONNECT API KEY</Text></Pressable>}</View>
+    </ScrollView><TPBottomNav active="MORE" onChange={setActivePage}/>
+  </View></SafeAreaView>;
+
+  `;
+
+if (!app.includes('TORNPULSE_MAINSTREAM_RETURNS')) {
+  const insertMarker='/* TORNPULSE_TARGETS_PAGE_RETURN */';
+  if (!app.includes(insertMarker)) throw new Error('TornPulse Mainstream UI: Targets page return marker not found');
+  app=app.replace(insertMarker,mainstreamReturns+insertMarker);
+}
+
+const mainstreamStyles = `
+  tpShell:{flex:1,backgroundColor:'#080A0D'},tpShellInner:{flex:1,backgroundColor:'#080A0D'},tpScroll:{flex:1},tpScrollContent:{paddingHorizontal:12,paddingTop:Platform.OS==='android'?34:8,paddingBottom:16},tpTargetScrollContent:{paddingHorizontal:10,paddingTop:Platform.OS==='android'?34:8,paddingBottom:16},
+  tpTopBar:{height:50,flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:10,paddingHorizontal:2},tpBrandWrap:{flexDirection:'row',alignItems:'center'},tpBrandPulse:{width:10,height:10,borderRadius:5,borderWidth:2,borderColor:'#E34A4F',marginRight:9,shadowColor:'#E34A4F',shadowOpacity:.8,shadowRadius:7,elevation:4},tpBrand:{color:'#F3F5F7',fontSize:23,fontWeight:'900',letterSpacing:-.7},tpBrandAccent:{color:'#E34A4F'},tpTopIcon:{width:38,height:38,borderRadius:12,borderWidth:1,borderColor:'#30353B',backgroundColor:'#111419',alignItems:'center',justifyContent:'center'},tpTopIconText:{color:'#D9DCE0',fontSize:19,fontWeight:'900'},
+  tpBottomNav:{height:62,flexDirection:'row',alignItems:'stretch',backgroundColor:'#0C0F13',borderTopWidth:1,borderColor:'#252A30',paddingHorizontal:4,paddingBottom:Platform.OS==='android'?3:8},tpBottomItem:{flex:1,alignItems:'center',justifyContent:'center'},tpBottomIcon:{color:'#6F7781',fontSize:18,fontWeight:'900',height:22},tpBottomIconOn:{color:'#E34A4F'},tpBottomLabel:{color:'#777F89',fontSize:7.5,fontWeight:'900',letterSpacing:.55,marginTop:2},tpBottomLabelOn:{color:'#E34A4F'},
+  tpError:{backgroundColor:'#261215',borderWidth:1,borderColor:'#5D292E',borderRadius:12,padding:10,marginBottom:9},tpErrorText:{color:'#F08A8E',fontSize:9,fontWeight:'800'},
+  tpMetricGrid:{flexDirection:'row',gap:7,marginBottom:8},tpMetric:{flex:1,minHeight:102,borderRadius:15,borderWidth:1,borderColor:'#30353B',backgroundColor:'#111419',padding:10},tpMetricHead:{flexDirection:'row',alignItems:'center'},tpMetricIcon:{fontSize:17,fontWeight:'900',marginRight:5},tpMetricLabel:{color:'#A6ADB5',fontSize:8,fontWeight:'900',letterSpacing:.65},tpMetricValue:{color:'#F3F5F7',fontSize:15,fontWeight:'900',marginTop:8},tpMetricMax:{color:'#878F99',fontSize:10,fontWeight:'800'},tpMetricTrack:{height:5,borderRadius:3,backgroundColor:'#2A2F35',overflow:'hidden',marginTop:9},tpMetricFill:{height:'100%',borderRadius:3},tpMetricPct:{fontSize:8,fontWeight:'900',marginTop:6},
+  tpCooldownStrip:{flexDirection:'row',gap:7,marginBottom:8},tpCooldownMini:{flex:1,minHeight:58,borderWidth:1,borderColor:'#30353B',borderRadius:13,backgroundColor:'#111419',paddingHorizontal:9,paddingVertical:8,flexDirection:'row',alignItems:'center'},tpCooldownIcon:{fontSize:17,marginRight:6},tpCooldownLabel:{color:'#8F97A0',fontSize:7,fontWeight:'900',letterSpacing:.6},tpCooldownValue:{fontSize:10,fontWeight:'900',marginTop:3},
+  tpStatusStrip:{minHeight:74,borderWidth:1,borderColor:'#30353B',borderRadius:15,backgroundColor:'#111419',flexDirection:'row',alignItems:'stretch',marginBottom:8,paddingVertical:8},tpStatusCell:{flex:1,alignItems:'center',justifyContent:'center',paddingHorizontal:5},tpStatusDivider:{width:1,backgroundColor:'#2A2F35',marginVertical:5},tpStatusMini:{color:'#777F89',fontSize:6.8,fontWeight:'900',letterSpacing:.8},tpStatusBig:{color:'#F2F4F6',fontSize:12,fontWeight:'900',marginTop:4},tpStatusSub:{color:'#777F89',fontSize:6.7,fontWeight:'700',marginTop:3,textAlign:'center'},
+  tpCard:{borderWidth:1,borderColor:'#30353B',borderRadius:16,backgroundColor:'#101317',padding:12,marginBottom:8},tpSectionHead:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:7},tpSectionTitle:{color:'#F2F4F6',fontSize:10,fontWeight:'900',letterSpacing:.85},tpSeeAll:{color:'#E34A4F',fontSize:7.5,fontWeight:'900',letterSpacing:.7},tpCardCopy:{color:'#8F97A0',fontSize:8.5,lineHeight:12.5},tpSetPreview:{flexDirection:'row',gap:6,marginTop:10},tpSetPill:{flex:1,borderRadius:10,borderWidth:1,borderColor:'#33383E',backgroundColor:'#171A1F',paddingVertical:8,alignItems:'center'},tpSetNumber:{color:'#F2F4F6',fontSize:9,fontWeight:'900'},tpSetMeta:{color:'#E34A4F',fontSize:6.5,fontWeight:'900',letterSpacing:.7,marginTop:2},tpRadarButton:{height:38,borderRadius:10,borderWidth:1,borderColor:'#E34A4F',backgroundColor:'#1E0D10',alignItems:'center',justifyContent:'center',marginTop:9},tpRadarButtonText:{color:'#F16469',fontSize:8.5,fontWeight:'900',letterSpacing:.85},
+  tpQuickGrid:{flexDirection:'row',gap:7},tpQuick:{flex:1,minHeight:66,borderWidth:1,borderColor:'#30353B',borderRadius:12,backgroundColor:'#15181D',alignItems:'center',justifyContent:'center'},tpQuickIcon:{fontSize:19,fontWeight:'900'},tpQuickLabel:{color:'#AAB0B8',fontSize:7,fontWeight:'900',letterSpacing:.55,marginTop:5},
+  tpNextCard:{minHeight:70,borderWidth:1,borderColor:'#36312B',borderRadius:15,backgroundColor:'#15130F',padding:12,flexDirection:'row',alignItems:'center',marginBottom:4},tpNextKicker:{color:'#C59B4A',fontSize:6.5,fontWeight:'900',letterSpacing:.85},tpNextTitle:{color:'#F0D184',fontSize:13,fontWeight:'900',marginTop:3},tpNextCopy:{color:'#A8ADB4',fontSize:8,lineHeight:11.5,marginTop:3},tpNextArrow:{color:'#D6B25E',fontSize:25,fontWeight:'900',marginLeft:8},
+  tpPageHeading:{marginBottom:9,paddingHorizontal:2},tpPageKicker:{color:'#E34A4F',fontSize:7,fontWeight:'900',letterSpacing:1.1},tpPageTitle:{color:'#F4F5F6',fontSize:22,fontWeight:'900',marginTop:3,letterSpacing:.4},tpPageCopy:{color:'#9299A2',fontSize:9,lineHeight:13,marginTop:4},
+  tpInfoRow:{minHeight:36,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderTopWidth:1,borderColor:'#252A30'},tpInfoLabel:{color:'#8E96A0',fontSize:8.5,fontWeight:'800'},tpInfoValue:{fontSize:9,fontWeight:'900'},
+  tpHeroHud:{borderWidth:1,borderColor:'#33443A',borderRadius:17,backgroundColor:'#0F1511',padding:14,marginBottom:8},tpHudHeroTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},tpHudHeroKicker:{color:'#7D8A82',fontSize:7,fontWeight:'900',letterSpacing:1},tpHudHeroTitle:{fontSize:20,fontWeight:'900',marginTop:4},tpHudLamp:{width:13,height:13,borderRadius:7,backgroundColor:'#555C63'},tpHudLampOn:{backgroundColor:'#63D983',shadowColor:'#63D983',shadowOpacity:.9,shadowRadius:8,elevation:5},tpHudHeroCopy:{color:'#A3AAA5',fontSize:9,lineHeight:13.5,marginTop:10},tpHudMainButton:{height:42,borderRadius:11,backgroundColor:'#245B34',borderWidth:1,borderColor:'#63D983',alignItems:'center',justifyContent:'center',marginTop:12},tpHudMainButtonStop:{backgroundColor:'#2A1214',borderColor:'#E34A4F'},tpHudMainButtonText:{color:'#FFFFFF',fontSize:8.5,fontWeight:'900',letterSpacing:.7},tpDemoNotice:{color:'#C6A965',fontSize:8.5,fontWeight:'800',marginTop:12},
+  tpChoiceRow:{flexDirection:'row',gap:7,marginTop:7},tpChoice:{flex:1,height:34,borderWidth:1,borderColor:'#33383E',borderRadius:9,backgroundColor:'#15181D',alignItems:'center',justifyContent:'center'},tpChoiceOn:{borderColor:'#E34A4F',backgroundColor:'#211013'},tpChoiceText:{color:'#D8DBDF',fontSize:8.5,fontWeight:'900'},tpOutlineButton:{height:40,borderWidth:1,borderColor:'#5A3437',borderRadius:10,alignItems:'center',justifyContent:'center',marginTop:12},tpOutlineButtonText:{color:'#E66A6F',fontSize:8.5,fontWeight:'900',letterSpacing:.7},
+`;
+if (!app.includes('tpShell:{flex:1')) {
+  app=replaceOnce(app,'const styles = StyleSheet.create({','const styles = StyleSheet.create({'+mainstreamStyles,'mainstream styles');
+}
+
+setEmbedded('APP_JS',app);
+fs.writeFileSync(FILE,src,'utf8');
+console.log('TornPulse mainstream app shell overhaul applied successfully.');
+})();
