@@ -2,21 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const {execFileSync} = require('child_process');
 
-// TornPulse Target Scanner headroom fix.
-// Replays successful Build #90, then fixes the API-budget behavior seen in testing:
-// - ALL BALDR is explicitly selected on load
-// - compact dashboard scans only the two rows it actually displays
-// - automatic/manual page scans preserve a dedicated reserve for ATTACK verification
-// - failed target checks wait before automatic retry instead of immediately burning the budget
-// - scanner cooldown is shown inline instead of a blocking popup
-const BASE_COMMIT = 'e2ff8b47e119973cf138a3b12d41d2fa62b647b3';
+// TornPulse half-height floating HUD.
+// Replays successful Build #91, then compresses ONLY the native Android HUD.
+// Width, live data, scanner logic, Baldr targets and main dashboard stay unchanged.
+const BASE_COMMIT = 'ed9af1ca18853c2c893df6b9d3b50f1ed7c22be4';
 const BASE_PATH = 'patch-v100-hud.cjs';
 const CONFIG_FILE = 'app.config.js';
-const TEMP_BASE = path.join(process.cwd(), '.tornpulse-build90-known-good.cjs');
+const TEMP_BASE = path.join(process.cwd(), '.tornpulse-build91-known-good.cjs');
 
 try {
   try {
-    execFileSync('git', ['fetch', '--depth=112', 'origin', 'main'], {stdio:'ignore'});
+    execFileSync('git', ['fetch', '--depth=128', 'origin', 'main'], {stdio:'ignore'});
   } catch (_) {}
   const base = execFileSync('git', ['show', `${BASE_COMMIT}:${BASE_PATH}`], {encoding:'utf8'});
   fs.writeFileSync(TEMP_BASE, base, 'utf8');
@@ -30,9 +26,9 @@ let src = fs.readFileSync(CONFIG_FILE, 'utf8');
 function extractEmbedded(name) {
   const prefix = `const ${name} = `;
   const start = src.indexOf(prefix);
-  if (start < 0) throw new Error(`TornPulse scanner fix: could not find ${name}`);
+  if (start < 0) throw new Error(`TornPulse half-height HUD: could not find ${name}`);
   const valueStart = start + prefix.length;
-  if (src[valueStart] !== '"') throw new Error(`TornPulse scanner fix: ${name} is not a JSON string`);
+  if (src[valueStart] !== '"') throw new Error(`TornPulse half-height HUD: ${name} is not a JSON string`);
   let i = valueStart + 1;
   let escaped = false;
   for (; i < src.length; i++) {
@@ -42,7 +38,7 @@ function extractEmbedded(name) {
     if (ch === '"') break;
   }
   if (i >= src.length || src[i + 1] !== ';') {
-    throw new Error(`TornPulse scanner fix: could not parse ${name}`);
+    throw new Error(`TornPulse half-height HUD: could not parse ${name}`);
   }
   return {start:valueStart,end:i+1,value:JSON.parse(src.slice(valueStart,i+1))};
 }
@@ -52,99 +48,82 @@ function setEmbedded(name, value) {
   src = src.slice(0,found.start) + JSON.stringify(value) + src.slice(found.end);
 }
 
-function replaceExact(text, oldText, newText, label) {
-  const count = text.split(oldText).length - 1;
-  if (count !== 1) {
-    throw new Error(`TornPulse scanner fix: expected 1 match for ${label}, found ${count}`);
+let kt = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function setWhen(name, compact, large, standard) {
+  const re = new RegExp(
+    `(val\\s+${name}\\s*=\\s*when\\s*\\{\\s*` +
+    `compact\\s*->\\s*)[^\\n]+(\\s*` +
+    `large\\s*->\\s*)[^\\n]+(\\s*` +
+    `else\\s*->\\s*)[^\\n]+(\\s*\\})`
+  );
+  if (!re.test(kt)) {
+    throw new Error(`TornPulse half-height HUD: ${name} sizing block not found`);
   }
-  console.log(`✓ ${label}`);
-  return text.replace(oldText, newText);
+  kt = kt.replace(re, `$1${compact}$2${large}$3${standard}$4`);
+  console.log(`✓ ${name} compressed`);
 }
 
-let app = extractEmbedded('APP_JS').value;
-
-// Keep a protected slice of TornPulse's internal 70-call scanner allowance.
-// This reserve is only for the final per-target ATTACK verification.
-app = replaceExact(
-  app,
-  `const TARGET_API_BUDGET = 70;
-const TARGET_API_WINDOW_MS = 60000;
-const TARGET_STATUS_TTL_MS = 60000;`,
-  `const TARGET_API_BUDGET = 70;
-const TARGET_ATTACK_RESERVE = 12;
-const TARGET_API_WINDOW_MS = 60000;
-const TARGET_STATUS_TTL_MS = 60000;
-const TARGET_ERROR_RETRY_MS = 30000;`,
-  'scanner attack reserve + error cooldown constants'
-);
-
-// Failed API checks must not immediately trigger another 36-target automatic sweep.
-app = replaceExact(
-  app,
-  `  const status = String(target.status || 'unknown');
-  if (!targetStatusConfirmed(status)) return true;
-  if (status === 'hospital' && Number(target.until) > 0 && Number(target.until) <= Math.floor(Number(nowMs)/1000)) return true;`,
-  `  const status = String(target.status || 'unknown');
-  if (status === 'error') return targetStatusAgeMs(target,nowMs) >= TARGET_ERROR_RETRY_MS;
-  if (!targetStatusConfirmed(status)) return true;
-  if (status === 'hospital' && Number(target.until) > 0 && Number(target.until) <= Math.floor(Number(nowMs)/1000)) return true;`,
-  'failed target checks back off for 30 seconds'
-);
-
-// Make the master list explicit rather than relying only on sort order.
-app = replaceExact(
-  app,
-  `        setLists(normalized);
-        setListName(names[0]);`,
-  `        setLists(normalized);
-        setListName(names.includes('ALL BALDR') ? 'ALL BALDR' : names[0]);`,
-  'ALL BALDR forced as opening list'
-);
-
-// Do not burn 36 live checks for the two-row dashboard preview.
-// Also preserve 12 calls for ATTACK verification even after manual refreshes/page changes.
-app = replaceExact(
-  app,
-  `    const budget = Math.max(0,TARGET_API_BUDGET-recent.length);
-    if (budget <= 0) {
-      const wait = Math.max(1,Math.ceil((TARGET_API_WINDOW_MS-(current-recent[0]))/1000));
-      if (!auto) Alert.alert('Scanner cooling down','TornPulse reserved API headroom. Try again in about ' + wait + ' seconds.');
-      setMessage('API headroom reserved • ' + wait + 's');
-      return;
-    }
-    const scanPool = auto ? pageTargets.filter(t => targetNeedsLiveCheck(t,current)) : pageTargets;
-    const candidates = scanPool.slice(0,budget);`,
-  `    const budget = Math.max(0,TARGET_API_BUDGET-recent.length);
-    const scanBudget = Math.max(0,budget-TARGET_ATTACK_RESERVE);
-    if (scanBudget <= 0) {
-      const oldest = recent[0] || current;
-      const wait = Math.max(1,Math.ceil((TARGET_API_WINDOW_MS-(current-oldest))/1000));
-      setMessage('Attack reserve protected • scanner resumes in about ' + wait + 's');
-      return;
-    }
-    const visiblePool = compact ? pageTargets.slice(0,2) : pageTargets;
-    const scanPool = auto ? visiblePool.filter(t => targetNeedsLiveCheck(t,current)) : visiblePool;
-    const candidates = scanPool.slice(0,scanBudget);`,
-  'smart scanner pool + protected attack headroom'
-);
-
-// Make the UI explain the protected reserve.
-app = app.replace(
-  `API {apiBudget}/{TARGET_API_BUDGET}`,
-  `API {apiBudget}/{TARGET_API_BUDGET} • {TARGET_ATTACK_RESERVE} RESERVED`
-);
-
-if (!app.includes('TARGET_ATTACK_RESERVE = 12')) {
-  throw new Error('TornPulse scanner fix: attack reserve was not installed');
-}
-if (!app.includes(`compact ? pageTargets.slice(0,2) : pageTargets`)) {
-  throw new Error('TornPulse scanner fix: compact scan limiter was not installed');
-}
-if (!app.includes(`names.includes('ALL BALDR') ? 'ALL BALDR' : names[0]`)) {
-  throw new Error('TornPulse scanner fix: ALL BALDR default was not installed');
+function replaceAllExact(oldText, newText, label, required=false) {
+  const count = kt.split(oldText).length - 1;
+  if (!count) {
+    if (required) throw new Error(`TornPulse half-height HUD: ${label} not found`);
+    console.log(`- ${label} skipped`);
+    return;
+  }
+  kt = kt.split(oldText).join(newText);
+  console.log(`✓ ${label} (${count})`);
 }
 
-setEmbedded('APP_JS', app);
+// Keep horizontal sizing untouched; compress the vertical measurements.
+setWhen('verticalPadding', '1', '2', '1');
+setWhen('logoSize', '10', '12', '11');
+setWhen('headerSize', '5.5f', '6.5f', '6f');
+setWhen('statLabelSize', '5f', '5.8f', '5.3f');
+setWhen('barsSize', '8.5f', '10.5f', '9.3f');
+setWhen('cooldownSize', '5f', '5.8f', '5.3f');
+setWhen('tickerSize', '5f', '5.8f', '5.3f');
+setWhen('detailSize', '5f', '5.8f', '5.3f');
+
+// Current graphite HUD chip/row spacing -> half-height spacing.
+replaceAllExact(
+  'setPadding(dp(2), dp(2), dp(2), dp(2))',
+  'setPadding(dp(2), dp(1), dp(2), dp(1))',
+  'cooldown chip vertical padding'
+);
+replaceAllExact(
+  'setPadding(dp(4), dp(2), dp(4), dp(2))',
+  'setPadding(dp(3), dp(1), dp(3), dp(1))',
+  'clock strip vertical padding'
+);
+replaceAllExact(
+  'setPadding(0, dp(3), 0, 0)',
+  'setPadding(0, dp(1), 0, 0)',
+  'HUD row top spacing'
+);
+replaceAllExact(
+  'setPadding(0, dp(4), 0, 0)',
+  'setPadding(0, dp(1), 0, 0)',
+  'legacy HUD row top spacing'
+);
+replaceAllExact(
+  'rightMargin = dp(8)',
+  'rightMargin = dp(4)',
+  'logo right margin'
+);
+
+// Reduce any explicit tiny spacer heights without altering the width of the HUD.
+kt = kt.replace(/height\s*=\s*dp\((?:4|5|6|7|8)\)/g, (m) => {
+  const n = Number((m.match(/\d+/) || ['4'])[0]);
+  return `height = dp(${Math.max(2, Math.round(n/2))})`;
+});
+
+// Safety guards: the HUD must still contain all major live-data rows.
+for (const marker of ['barsText', 'cooldownText', 'statusText', 'detailText']) {
+  if (!kt.includes(marker)) throw new Error(`TornPulse half-height HUD: missing ${marker} after compression`);
+}
+
+setEmbedded('OVERLAY_SERVICE_KT', kt);
 fs.writeFileSync(CONFIG_FILE, src);
 
-console.log('✓ TornPulse scanner headroom fix applied');
+console.log('✓ TornPulse floating HUD compressed to half-height profile');
