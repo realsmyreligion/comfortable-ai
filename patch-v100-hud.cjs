@@ -66,17 +66,23 @@ function setNamedColor(app, key, color) {
 }
 
 function setAccentByLabel(app, label, color) {
-  const patterns = [
-    new RegExp(`(<[^>]+label=["']${label}["'][^>]*?accent=)["']#[0-9A-Fa-f]{6}["']`, 'g'),
-    new RegExp(`(<[^>]+accent=)["']#[0-9A-Fa-f]{6}["']([^>]*?label=["']${label}["'])`, 'g')
-  ];
   let changed = false;
-  for (const re of patterns) {
-    app = app.replace(re, (m, a, b='') => {
-      changed = true;
-      return `${a}"${color}"${b}`;
-    });
-  }
+
+  // label appears before accent: one capture group only.
+  // Keep the callback arity exact so the regex match offset is never appended to JSX.
+  const labelFirst = new RegExp(`(<[^>]+label=["']${label}["'][^>]*?accent=)["']#[0-9A-Fa-f]{6}["']`, 'g');
+  app = app.replace(labelFirst, (m, prefix) => {
+    changed = true;
+    return `${prefix}"${color}"`;
+  });
+
+  // accent appears before label: preserve both surrounding capture groups.
+  const accentFirst = new RegExp(`(<[^>]+accent=)["']#[0-9A-Fa-f]{6}["']([^>]*?label=["']${label}["'])`, 'g');
+  app = app.replace(accentFirst, (m, prefix, suffix) => {
+    changed = true;
+    return `${prefix}"${color}"${suffix}`;
+  });
+
   if (changed) console.log(`✓ ${label} accent -> ${color}`);
   return app;
 }
@@ -121,6 +127,11 @@ app = setAccentByLabel(app, 'LIFE', LIFE);
 app = setAccentByLabel(app, 'ENERGY', ENERGY);
 app = setAccentByLabel(app, 'NERVE', NERVE);
 app = setAccentByLabel(app, 'HAPPY', HAPPY);
+
+// Build-safety guard: an accent prop must close directly after the color string.
+if (/accent=["']#[0-9A-Fa-f]{6}["']\d/.test(app)) {
+  throw new Error('TornPulse exact-brand patch: malformed accent prop detected');
+}
 
 // Native floating HUD: match the same resource colors by semantic span position.
 let kt = extractEmbedded('OVERLAY_SERVICE_KT').value;

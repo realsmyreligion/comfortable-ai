@@ -1,15 +1,10 @@
-TORNPULSE - OLD METHOD FIX
+TORNPULSE BUILD #85 FIX
 
 1. Extract this ZIP on your phone.
-2. Open your comfortable-ai repository on GitHub.
-3. Stay in the ROOT / main folder of the repository.
-4. Upload BOTH extracted files:
-   - patch-v100-hud.cjs
-   - tornpulse-header.png
-5. GitHub should replace the existing files with the same names.
-6. Commit the upload.
+2. Open the MAIN/ROOT folder of comfortable-ai on GitHub.
+3. Upload patch-v100-hud.cjs and replace the existing file.
+4. Upload tornpulse-header.png too if GitHub asks/replaces it; it is the same exact header artwork.
+5. Commit the upload.
+6. Do NOT edit main.yml or anything inside .github/workflows.
 
-DO NOT edit or upload main.yml.
-DO NOT go into .github/workflows.
-
-The existing workflow already runs patch-v100-hud.cjs, so replacing that file automatically applies this change in the next build.
+This fixes the Build #85 JSX color bug while keeping the exact TornPulse header image and Torn-style resource colors.
