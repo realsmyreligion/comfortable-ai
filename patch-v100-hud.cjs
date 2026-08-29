@@ -210,5 +210,92 @@ if (!app.includes('onVerifyTarget')) {
 }
 
 setEmbedded('APP_JS',app);
+
+// ---------------------------------------------------------------------------
+// 5) Bigger minimized TornPulse logo.
+//    Expanded HUD dimensions stay exactly as they are. Only the collapsed
+//    logo grows so the floating button is easier to notice and tap.
+// ---------------------------------------------------------------------------
+let overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function insertAfterKotlinWhen(text, variableName, insertion, label) {
+  const marker = `    val ${variableName} = when {`;
+  const start = text.indexOf(marker);
+  if (start < 0) throw new Error(`TornPulse bigger minimized logo: ${label} block not found`);
+  const open = text.indexOf('{', start);
+  let depth = 1;
+  let end = -1;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) { end = i + 1; break; }
+    }
+  }
+  if (end < 0) throw new Error(`TornPulse bigger minimized logo: ${label} closing brace not found`);
+  return text.slice(0,end) + insertion + text.slice(end);
+}
+
+// Remember the normal logo size, but give the minimized button its own larger size.
+if (!overlay.includes('private var currentExpandedLogoSizeDp')) {
+  const fieldRe = /(  private var currentCollapsedWidthDp\s*=\s*\d+)/;
+  if (!fieldRe.test(overlay)) {
+    throw new Error('TornPulse bigger minimized logo: collapsed width field not found');
+  }
+  overlay = overlay.replace(
+    fieldRe,
+    `$1\n  private var currentExpandedLogoSizeDp = 11\n  private var currentCollapsedLogoSizeDp = 32`
+  );
+  console.log('✓ collapsed/expanded logo size fields');
+}
+
+if (!overlay.includes('currentExpandedLogoSizeDp = logoSize')) {
+  overlay = insertAfterKotlinWhen(
+    overlay,
+    'logoSize',
+    `\n    currentExpandedLogoSizeDp = logoSize\n    currentCollapsedLogoSizeDp = when {\n      compact -> 30\n      large -> 36\n      else -> 32\n    }`,
+    'logoSize'
+  );
+  console.log('✓ larger minimized logo profile');
+}
+
+// If the HUD starts already minimized, build the logo at the larger size immediately.
+const logoAddRe = /headerRow\.addView\(logoView,\s*LinearLayout\.LayoutParams\(dp\(logoSize\),\s*dp\(logoSize\)\)(?:\.apply\s*\{[^}]*\})?\)/;
+if (logoAddRe.test(overlay)) {
+  overlay = overlay.replace(
+    logoAddRe,
+    `val initialLogoSizeDp = if (hudCollapsed) currentCollapsedLogoSizeDp else currentExpandedLogoSizeDp\n    headerRow.addView(logoView, LinearLayout.LayoutParams(dp(initialLogoSizeDp), dp(initialLogoSizeDp)))`
+  );
+  console.log('✓ minimized logo starts large');
+} else if (!overlay.includes('val initialLogoSizeDp = if (hudCollapsed) currentCollapsedLogoSizeDp')) {
+  throw new Error('TornPulse bigger minimized logo: logo layout line not found');
+}
+
+// Resize the same ImageView whenever the user minimizes or restores the HUD.
+if (!overlay.includes('val targetLogoDp = if (hudCollapsed) currentCollapsedLogoSizeDp')) {
+  const anchorRe = /(    logoViewRef\?\.contentDescription\s*=\s*if \(hudCollapsed\) "Expand TornPulse HUD" else "Collapse TornPulse HUD"\n)/;
+  if (!anchorRe.test(overlay)) {
+    throw new Error('TornPulse bigger minimized logo: collapsed-state logo anchor not found');
+  }
+  overlay = overlay.replace(
+    anchorRe,
+    `$1    logoViewRef?.let { logo ->\n      val targetLogoDp = if (hudCollapsed) currentCollapsedLogoSizeDp else currentExpandedLogoSizeDp\n      val targetLogoPx = dp(targetLogoDp)\n      val logoParams = logo.layoutParams\n      if (logoParams.width != targetLogoPx || logoParams.height != targetLogoPx) {\n        logoParams.width = targetLogoPx\n        logoParams.height = targetLogoPx\n        logo.layoutParams = logoParams\n      }\n    }\n`
+  );
+  console.log('✓ minimized logo resizes on collapse/restore');
+}
+
+// Guards: the expanded HUD remains on its existing logoSize profile; only collapsed gets 30/32/36dp.
+if (!overlay.includes('currentCollapsedLogoSizeDp = when {') ||
+    !overlay.includes('compact -> 30') ||
+    !overlay.includes('large -> 36') ||
+    !overlay.includes('else -> 32')) {
+  throw new Error('TornPulse bigger minimized logo: collapsed logo sizing guard failed');
+}
+if (!overlay.includes('val targetLogoDp = if (hudCollapsed) currentCollapsedLogoSizeDp else currentExpandedLogoSizeDp')) {
+  throw new Error('TornPulse bigger minimized logo: live resize guard failed');
+}
+
+setEmbedded('OVERLAY_SERVICE_KT',overlay);
 fs.writeFileSync(CONFIG_FILE,src);
-console.log('✓ TornPulse instant target readiness + manual refresh fix applied');
+console.log('✓ TornPulse instant targets + larger minimized TP logo applied');
