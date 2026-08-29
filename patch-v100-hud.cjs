@@ -732,7 +732,9 @@ function replaceRegexSoft(text, regex, replacer, label) {
 }
 
 function updateStyleObject(text, styleName, mutator, label) {
-  const re = new RegExp(`(${styleName}\\s*:\\s*\\{)([\\s\\S]*?)(\\})`);
+  // Require a real style-name boundary so pHudShortcut cannot accidentally
+  // match the tail of tpHudShortcut.
+  const re = new RegExp(`(?<![A-Za-z0-9_])(${styleName}\\s*:\\s*\\{)([\\s\\S]*?)(\\})`);
   const match = text.match(re);
   if (!match) {
     console.log(`- ${label} skipped`);
@@ -745,7 +747,10 @@ function updateStyleObject(text, styleName, mutator, label) {
 }
 
 function setStyleProp(objText, prop, value) {
-  const propRe = new RegExp(`(${prop}\\s*:\\s*)([^,\\n}]+)`);
+  // Match a complete quoted value (including commas inside rgba(...)), or
+  // a normal unquoted style value. The old matcher stopped at the first comma
+  // and produced invalid JS such as rgba(...),9,12,0.82)'.
+  const propRe = new RegExp(`(${prop}\\s*:\\s*)('(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*"|[^,\\n}]+)`);
   if (propRe.test(objText)) {
     return objText.replace(propRe, `$1${value}`);
   }
