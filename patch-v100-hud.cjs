@@ -181,6 +181,80 @@ app = replaceStyle(app,'tpScrollContent',"paddingHorizontal:11,paddingTop:Platfo
 // Hide now-unused quick styles more gracefully if they still exist.
 app = replaceStyle(app,'tpQuickGrid',"flexDirection:'row',gap:8,display:'none'");
 
+// ---------------------------------------------------------------------------
+// Dashboard utility cleanup:
+// - remove the redundant Status + Stats tabs from the main navigation
+// - restore HUD as a first-class tab
+// - add a compact start/stop HUD control directly under the dashboard cards
+// ---------------------------------------------------------------------------
+app = mustReplace(
+  app,
+  `  const tabs=[['DASHBOARD','⌂','DASHBOARD'],['TARGETS','◎','TARGETS'],['STATUS','⌁','STATUS'],['STATS','▥','STATS'],['MORE','•••','MORE']];`,
+  `  const tabs=[['DASHBOARD','⌂','DASHBOARD'],['TARGETS','◎','TARGETS'],['HUD','◉','HUD'],['MORE','•••','MORE']];`,
+  'simplified bottom nav with HUD'
+);
+
+function matchingViewEnd(text,start) {
+  const re=/<\/?View\b[^>]*>/g;
+  re.lastIndex=start;
+  let depth=0, seen=false, match;
+  while ((match=re.exec(text))) {
+    const tag=match[0];
+    if (tag.startsWith('</View')) {
+      depth--;
+    } else {
+      seen=true;
+      if (!tag.endsWith('/>')) depth++;
+    }
+    if (seen && depth===0) return re.lastIndex;
+  }
+  return -1;
+}
+
+if (!app.includes('TORNPULSE_DASH_HUD_CONTROL')) {
+  const lowerStart=app.indexOf('<View style={styles.tpLowerGrid}>');
+  const lowerEnd=lowerStart>=0?matchingViewEnd(app,lowerStart):-1;
+  if (lowerStart<0 || lowerEnd<0) throw new Error('TornPulse cleanup patch: could not locate dashboard lower cards');
+
+  const dashHud=`
+      {/* TORNPULSE_DASH_HUD_CONTROL */}
+      {!snapshot.demo?<View style={styles.tpDashHud}>
+        <View style={styles.tpDashHudInfo}>
+          <View style={styles.tpDashHudHead}>
+            <Text style={styles.tpDashHudKicker}>FLOATING HUD</Text>
+            <View style={[styles.tpDashHudDot,hudRunning&&styles.tpDashHudDotOn]}/>
+            <Text style={[styles.tpDashHudState,hudRunning&&styles.tpDashHudStateOn]}>{hudRunning?'ON SCREEN':'READY'}</Text>
+          </View>
+          <Text style={styles.tpDashHudTitle}>{hudRunning?'HUD ACTIVE':'HUD STANDBY'}</Text>
+          <Text numberOfLines={1} style={styles.tpDashHudCopy}>{hudRunning?'Overlay is running over Torn':'Launch the overlay right from Dashboard'}</Text>
+        </View>
+        <View style={styles.tpDashHudActions}>
+          <Pressable onPress={hudRunning?stopHud:startHud} disabled={hudBusy} style={[styles.tpDashHudToggle,hudRunning&&styles.tpDashHudToggleStop]}>
+            <Text style={[styles.tpDashHudToggleText,hudRunning&&styles.tpDashHudToggleStopText]}>{hudBusy?'WORKING…':hudRunning?'STOP HUD':'START HUD'}</Text>
+          </Pressable>
+          <Pressable onPress={()=>setActivePage('HUD')} style={styles.tpDashHudManage}>
+            <Text style={styles.tpDashHudManageText}>HUD SETTINGS  ›</Text>
+          </Pressable>
+        </View>
+      </View>:null}
+`;
+  app=app.slice(0,lowerEnd)+dashHud+app.slice(lowerEnd);
+  console.log('✓ dashboard HUD activation control');
+}
+
+if (!app.includes('tpDashHud:{')) {
+  const styleAnchor='  tpError:{';
+  const at=app.indexOf(styleAnchor);
+  if (at<0) throw new Error('TornPulse cleanup patch: HUD dashboard style anchor not found');
+  const hudStyles=`  tpDashHud:{minHeight:86,marginTop:3,marginBottom:8,borderWidth:1,borderColor:'#315D39',borderRadius:14,backgroundColor:'#0A1210',padding:11,flexDirection:'row',alignItems:'center'},tpDashHudInfo:{flex:1,minWidth:0,paddingRight:9},tpDashHudHead:{flexDirection:'row',alignItems:'center'},tpDashHudKicker:{color:'#8F9992',fontSize:7.2,fontWeight:'900',letterSpacing:.8},tpDashHudDot:{width:6,height:6,borderRadius:3,backgroundColor:'#68716B',marginLeft:8,marginRight:4},tpDashHudDotOn:{backgroundColor:'#72D56D'},tpDashHudState:{color:'#8F9992',fontSize:6.8,fontWeight:'900',letterSpacing:.55},tpDashHudStateOn:{color:'#72D56D'},tpDashHudTitle:{color:'#F1F4F2',fontSize:13.5,fontWeight:'900',marginTop:5},tpDashHudCopy:{color:'#8F9992',fontSize:7.4,fontWeight:'700',marginTop:4},tpDashHudActions:{width:108,gap:6},tpDashHudToggle:{height:34,borderWidth:1,borderColor:'#3E8B51',borderRadius:9,backgroundColor:'#102416',alignItems:'center',justifyContent:'center'},tpDashHudToggleStop:{borderColor:'#B84046',backgroundColor:'#351416'},tpDashHudToggleText:{color:'#72D56D',fontSize:7.4,fontWeight:'900',letterSpacing:.55},tpDashHudToggleStopText:{color:'#F17A7F'},tpDashHudManage:{height:27,borderWidth:1,borderColor:'#30363D',borderRadius:8,backgroundColor:'#0D1014',alignItems:'center',justifyContent:'center'},tpDashHudManageText:{color:'#A5ADB6',fontSize:6.5,fontWeight:'900',letterSpacing:.35},
+`;
+  app=app.slice(0,at)+hudStyles+app.slice(at);
+  console.log('✓ dashboard HUD control styles');
+}
+
+// Four tabs have more breathing room than the old five-tab layout.
+app = replaceStyle(app,'tpBottomNav',"height:72,flexDirection:'row',alignItems:'stretch',backgroundColor:'#080B0F',borderTopWidth:1,borderColor:'#262C33',paddingHorizontal:8,paddingTop:4,paddingBottom:Platform.OS==='android'?12:7");
+
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
-console.log('✓ TornPulse dashboard cleanup patch applied');
+console.log('✓ TornPulse dashboard + HUD utility cleanup applied');
