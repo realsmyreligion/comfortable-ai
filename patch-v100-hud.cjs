@@ -706,3 +706,209 @@ overlay = replaceKotlinFunction(
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse professional transparent activity HUD applied.');
+
+
+// ---------------------------------------------------------------------------
+// Bigger HUD branding + app-wide wordmark polish.
+// - Makes the floating HUD wordmarks noticeably larger in both expanded and
+//   collapsed states.
+// - Tries to enlarge the in-app TornPulse brand headers on the dashboard,
+//   settings, floating HUD page and target / attack page.
+// - Uses soft matching so the patch stays safe across nearby source revisions.
+// ---------------------------------------------------------------------------
+
+function replaceRegexSoft(text, regex, replacer, label) {
+  let hits = 0;
+  const out = text.replace(regex, (...args) => {
+    hits++;
+    return typeof replacer === 'function' ? replacer(...args) : replacer;
+  });
+  if (hits > 0) {
+    console.log(`✓ ${label} (${hits})`);
+    return out;
+  }
+  console.log(`- ${label} skipped`);
+  return text;
+}
+
+function updateStyleObject(text, styleName, mutator, label) {
+  const re = new RegExp(`(${styleName}\\s*:\\s*\\{)([\\s\\S]*?)(\\})`);
+  const match = text.match(re);
+  if (!match) {
+    console.log(`- ${label} skipped`);
+    return text;
+  }
+  const before = match[2];
+  const after = mutator(before);
+  console.log(`✓ ${label}`);
+  return text.replace(re, `${match[1]}${after}${match[3]}`);
+}
+
+function setStyleProp(objText, prop, value) {
+  const propRe = new RegExp(`(${prop}\\s*:\\s*)([^,\\n}]+)`);
+  if (propRe.test(objText)) {
+    return objText.replace(propRe, `$1${value}`);
+  }
+  const trimmed = objText.replace(/\s*$/, '');
+  const joiner = trimmed.trim().length && !trimmed.trim().endsWith(',') ? ',' : '';
+  return `${trimmed}${joiner}\n    ${prop}: ${value},\n  `;
+}
+
+app = extractEmbedded('APP_JS').value;
+
+// Unify a few visible brand strings when those exact copy blocks exist.
+app = replaceRegexSoft(
+  app,
+  /TORNPULSE\s*[•·]\s*TARGET INTELLIGENCE/g,
+  'TORNPULSE • TARGET INTELLIGENCE',
+  'normalize target-page brand line'
+);
+app = replaceRegexSoft(
+  app,
+  /TORNPULSE\s*[•·]\s*TARGET ASSISTANT/g,
+  'TORNPULSE • TARGET ASSISTANT',
+  'normalize target assistant brand line'
+);
+
+// Bigger / cleaner in-app top branding where the page still uses the text logo.
+app = updateStyleObject(app, 'pBrandWrap', block => {
+  block = setStyleProp(block, 'paddingTop', '12');
+  block = setStyleProp(block, 'paddingBottom', '8');
+  block = setStyleProp(block, 'minHeight', '120');
+  return block;
+}, 'brand card spacing');
+
+app = updateStyleObject(app, 'pBrandAccent', block => {
+  block = setStyleProp(block, 'fontSize', '58');
+  block = setStyleProp(block, 'lineHeight', '60');
+  block = setStyleProp(block, 'letterSpacing', '1.2');
+  return block;
+}, 'larger TORN / PULSE heading');
+
+app = updateStyleObject(app, 'pBrandBeat', block => {
+  block = setStyleProp(block, 'height', '22');
+  block = setStyleProp(block, 'marginTop', '8');
+  return block;
+}, 'larger brand heartbeat underline');
+
+app = updateStyleObject(app, 'pPageHeading', block => {
+  block = setStyleProp(block, 'fontSize', '18');
+  block = setStyleProp(block, 'letterSpacing', '2.8');
+  return block;
+}, 'page eyebrow heading');
+
+app = updateStyleObject(app, 'pPageTitle', block => {
+  block = setStyleProp(block, 'fontSize', '36');
+  block = setStyleProp(block, 'lineHeight', '40');
+  return block;
+}, 'larger page title');
+
+app = updateStyleObject(app, 'pPageCopy', block => {
+  block = setStyleProp(block, 'fontSize', '17');
+  block = setStyleProp(block, 'lineHeight', '24');
+  return block;
+}, 'page copy readability');
+
+app = updateStyleObject(app, 'pHudHeroTitle', block => {
+  block = setStyleProp(block, 'fontSize', '28');
+  block = setStyleProp(block, 'lineHeight', '32');
+  return block;
+}, 'floating HUD page hero title');
+
+app = updateStyleObject(app, 'pHudHeroKicker', block => {
+  block = setStyleProp(block, 'fontSize', '15');
+  block = setStyleProp(block, 'letterSpacing', '1.8');
+  return block;
+}, 'floating HUD page hero kicker');
+
+app = updateStyleObject(app, 'pHudShortcutTitle', block => {
+  block = setStyleProp(block, 'fontSize', '18');
+  block = setStyleProp(block, 'lineHeight', '22');
+  return block;
+}, 'dashboard shortcut title');
+
+app = updateStyleObject(app, 'pHudShortcutKicker', block => {
+  block = setStyleProp(block, 'fontSize', '12');
+  block = setStyleProp(block, 'letterSpacing', '1.6');
+  return block;
+}, 'dashboard shortcut kicker');
+
+app = updateStyleObject(app, 'pDashHudTitle', block => {
+  block = setStyleProp(block, 'fontSize', '24');
+  block = setStyleProp(block, 'lineHeight', '28');
+  return block;
+}, 'dashboard HUD card title');
+
+app = updateStyleObject(app, 'pDashHudKicker', block => {
+  block = setStyleProp(block, 'fontSize', '13');
+  block = setStyleProp(block, 'letterSpacing', '1.6');
+  return block;
+}, 'dashboard HUD card kicker');
+
+app = updateStyleObject(app, 'pTopIconText', block => {
+  block = setStyleProp(block, 'fontSize', '16');
+  block = setStyleProp(block, 'lineHeight', '20');
+  return block;
+}, 'top icon label sizing');
+
+// If the page already uses the image wordmark, make it larger.
+app = updateStyleObject(app, 'pHeaderImage', block => {
+  block = setStyleProp(block, 'width', '320');
+  block = setStyleProp(block, 'height', '112');
+  return block;
+}, 'larger shared header image');
+
+app = updateStyleObject(app, 'pHeaderImageWrap', block => {
+  block = setStyleProp(block, 'paddingTop', '6');
+  block = setStyleProp(block, 'paddingBottom', '8');
+  return block;
+}, 'header image spacing');
+
+setEmbedded('APP_JS', app);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse in-app wordmark polish applied.');
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+// Bigger expanded logo in the whole top-left section.
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentExpandedLogoWidthDp = when {\n      compact -> 150\n      large -> 196\n      else -> 172\n    }\n    currentExpandedLogoHeightDp = when {\n      compact -> 28\n      large -> 38\n      else -> 32\n    }`,
+  `    currentExpandedLogoWidthDp = when {\n      compact -> 186\n      large -> 236\n      else -> 208\n    }\n    currentExpandedLogoHeightDp = when {\n      compact -> 34\n      large -> 46\n      else -> 40\n    }`,
+  'extra-large top-left expanded logo'
+);
+
+// Bigger minimized TP pill as well so the button is easier to spot.
+overlay = replaceOptionalExact(
+  overlay,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 48\n      large -> 64\n      else -> 56\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 16\n      large -> 22\n      else -> 18\n    }`,
+  `    currentCollapsedLogoWidthDp = when {\n      compact -> 60\n      large -> 78\n      else -> 68\n    }\n    currentCollapsedLogoHeightDp = when {\n      compact -> 20\n      large -> 26\n      else -> 22\n    }`,
+  'larger minimized TP logo'
+);
+
+// Slightly larger collapsed shell to fit the bigger symbol without crowding.
+overlay = replaceOptionalExact(
+  overlay,
+  `      compact -> 56\n      large -> 72\n      else -> 64`,
+  `      compact -> 70\n      large -> 90\n      else -> 80`,
+  'wider minimized logo-only shell'
+);
+
+// Let the header row breathe so the larger logo and ticker stay balanced.
+overlay = replaceRegexSoft(
+  overlay,
+  /val headerPaddingTop = dp\((\d+)\)/g,
+  'val headerPaddingTop = dp(8)',
+  'header top padding'
+);
+
+overlay = replaceRegexSoft(
+  overlay,
+  /val headerPaddingBottom = dp\((\d+)\)/g,
+  'val headerPaddingBottom = dp(6)',
+  'header bottom padding'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse bigger HUD branding patch applied.');
