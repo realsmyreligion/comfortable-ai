@@ -237,6 +237,72 @@ if (!app.includes('tpDashHud:{')) {
 // Four tabs have more breathing room than the old five-tab layout.
 app = replaceStyle(app,'tpBottomNav',"height:72,flexDirection:'row',alignItems:'stretch',backgroundColor:'#080B0F',borderTopWidth:1,borderColor:'#262C33',paddingHorizontal:8,paddingTop:4,paddingBottom:Platform.OS==='android'?12:7");
 
+
+// ---------------------------------------------------------------------------
+// Polish pass:
+// - make the dashboard HUD card fill the lower space better
+// - refresh the top stat/cooldown icons closer to the visual reference
+// - try a smaller floating HUD footprint
+// ---------------------------------------------------------------------------
+
+// Dashboard HUD card copy / spacing / fill.
+app = softReplace(
+  app,
+  `<Text numberOfLines={1} style={styles.tpDashHudCopy}>{hudRunning?'Overlay is running over Torn':'Launch the overlay right from Dashboard'}</Text>`,
+  `<Text style={styles.tpDashHudCopy}>{hudRunning?'Overlay is live over Torn. Open settings any time.':'Launch, stop, or manage the overlay right from Dashboard.'}</Text>`,
+  'dashboard HUD copy refresh'
+);
+
+app = replaceStyle(app,'tpScrollContent',"flexGrow:1,paddingHorizontal:11,paddingTop:Platform.OS==='android'?24:5,paddingBottom:10");
+app = replaceStyle(app,'tpDashHud',"minHeight:138,flexGrow:1,marginTop:8,marginBottom:10,borderWidth:1,borderColor:'#315D39',borderRadius:16,backgroundColor:'#0B1610',paddingHorizontal:14,paddingVertical:16,flexDirection:'row',alignItems:'stretch',justifyContent:'space-between'");
+app = replaceStyle(app,'tpDashHudInfo',"flex:1,minWidth:0,paddingRight:12,justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudHead',"flexDirection:'row',alignItems:'center',marginBottom:2");
+app = replaceStyle(app,'tpDashHudKicker',"color:'#96A29A',fontSize:7.6,fontWeight:'900',letterSpacing:.95");
+app = replaceStyle(app,'tpDashHudState',"color:'#8F9992',fontSize:7.1,fontWeight:'900',letterSpacing:.55");
+app = replaceStyle(app,'tpDashHudTitle',"color:'#F1F4F2',fontSize:16.2,fontWeight:'900',marginTop:7");
+app = replaceStyle(app,'tpDashHudCopy',"color:'#9BA69F',fontSize:8.2,fontWeight:'700',marginTop:6,lineHeight:13.5");
+app = replaceStyle(app,'tpDashHudActions',"width:122,gap:9,justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudToggle',"height:42,borderWidth:1,borderColor:'#3E8B51',borderRadius:11,backgroundColor:'#102416',alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudToggleStop',"borderColor:'#B84046',backgroundColor:'#351416'");
+app = replaceStyle(app,'tpDashHudToggleText',"color:'#72D56D',fontSize:8.0,fontWeight:'900',letterSpacing:.62");
+app = replaceStyle(app,'tpDashHudManage',"height:34,borderWidth:1,borderColor:'#30363D',borderRadius:10,backgroundColor:'#0D1014',alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpDashHudManageText',"color:'#A5ADB6',fontSize:7.0,fontWeight:'900',letterSpacing:.4");
+
+// Top metrics and cooldown icons closer to the reference feel.
+app = softReplace(app, `label="HEALTH" icon="♥︎"`, `label="HEALTH" icon="❤"`, 'health icon refresh');
+app = softReplace(app, `label="ENERGY" icon="ϟ"`, `label="ENERGY" icon="⚡"`, 'energy icon refresh');
+app = softReplace(app, `label="NERVE" icon="✦"`, `label="NERVE" icon="🏃"`, 'nerve icon refresh');
+app = softReplace(app, `label="TORN TIME" icon="◷"`, `label="TORN TIME" icon="🕘"`, 'time icon refresh');
+
+app = softReplace(app, `icon="◆" label="DRUG"`, `icon="💊" label="DRUG"`, 'drug icon refresh');
+app = softReplace(app, `icon="▰" label="BOOSTER"`, `icon="🥤" label="BOOSTER"`, 'booster icon refresh');
+app = softReplace(app, `>◎</Text><View style={{flex:1,minWidth:0}}><Text style={styles.tpCooldownLabel}>SCANNER</Text>`, `>◉</Text><View style={{flex:1,minWidth:0}}><Text style={styles.tpCooldownLabel}>SCANNER</Text>`, 'scanner icon refresh');
+
+app = replaceStyle(app,'tpRefMetricBadge',"width:32,height:32,borderRadius:9,borderWidth:1,alignItems:'center',justifyContent:'center'");
+app = replaceStyle(app,'tpRefMetricIcon',"fontSize:17,fontWeight:'900'");
+app = replaceStyle(app,'tpRefMetricLabel',"flex:1,color:'#9CA4AE',fontSize:7.7,fontWeight:'900',letterSpacing:.45,marginLeft:7");
+app = replaceStyle(app,'tpRefMetricValue',"color:'#F5F6F8',fontSize:17,fontWeight:'900',marginTop:7");
+app = replaceStyle(app,'tpRefCoolIcon',"width:34,height:34,borderRadius:17,borderWidth:1,alignItems:'center',justifyContent:'center',marginRight:8");
+app = replaceStyle(app,'tpRefCoolIconText',"fontSize:17,fontWeight:'900'");
+app = replaceStyle(app,'tpRefCoolValue',"fontSize:10.0,fontWeight:'900',marginTop:3");
+
+// Floating HUD: smaller overall footprint where those style keys exist.
+app = replaceStyle(app,'hudPanel',"minWidth:286,maxWidth:332,borderRadius:18,paddingHorizontal:10,paddingTop:8,paddingBottom:8");
+app = replaceStyle(app,'hudMeta',"fontSize:7.4,fontWeight:'800'");
+app = replaceStyle(app,'hudTitle',"fontSize:11.5,fontWeight:'900'");
+app = replaceStyle(app,'hudCopy',"fontSize:7.2,fontWeight:'700',lineHeight:10.8");
+app = replaceStyle(app,'hudUtilityRow',"minHeight:30,paddingVertical:4");
+app = replaceStyle(app,'hudButtonText',"fontSize:7.2,fontWeight:'900',letterSpacing:.35");
+app = replaceStyle(app,'hudButtonStopTextLayout',"fontSize:7.2,fontWeight:'900',letterSpacing:.35");
+app = replaceStyle(app,'hudSettingLabel',"fontSize:6.8,fontWeight:'900',letterSpacing:.35");
+app = replaceStyle(app,'panelKicker',"fontSize:6.6,fontWeight:'900',letterSpacing:.55");
+app = replaceStyle(app,'primaryText',"fontSize:10.5,fontWeight:'900'");
+app = replaceStyle(app,'coolGrid',"marginTop:6,gap:6");
+app = replaceStyle(app,'coolIconBox',"width:28,height:28,borderRadius:14");
+app = replaceStyle(app,'coolValue',"fontSize:8.8,fontWeight:'900'");
+app = replaceStyle(app,'coolLabel',"fontSize:6.5,fontWeight:'900',letterSpacing:.4");
+app = replaceStyle(app,'coolState',"fontSize:6.5,fontWeight:'900',letterSpacing:.35");
+
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
 console.log('✓ TornPulse dashboard + HUD utility cleanup applied');
