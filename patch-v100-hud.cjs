@@ -461,3 +461,60 @@ overlay = replaceOptionalExact(
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse branding cleanup patch applied.');
+
+
+// ---------------------------------------------------------------------------
+// Logo-only mini HUD + transparency tuning.
+// ---------------------------------------------------------------------------
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+overlay = replaceOptionalExact(
+  overlay,
+  `      compact -> 84
+      large -> 104
+      else -> 94`,
+  `      compact -> 56
+      large -> 72
+      else -> 64`,
+  'logo-only minimized width'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `setColor(Color.argb(252, 12, 13, 16))`,
+  `setColor(Color.TRANSPARENT)`,
+  'remove minimized logo fill box'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `setStroke(dp(1), Color.argb(220, 230, 52, 58))`,
+  `setStroke(dp(1), Color.TRANSPARENT)`,
+  'remove minimized logo border box'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `setColor(Color.argb(196, 12, 13, 17))`,
+  `setColor(Color.argb(152, 12, 13, 17))`,
+  'slightly more transparent stat cards'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `setColor(Color.argb(190, 14, 15, 19))`,
+  `setColor(Color.argb(146, 14, 15, 19))`,
+  'slightly more transparent cooldown chips'
+);
+
+overlay = replaceOptionalExact(
+  overlay,
+  `setColor(Color.argb(156, 14, 15, 18))`,
+  `setColor(Color.argb(118, 14, 15, 18))`,
+  'slightly more transparent TCT row'
+);
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse mini-logo transparency patch applied.');
