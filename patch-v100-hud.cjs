@@ -1860,3 +1860,87 @@ if (!overlay.includes('statContainer.addView(tornClockRow')) {
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TORNPULSE HUD CONCEPT REBUILD — structural native overlay replacement applied.');
+// ===========================================================================
+// TORNPULSE STATIC LAST-ACTIVITY STRIP
+// Keep the top activity strip readable: no marquee, no repeated text, no fast
+// motion. It simply sits there showing the most recent HUD event / attack.
+// ===========================================================================
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function staticReplaceOnce(text, oldText, newText, label) {
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) {
+    throw new Error(`TornPulse static activity: expected 1 match for ${label}, found ${count}`);
+  }
+  console.log(`✓ STATIC ACTIVITY ${label}`);
+  return text.replace(oldText, newText);
+}
+
+// Disable Android marquee behavior on the actual top-center activity TextView.
+overlay = staticReplaceOnce(
+  overlay,
+  `      it.ellipsize = TextUtils.TruncateAt.MARQUEE
+      it.marqueeRepeatLimit = -1
+      it.setHorizontallyScrolling(true)
+      it.isSelected = true
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER`,
+  `      it.ellipsize = TextUtils.TruncateAt.END
+      it.setHorizontallyScrolling(false)
+      it.isSelected = false
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER`,
+  'disable fast marquee'
+);
+
+// Keep the most recent HUD event available instead of expiring it visually.
+// A newer attack/action will naturally replace eventTickerMessage.
+overlay = staticReplaceOnce(
+  overlay,
+  `    val activeEvent = eventTickerMessage?.takeIf {
+      it.isNotBlank() && SystemClock.elapsedRealtime() < eventTickerUntilElapsed
+    }`,
+  `    val activeEvent = eventTickerMessage?.takeIf {
+      it.isNotBlank()
+    }`,
+  'persist latest HUD action'
+);
+
+// Never duplicate the message for scrolling. Just show one clean static line.
+overlay = staticReplaceOnce(
+  overlay,
+  `    val marquee = if (display.length > 34) "   $display      •      $display   " else display
+    if (view.text.toString() != marquee) {
+      view.text = marquee
+      view.isSelected = false
+      view.isSelected = true
+    }`,
+  `    if (view.text.toString() != display) {
+      view.text = display
+    }
+    view.isSelected = false`,
+  'single static last-activity line'
+);
+
+// Make the attack wording a little shorter so more of it fits without motion.
+overlay = overlay.replace(
+  `display = "LAST INCOMING  •  $who  •  ${latest.result}$age"`,
+  `display = "LAST ATTACK  •  $who  •  ${latest.result}$age"`
+);
+
+// Hard verification so this cannot silently fall back to the racing marquee.
+const activityStart = overlay.indexOf('eventTickerText = makeText("LIVE ACTIVITY"');
+const activityEnd = activityStart >= 0 ? overlay.indexOf('headerRow.addView(it, 1', activityStart) : -1;
+if (activityStart < 0 || activityEnd < 0) {
+  throw new Error('TornPulse static activity verification: top activity strip not found');
+}
+const activitySetup = overlay.slice(activityStart, activityEnd);
+if (activitySetup.includes('TruncateAt.MARQUEE') || activitySetup.includes('setHorizontallyScrolling(true)')) {
+  throw new Error('TornPulse static activity verification: marquee behavior still present');
+}
+if (!overlay.includes('view.text = display')) {
+  throw new Error('TornPulse static activity verification: static display assignment missing');
+}
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse static last-activity strip applied — no scrolling.');
