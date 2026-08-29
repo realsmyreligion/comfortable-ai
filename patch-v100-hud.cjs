@@ -51,8 +51,8 @@ function setEmbedded(name, value) {
 function functionBlockEnd(text, start, label) {
   const open = text.indexOf(') {', start);
   if (open < 0) throw new Error(`TornPulse instant targets: ${label} opening brace not found`);
-  let depth = 0;
-  for (let i=open+2;i<text.length;i++) {
+  let depth = 1;
+  for (let i=open+3;i<text.length;i++) {
     const ch=text[i];
     if (ch === '{') depth++;
     else if (ch === '}') {
@@ -102,12 +102,11 @@ function targetDisplayTarget(target, clock=Date.now()) {
 app = app.slice(0,statusAt) + instantHelpers + app.slice(statusAt);
 console.log('✓ instant hospital-expiry helpers');
 
-app = replaceExact(
-  app,
-  `    if (left <= 0) return 'READY?';`,
-  `    if (left <= 0) return 'READY';`,
-  'zero-second hospital label becomes READY'
-);
+const beforeReadyLabel = app;
+app = app.replace(/if \(left <= 0\) return ['\"]READY\?['\"];/, "if (left <= 0) return 'READY';");
+console.log(beforeReadyLabel === app
+  ? '- zero-second hospital label already handled by current base'
+  : '✓ zero-second hospital label becomes READY');
 
 // ---------------------------------------------------------------------------
 // 2) Manual refresh may borrow the AUTO scanner reserve, while always leaving
