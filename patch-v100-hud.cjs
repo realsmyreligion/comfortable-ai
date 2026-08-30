@@ -2418,7 +2418,7 @@ if (!overlay.includes('TORNPULSE_CLEAN_SLATE_ICON_ENGINE')) {
     return object : View(this) {
       private val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         style = android.graphics.Paint.Style.STROKE
-        strokeWidth = dp(1.7f)
+        strokeWidth = dp(2).toFloat()
         strokeCap = android.graphics.Paint.Cap.ROUND
         strokeJoin = android.graphics.Paint.Join.ROUND
         this.color = color
