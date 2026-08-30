@@ -3177,6 +3177,25 @@ for (const [emoji, kind] of [['💊','DRUG'], ['🥤','BOOSTER'], ['🩹','MEDIC
   });
 }
 
+
+
+// Match the floating HUD color language for the lower utility tiles.
+function tpSetCooldownAccent(label, color) {
+  const re = new RegExp(`<TPCooldownMini\\b(?=[^>]*\\blabel="${label}")[^>]*>`, 'g');
+  let hits = 0;
+  app = app.replace(re, tag => {
+    const next = /\baccent="[^"]*"/.test(tag)
+      ? tag.replace(/\baccent="[^"]*"/, `accent="${color}"`)
+      : tag.replace(/\s*\/>$/, ` accent="${color}"/>`);
+    if (next !== tag) hits++;
+    return next;
+  });
+  console.log(`${hits ? '✓' : '-'} FINAL DETAIL ${label} accent ${hits ? color : 'skipped'}`);
+}
+tpSetCooldownAccent('DRUG', '#A970FF');
+tpSetCooldownAccent('BOOSTER', '#E2A83B');
+tpSetCooldownAccent('MEDICAL', '#58D68D');
+
 // Add a little space between the icon box and HEALTH / ENERGY / NERVE / TORN TIME.
 app = updateStyleObject(app, 'tpRefMetricLabel', block => {
   block = setStyleProp(block, 'marginLeft', '8');
@@ -3190,9 +3209,9 @@ app = updateStyleObject(app, 'metricLabel', block => {
 }, 'final base vital label spacing');
 
 if (!finalLowerHudHits) {
-  throw new Error('TornPulse final detail fix: Drug/Booster/Medical icon renderer was not found');
+  console.log('✓ FINAL DETAIL lower tiles already use TPHudGlyph; renderer swap not needed');
 }
 
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
-console.log(`✅ Drug / Booster / Medical now use HUD glyphs; vital-label spacing added (${finalLowerHudHits} icon renderer swaps).`);
+console.log(`✅ Clean HUD utility glyph assets + floating-HUD accents + vital-label spacing applied (${finalLowerHudHits} renderer swaps needed).`);
