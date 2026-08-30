@@ -16,7 +16,7 @@ try {
     execFileSync('git', ['fetch', '--depth=10', 'origin', 'main'], {stdio:'ignore'});
   } catch (_) {}
 
-  const base = execFileSync('git', ['show', `${BASE_COMMIT}:${BASE_PATH}`], {encoding:'utf8'});
+  const base = execFileSync('git', ['show', `${BASE_COMMIT}:${BASE_PATH}`], {encoding:'utf8', maxBuffer: 32 * 1024 * 1024});
   fs.writeFileSync(tempBase, base, 'utf8');
   execFileSync(process.execPath, [tempBase], {stdio:'inherit'});
 } finally {
