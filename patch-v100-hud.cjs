@@ -97,95 +97,70 @@ function TPBaldrHubCard({compact=false}) {
   console.log('✓ Baldr Link Hub components added');
 }
 
-// Replace any dashboard/full-page radar renderer that still draws the old player list.
-// This is intentionally marker-based so it follows the current evolved UI rather than
-// depending on one old component name.
-function replaceRadarRenderers(source) {
-  const fnRe = /function\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g;
-  const hits = [];
-  let match;
+// HARD REMOVE: delete the actual dashboard TARGET RADAR JSX card.
+// We locate the visible TARGET RADAR text, walk backward to its enclosing
+// tpRadarClone card (or tpCard fallback), then remove that entire <View> tree.
+function findMatchingViewEnd(source, start) {
+  let depth = 0;
+  let pos = start;
+  while (pos < source.length) {
+    const open = source.indexOf('<View', pos);
+    const close = source.indexOf('</View>', pos);
 
-  while ((match = fnRe.exec(source))) {
-    const start = match.index;
-    const open = source.indexOf('{', match.index);
-    let depth = 1;
-    let i = open + 1;
-    let quote = null;
-    let escaped = false;
-    let templateExprDepth = 0;
+    if (open < 0 && close < 0) break;
 
-    for (; i < source.length; i++) {
-      const ch = source[i];
-
-      if (quote) {
-        if (escaped) { escaped = false; continue; }
-        if (ch === '\\') { escaped = true; continue; }
-        if (quote === '`' && ch === '$' && source[i+1] === '{') {
-          templateExprDepth++;
-          i++;
-          continue;
-        }
-        if (quote === '`' && templateExprDepth > 0) {
-          if (ch === '{') templateExprDepth++;
-          else if (ch === '}') templateExprDepth--;
-          continue;
-        }
-        if (ch === quote && templateExprDepth === 0) quote = null;
-        continue;
-      }
-
-      if (ch === "'" || ch === '"' || ch === '`') {
-        quote = ch;
-        continue;
-      }
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) { i++; break; }
-      }
+    if (open >= 0 && (close < 0 || open < close)) {
+      const tagEnd = source.indexOf('>', open);
+      if (tagEnd < 0) break;
+      const tagText = source.slice(open, tagEnd + 1);
+      if (!/\/\s*>$/.test(tagText)) depth++;
+      pos = tagEnd + 1;
+      continue;
     }
 
-    if (depth !== 0) continue;
-    const body = source.slice(start, i);
-
-    const radarMarkers =
-      body.includes('TARGET RADAR') &&
-      (
-        body.includes('VIEW ALL') ||
-        body.includes('OPEN FULL TARGETS PAGE') ||
-        body.includes('targetRow') ||
-        body.includes('targetAttack')
-      );
-
-    if (radarMarkers) {
-      hits.push({
-        start,
-        end: i,
-        name: match[1],
-        signature: source.slice(start, open)
-      });
+    if (close >= 0) {
+      depth--;
+      pos = close + '</View>'.length;
+      if (depth === 0) return pos;
     }
   }
+  return -1;
+}
 
-  if (!hits.length) return {source, count:0, names:[]};
-
-  // Replace from the end so earlier offsets stay valid.
+function removeVisibleRadarCards(source) {
   let out = source;
-  const names = [];
-  for (const hit of hits.reverse()) {
-    const replacement = `${hit.signature}{ return <TPBaldrHubCard compact/>; }`;
-    out = out.slice(0, hit.start) + replacement + out.slice(hit.end);
-    names.push(hit.name);
+  let count = 0;
+
+  while (true) {
+    const labelAt = out.indexOf('TARGET RADAR');
+    if (labelAt < 0) break;
+
+    let start = out.lastIndexOf('<View style={styles.tpRadarClone', labelAt);
+    if (start < 0) {
+      start = out.lastIndexOf('<View style={styles.tpCard}', labelAt);
+    }
+    if (start < 0) {
+      throw new Error('TornPulse Link Hub: TARGET RADAR found but enclosing radar card was not found');
+    }
+
+    const end = findMatchingViewEnd(out, start);
+    if (end < 0) {
+      throw new Error('TornPulse Link Hub: could not find end of TARGET RADAR card');
+    }
+
+    out = out.slice(0, start) + '<TPBaldrHubCard compact/>' + out.slice(end);
+    count++;
   }
-  names.reverse();
-  return {source:out, count:hits.length, names};
+
+  return {source:out, count};
 }
 
-const radarSwap = replaceRadarRenderers(app);
-app = radarSwap.source;
-if (radarSwap.count) {
-  console.log(`✓ replaced ${radarSwap.count} old radar renderer(s): ${radarSwap.names.join(', ')}`);
+const hardRadarRemoval = removeVisibleRadarCards(app);
+app = hardRadarRemoval.source;
+if (!hardRadarRemoval.count) {
+  throw new Error('TornPulse Link Hub: visible TARGET RADAR card was not found');
 }
+console.log(`✓ HARD REMOVED ${hardRadarRemoval.count} visible TARGET RADAR card(s)`);
 
 // Replace every rendered TargetAssistant surface. Dead scanner code may remain in the bundle,
 // but without a mounted TargetAssistant it cannot auto-scan or consume per-target API calls.
@@ -199,11 +174,7 @@ app = app.replace(/<TargetAssistant\b[^>]*\/>/g, (match) => {
 if (renderedTargets) {
   console.log(`✓ replaced ${renderedTargets} rendered Target Assistant surface(s)`);
 } else {
-  console.log('- no direct TargetAssistant surface remained after radar replacement');
-}
-
-if (!radarSwap.count && !renderedTargets) {
-  throw new Error('TornPulse Link Hub: no visible target/radar surface found to replace');
+  console.log('- no direct TargetAssistant surface remained');
 }
 
 // Replace scanner utility tile if it is still rendered in the dashboard.
@@ -250,6 +221,19 @@ if (!app.includes('tpLinkHub:{')) {
   console.log('✓ Baldr Link Hub styles added');
 }
 
+// Hard postconditions: do not allow another "successful" build with the old radar still visible.
+const forbiddenVisibleRadarText = ['TARGET RADAR','OPEN FULL TARGETS PAGE','VIEW ALL'];
+for (const forbidden of forbiddenVisibleRadarText) {
+  if (app.includes(forbidden)) {
+    throw new Error(`TornPulse Link Hub: forbidden old radar text still remains: ${forbidden}`);
+  }
+}
+if (!app.includes("Baldr’s Target List") || !app.includes('https://oran.pw/baldrstargets/')) {
+  throw new Error('TornPulse Link Hub: Baldr launcher verification failed');
+}
+console.log('✓ verified: no TARGET RADAR / VIEW ALL / OPEN FULL TARGETS PAGE remains');
+console.log('✓ verified: Baldr launcher is present');
+
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
-console.log('✅ TornPulse Baldr Link Hub applied — old dashboard radar/player list removed.');
+console.log('✅ TornPulse Baldr Link Hub applied — dashboard radar forcibly removed and verified.');
