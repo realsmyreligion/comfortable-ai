@@ -3098,3 +3098,101 @@ app = updateStyleObject(app, 'tpRefMetricIcon', block => {
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ Main screen now matches the floating HUD icon look more closely.');
+
+
+// ---------------------------------------------------------------------------
+// FINAL DASHBOARD DETAIL FIX
+// 1) Force Drug / Booster / Medical dashboard tiles to use the same clean
+//    floating-HUD glyph artwork instead of emoji.
+// 2) Add breathing room between the upper vital icon boxes and their labels.
+// ---------------------------------------------------------------------------
+
+app = extractEmbedded('APP_JS').value;
+
+function replaceDashboardIconRendererInFunction(text, functionName) {
+  const signatures = [`function ${functionName}(`, `const ${functionName} =`, `let ${functionName} =`];
+  let start = -1;
+  for (const sig of signatures) {
+    start = text.indexOf(sig);
+    if (start >= 0) break;
+  }
+  if (start < 0) {
+    console.log(`- FINAL DETAIL ${functionName} renderer skipped`);
+    return { text, hits: 0 };
+  }
+
+  // Limit to the next component/function declaration so we only touch this tile.
+  const nextMarkers = ['\nfunction ', '\nconst ', '\nlet '];
+  let end = text.length;
+  for (const marker of nextMarkers) {
+    const at = text.indexOf(marker, start + 10);
+    if (at >= 0 && at < end) end = at;
+  }
+
+  let block = text.slice(start, end);
+  let hits = 0;
+
+  // Most redesigned/base variants render the icon prop in a Text node.
+  block = block.replace(/<Text\b[^>]*>\s*\{icon\}\s*<\/Text>/g, () => {
+    hits++;
+    return '<TPHudGlyph kind={label} label={label} size={24}/>';
+  });
+
+  // Some revisions render the literal emoji directly inside Text.
+  const literalMap = [
+    ['💊', 'DRUG'],
+    ['🥤', 'BOOSTER'],
+    ['🩹', 'MEDICAL'],
+    ['🩺', 'MEDICAL'],
+    ['🧪', 'BOOSTER'],
+  ];
+  for (const [emoji, kind] of literalMap) {
+    const escaped = emoji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`<Text\\b[^>]*>\\s*${escaped}\\s*<\\/Text>`, 'g');
+    block = block.replace(re, () => {
+      hits++;
+      return `<TPHudGlyph kind="${kind}" size={24}/>`;
+    });
+  }
+
+  if (hits) console.log(`✓ FINAL DETAIL ${functionName} HUD glyph renderer (${hits})`);
+  else console.log(`- FINAL DETAIL ${functionName} renderer had no emoji/icon Text node`);
+  return { text: text.slice(0, start) + block + text.slice(end), hits };
+}
+
+let finalLowerHudHits = 0;
+for (const name of ['TPCooldownMini', 'Cooldown']) {
+  const result = replaceDashboardIconRendererInFunction(app, name);
+  app = result.text;
+  finalLowerHudHits += result.hits;
+}
+
+// Last-resort live JSX replacement for direct emoji nodes in the dashboard.
+for (const [emoji, kind] of [['💊','DRUG'], ['🥤','BOOSTER'], ['🩹','MEDICAL'], ['🩺','MEDICAL']]) {
+  const escaped = emoji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`<Text\\b([^>]*)>\\s*${escaped}\\s*<\\/Text>`, 'g');
+  app = app.replace(re, () => {
+    finalLowerHudHits++;
+    return `<TPHudGlyph kind="${kind}" size={24}/>`;
+  });
+}
+
+// Add a little space between the icon box and HEALTH / ENERGY / NERVE / TORN TIME.
+app = updateStyleObject(app, 'tpRefMetricLabel', block => {
+  block = setStyleProp(block, 'marginLeft', '8');
+  return block;
+}, 'final vital label spacing');
+
+// Base-card fallback if a nearby dashboard revision still uses metricLabel.
+app = updateStyleObject(app, 'metricLabel', block => {
+  block = setStyleProp(block, 'marginLeft', '8');
+  return block;
+}, 'final base vital label spacing');
+
+if (!finalLowerHudHits) {
+  throw new Error('TornPulse final detail fix: Drug/Booster/Medical icon renderer was not found');
+}
+
+setEmbedded('APP_JS', app);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log(`✅ Drug / Booster / Medical now use HUD glyphs; vital-label spacing added (${finalLowerHudHits} icon renderer swaps).`);
