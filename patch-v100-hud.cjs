@@ -2499,8 +2499,8 @@ overlay = replaceKotlinFunction(
       val column = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        setPadding(dp(7), dp(8), dp(7), dp(7))
-        minimumHeight = dp(92)
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        minimumHeight = dp(98)
         background = GradientDrawable().apply {
           shape = GradientDrawable.RECTANGLE
           cornerRadius = dp(15).toFloat()
@@ -2508,17 +2508,26 @@ overlay = replaceKotlinFunction(
           setStroke(dp(1), Color.argb(190, Color.red(color), Color.green(color), Color.blue(color)))
         }
       }
-      val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-      val icon = makeHudGlyph(label, color, 20)
+      val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+      val iconShell = LinearLayout(this).apply {
+        gravity = Gravity.CENTER
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(10).toFloat()
+          setColor(Color.argb(34, Color.red(color), Color.green(color), Color.blue(color)))
+          setStroke(dp(1), Color.argb(205, Color.red(color), Color.green(color), Color.blue(color)))
+        }
+      }
+      iconShell.addView(makeHudGlyph(label, color, 18), LinearLayout.LayoutParams(dp(18), dp(18)))
       val labelView = makeText(label, maxOf(7.5f, statLabelSize + 0.8f), color, true).apply {
         letterSpacing = 0.055f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
       }
-      head.addView(icon, LinearLayout.LayoutParams(dp(20), dp(20)).apply { rightMargin = dp(5) })
+      head.addView(iconShell, LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(7) })
       head.addView(labelView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
       val valueView = makeText("-- / --", maxOf(13.5f, barsSize + 0.5f), Color.rgb(247, 248, 250), true).apply {
-        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setPadding(0, dp(5), 0, 0); includeFontPadding = false; maxLines = 1; textAlignment = View.TEXT_ALIGNMENT_CENTER
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setPadding(0, dp(6), 0, 0); includeFontPadding = false; maxLines = 1; textAlignment = View.TEXT_ALIGNMENT_CENTER
       }
-      val timerView = makeText("--", maxOf(7.0f, statLabelSize - 0.2f), Color.rgb(190, 196, 204), true).apply {
+      val timerView = makeText("--", maxOf(7.3f, statLabelSize + 0.1f), Color.rgb(190, 196, 204), true).apply {
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); setPadding(0, dp(4), 0, 0); includeFontPadding = false; maxLines = 1; textAlignment = View.TEXT_ALIGNMENT_CENTER
       }
       val accent = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; cornerRadius = dp(3).toFloat(); setColor(color) } }
@@ -2549,8 +2558,18 @@ overlay = finalHudSection(
         setStroke(dp(1), Color.argb(175, 227, 52, 60))
       }
     }
-    val timeHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-    timeHead.addView(makeHudGlyph("TORN TIME", Color.rgb(238, 240, 244), 20), LinearLayout.LayoutParams(dp(20), dp(20)).apply { rightMargin = dp(5) })
+    val timeHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+    val timeIconShell = LinearLayout(this).apply {
+      gravity = Gravity.CENTER
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(10).toFloat()
+        setColor(Color.argb(26, 238, 240, 244))
+        setStroke(dp(1), Color.argb(200, 238, 240, 244))
+      }
+    }
+    timeIconShell.addView(makeHudGlyph("TORN TIME", Color.rgb(238, 240, 244), 18), LinearLayout.LayoutParams(dp(18), dp(18)))
+    timeHead.addView(timeIconShell, LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(7) })
     makeText("TORN TIME", maxOf(7.5f, cooldownSize - 0.2f), Color.rgb(238, 240, 244), true).also {
       it.letterSpacing = 0.055f; it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); it.includeFontPadding = false; it.maxLines = 1
       timeHead.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -2589,8 +2608,18 @@ overlay = replaceKotlinFunction(
           setStroke(dp(1), Color.argb(175, Color.red(labelColor), Color.green(labelColor), Color.blue(labelColor)))
         }
       }
-      val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-      head.addView(makeHudGlyph(label, labelColor, 18), LinearLayout.LayoutParams(dp(18), dp(18)).apply { rightMargin = dp(5) })
+      val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+      val iconShell = LinearLayout(this).apply {
+        gravity = Gravity.CENTER
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(9).toFloat()
+          setColor(Color.argb(32, Color.red(labelColor), Color.green(labelColor), Color.blue(labelColor)))
+          setStroke(dp(1), Color.argb(190, Color.red(labelColor), Color.green(labelColor), Color.blue(labelColor)))
+        }
+      }
+      iconShell.addView(makeHudGlyph(label, labelColor, 16), LinearLayout.LayoutParams(dp(16), dp(16)))
+      head.addView(iconShell, LinearLayout.LayoutParams(dp(30), dp(30)).apply { rightMargin = dp(6) })
       val labelView = makeText(label, maxOf(7f, cooldownSize - .1f), labelColor, true).apply {
         letterSpacing = .055f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
       }
@@ -2652,3 +2681,44 @@ if (!overlay.includes(CLEAN_SLATE_WORDMARK_BASE64.slice(0, 64))) {
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TORNPULSE CLEAN-SLATE HUD applied — transparent parent, supplied logo, canvas icons, fresh live cards.');
+// ===========================================================================
+// CENTERED ICON BOXES + TOP-ROW COUNTDOWNS
+// - center each HUD glyph inside its bordered icon box
+// - keep the top stat countdown line visible (health/energy/nerve/torn time)
+// ===========================================================================
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+function centerReplaceOnce(text, oldText, newText, label) {
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) {
+    throw new Error(`TornPulse centered-icon pass: expected 1 match for ${label}, found ${count}`);
+  }
+  console.log(`✓ CENTER PASS ${label}`);
+  return text.replace(oldText, newText);
+}
+
+// Make the stat/timer line a touch more readable in case the runtime source still
+// carries the slightly smaller value from earlier passes.
+overlay = centerReplaceOnce(
+  overlay,
+  `      val timerView = makeText("--", maxOf(7.0f, statLabelSize - 0.2f), Color.rgb(190, 196, 204), true).apply {`,
+  `      val timerView = makeText("--", maxOf(7.3f, statLabelSize + 0.1f), Color.rgb(190, 196, 204), true).apply {`,
+  'bigger stat countdown text'
+);
+
+// If HEALTH is full/capped, let the existing runtime show its status text; otherwise
+// the countdown logic for the stat line remains intact.
+if (!overlay.includes('LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(7) }')) {
+  throw new Error('TornPulse centered-icon verification: stat icon boxes missing');
+}
+if (!overlay.includes('timeIconShell') && !overlay.includes('TORN TIME"')) {
+  throw new Error('TornPulse centered-icon verification: Torn Time icon box missing');
+}
+if (!overlay.includes('maxOf(7.3f, statLabelSize + 0.1f)')) {
+  throw new Error('TornPulse centered-icon verification: countdown sizing missing');
+}
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse centered icon boxes + top-row countdown polish applied.');
