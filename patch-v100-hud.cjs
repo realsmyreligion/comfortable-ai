@@ -97,6 +97,96 @@ function TPBaldrHubCard({compact=false}) {
   console.log('✓ Baldr Link Hub components added');
 }
 
+// Replace any dashboard/full-page radar renderer that still draws the old player list.
+// This is intentionally marker-based so it follows the current evolved UI rather than
+// depending on one old component name.
+function replaceRadarRenderers(source) {
+  const fnRe = /function\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g;
+  const hits = [];
+  let match;
+
+  while ((match = fnRe.exec(source))) {
+    const start = match.index;
+    const open = source.indexOf('{', match.index);
+    let depth = 1;
+    let i = open + 1;
+    let quote = null;
+    let escaped = false;
+    let templateExprDepth = 0;
+
+    for (; i < source.length; i++) {
+      const ch = source[i];
+
+      if (quote) {
+        if (escaped) { escaped = false; continue; }
+        if (ch === '\\') { escaped = true; continue; }
+        if (quote === '`' && ch === '$' && source[i+1] === '{') {
+          templateExprDepth++;
+          i++;
+          continue;
+        }
+        if (quote === '`' && templateExprDepth > 0) {
+          if (ch === '{') templateExprDepth++;
+          else if (ch === '}') templateExprDepth--;
+          continue;
+        }
+        if (ch === quote && templateExprDepth === 0) quote = null;
+        continue;
+      }
+
+      if (ch === "'" || ch === '"' || ch === '`') {
+        quote = ch;
+        continue;
+      }
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) { i++; break; }
+      }
+    }
+
+    if (depth !== 0) continue;
+    const body = source.slice(start, i);
+
+    const radarMarkers =
+      body.includes('TARGET RADAR') &&
+      (
+        body.includes('VIEW ALL') ||
+        body.includes('OPEN FULL TARGETS PAGE') ||
+        body.includes('targetRow') ||
+        body.includes('targetAttack')
+      );
+
+    if (radarMarkers) {
+      hits.push({
+        start,
+        end: i,
+        name: match[1],
+        signature: source.slice(start, open)
+      });
+    }
+  }
+
+  if (!hits.length) return {source, count:0, names:[]};
+
+  // Replace from the end so earlier offsets stay valid.
+  let out = source;
+  const names = [];
+  for (const hit of hits.reverse()) {
+    const replacement = `${hit.signature}{ return <TPBaldrHubCard compact/>; }`;
+    out = out.slice(0, hit.start) + replacement + out.slice(hit.end);
+    names.push(hit.name);
+  }
+  names.reverse();
+  return {source:out, count:hits.length, names};
+}
+
+const radarSwap = replaceRadarRenderers(app);
+app = radarSwap.source;
+if (radarSwap.count) {
+  console.log(`✓ replaced ${radarSwap.count} old radar renderer(s): ${radarSwap.names.join(', ')}`);
+}
+
 // Replace every rendered TargetAssistant surface. Dead scanner code may remain in the bundle,
 // but without a mounted TargetAssistant it cannot auto-scan or consume per-target API calls.
 let renderedTargets = 0;
@@ -106,10 +196,15 @@ app = app.replace(/<TargetAssistant\b[^>]*\/>/g, (match) => {
   return compact ? '<TPBaldrHubCard compact/>' : '<TPBaldrHubCard/>';
 });
 
-if (!renderedTargets) {
-  throw new Error('TornPulse Link Hub: no rendered TargetAssistant surfaces found');
+if (renderedTargets) {
+  console.log(`✓ replaced ${renderedTargets} rendered Target Assistant surface(s)`);
+} else {
+  console.log('- no direct TargetAssistant surface remained after radar replacement');
 }
-console.log(`✓ replaced ${renderedTargets} rendered Target Assistant surface(s)`);
+
+if (!radarSwap.count && !renderedTargets) {
+  throw new Error('TornPulse Link Hub: no visible target/radar surface found to replace');
+}
 
 // Replace scanner utility tile if it is still rendered in the dashboard.
 let miniCount = 0;
@@ -157,4 +252,4 @@ if (!app.includes('tpLinkHub:{')) {
 
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
-console.log('✅ TornPulse Baldr Link Hub applied — custom target surfaces replaced.');
+console.log('✅ TornPulse Baldr Link Hub applied — old dashboard radar/player list removed.');
