@@ -2980,3 +2980,121 @@ if (!app.includes('<TPHudGlyph kind={label}')) {
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log(`✅ Main screen now uses the exact floating-HUD icon artwork (${exactHudIconSwaps} icon nodes replaced).`);
+
+
+// ---------------------------------------------------------------------------
+// MAIN SCREEN — MATCH THE FLOATING HUD ICON LOOK EXACTLY.
+// Fixes the live dashboard so it stops falling back to the scanner glyph,
+// removes the tiny duplicate inline mini-icons beside HEALTH / ENERGY / NERVE
+// / TORN TIME, and keeps the left icon box centered like the floating HUD.
+// ---------------------------------------------------------------------------
+
+app = extractEmbedded('APP_JS').value;
+
+const TP_HUD_GLYPH_FIX = `function TPHudGlyph({kind,label,size=22}) {
+  const raw = String(kind ?? label ?? '').toUpperCase();
+  const normalized = raw
+    .replace(/[^A-Z ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const key =
+    normalized.includes('HEALTH') ? 'HEALTH' :
+    normalized.includes('ENERGY') ? 'ENERGY' :
+    normalized.includes('NERVE') ? 'NERVE' :
+    (normalized.includes('TORN') || normalized.includes('TIME')) ? 'TORN TIME' :
+    normalized.includes('DRUG') ? 'DRUG' :
+    normalized.includes('BOOST') ? 'BOOSTER' :
+    normalized.includes('MEDIC') ? 'MEDICAL' :
+    normalized.includes('SCAN') ? 'SCANNER' :
+    'SCANNER';
+  const source = TP_HUD_ICON_IMAGES[key] || TP_HUD_ICON_IMAGES.SCANNER;
+  return <Image source={source} style={{width:size,height:size,resizeMode:'contain'}} />;
+}`;
+
+let tpHudGlyphFixHits = 0;
+app = app.replace(
+  /function TPHudGlyph\(\{kind,size=22\}\)\s*\{[\s\S]*?return <Image source=\{source\} style=\{\{width:size,height:size,resizeMode:'contain'\}\} \/>;\s*\}/,
+  () => { tpHudGlyphFixHits++; return TP_HUD_GLYPH_FIX; }
+);
+app = app.replace(
+  /function TPHudGlyph\(\{kind,label,size=22\}\)\s*\{[\s\S]*?return <Image source=\{source\} style=\{\{width:size,height:size,resizeMode:'contain'\}\} \/>;\s*\}/,
+  () => { tpHudGlyphFixHits++; return TP_HUD_GLYPH_FIX; }
+);
+if (!tpHudGlyphFixHits) throw new Error('TornPulse HUD-match fix: TPHudGlyph helper not found');
+console.log(`✓ HUD-match fixed TPHudGlyph helper (${tpHudGlyphFixHits})`);
+
+let tpHudGlyphCallFixes = 0;
+app = app.replace(/<TPHudGlyph kind=\{label\} size=\{(\d+)\}\/?>/g, (_m, size) => {
+  tpHudGlyphCallFixes++;
+  return `<TPHudGlyph kind={label} label={label} size={${size}}/>`;
+});
+console.log(`✓ HUD-match updated TPHudGlyph calls (${tpHudGlyphCallFixes})`);
+
+function replaceSoft(pattern, replacement, label) {
+  let hits = 0;
+  app = app.replace(pattern, (...args) => {
+    hits++;
+    return typeof replacement === 'function' ? replacement(...args) : replacement;
+  });
+  console.log(`${hits ? '✓' : '-'} HUD-match ${label}${hits ? ` (${hits})` : ' skipped'}`);
+}
+
+// Remove the tiny inline icon sitting before the vital labels on the dashboard.
+replaceSoft(
+  /(<Text\b[^>]*tpRefMetricLabel[^>]*>\s*)\{icon\}\s*\{' '\}\s*\{label\}(\s*<\/Text>)/g,
+  '$1{label}$2',
+  'remove tpRefMetricLabel inline icon+space'
+);
+replaceSoft(
+  /(<Text\b[^>]*tpRefMetricLabel[^>]*>\s*)\{icon\}\s*\{label\}(\s*<\/Text>)/g,
+  '$1{label}$2',
+  'remove tpRefMetricLabel inline icon'
+);
+replaceSoft(
+  /(<Text\b[^>]*metricLabel[^>]*>\s*)\{icon\}\s*\{' '\}\s*\{label\}(\s*<\/Text>)/g,
+  '$1{label}$2',
+  'remove metricLabel inline icon+space'
+);
+replaceSoft(
+  /(<Text\b[^>]*metricLabel[^>]*>\s*)\{icon\}\s*\{label\}(\s*<\/Text>)/g,
+  '$1{label}$2',
+  'remove metricLabel inline icon'
+);
+replaceSoft(
+  /(<Text\b[^>]*tpRefMetricLabel[^>]*>\s*)[^<{\n]+\s*\{label\}(\s*<\/Text>)/g,
+  '$1{label}$2',
+  'remove hardcoded tpRefMetricLabel prefix text'
+);
+
+// Normalize live vital labels in case they still carry emoji text in props.
+for (const [needle, plain] of [
+  ['HEALTH', 'HEALTH'],
+  ['ENERGY', 'ENERGY'],
+  ['NERVE', 'NERVE'],
+  ['TORN(?:\\s+TIME)?', 'TORN TIME'],
+]) {
+  const re = new RegExp(`(<TP(?:Ref)?Metric\\b[^>]*\\blabel=")[^"]*${needle}(")`, 'g');
+  let hits = 0;
+  app = app.replace(re, (_m, a, b) => {
+    hits++;
+    return `${a}${plain}${b}`;
+  });
+  console.log(`${hits ? '✓' : '-'} HUD-match normalize ${plain} label${hits ? ` (${hits})` : ' skipped'}`);
+}
+
+// Slight style tune so the icon block feels centered like the overlay HUD.
+app = updateStyleObject(app, 'tpRefMetricHead', block => {
+  block = setStyleProp(block, 'alignItems', "'center'");
+  block = setStyleProp(block, 'minHeight', '24');
+  return block;
+}, 'HUD-match vital header alignment');
+
+app = updateStyleObject(app, 'tpRefMetricIcon', block => {
+  block = setStyleProp(block, 'marginRight', '0');
+  block = setStyleProp(block, 'alignSelf', "'center'");
+  return block;
+}, 'HUD-match vital icon centering');
+
+setEmbedded('APP_JS', app);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ Main screen now matches the floating HUD icon look more closely.');
