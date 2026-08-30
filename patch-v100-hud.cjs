@@ -3215,3 +3215,563 @@ if (!finalLowerHudHits) {
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log(`✅ Clean HUD utility glyph assets + floating-HUD accents + vital-label spacing applied (${finalLowerHudHits} renderer swaps needed).`);
+
+
+// ===========================================================================
+// TARGET RADAR — LIVE STATUS / ATTACKABILITY OVERHAUL
+// Audited against Torn API v2 current user/profile + status schemas.
+// Goals:
+// - stop losing live target status when switching Dashboard <-> Targets
+// - prioritize UNKNOWN/stale rows instead of wasting the scanner on fresh rows
+// - use Torn's cache-bypass timestamp and current profile status + last_action
+// - understand every current UserStatus state, including Abroad/Awoken/Dormant
+// - update rows progressively during scans
+// - keep stale known-good intel visible if a refresh temporarily fails
+// - let UNKNOWN/stale rows be manually VERIFIED
+// - NEVER open an attack until a fresh live verification says status=Okay
+// ===========================================================================
+
+app = extractEmbedded('APP_JS').value;
+
+function tpTargetReplaceFunction(text, functionName, replacement) {
+  const signatures = [`function ${functionName}(`, `async function ${functionName}(`];
+  let start = -1;
+  for (const sig of signatures) {
+    const hit = text.indexOf(sig);
+    if (hit >= 0 && (start < 0 || hit < start)) start = hit;
+  }
+  if (start < 0) throw new Error(`TornPulse live targets: function ${functionName} not found`);
+  const open = text.indexOf('{', start);
+  if (open < 0) throw new Error(`TornPulse live targets: ${functionName} opening brace not found`);
+  let depth = 1;
+  let quote = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+  let end = -1;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (lineComment) { if (ch === '\n') lineComment = false; continue; }
+    if (blockComment) { if (ch === '*' && next === '/') { blockComment = false; i++; } continue; }
+    if (quote) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '/' && next === '/') { lineComment = true; i++; continue; }
+    if (ch === '/' && next === '*') { blockComment = true; i++; continue; }
+    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) { end = i + 1; break; }
+    }
+  }
+  if (end < 0) throw new Error(`TornPulse live targets: ${functionName} closing brace not found`);
+  console.log(`✓ LIVE TARGETS replaced ${functionName}`);
+  return text.slice(0,start) + replacement + text.slice(end);
+}
+
+function tpTargetReplaceExact(text, oldText, newText, label) {
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) throw new Error(`TornPulse live targets: expected 1 match for ${label}, found ${count}`);
+  console.log(`✓ LIVE TARGETS ${label}`);
+  return text.replace(oldText,newText);
+}
+
+// Shared, in-memory target intel survives when the compact Dashboard radar is
+// replaced by the full Targets page. Nothing is persisted across app restarts,
+// so an old status can never silently survive a new TornPulse session.
+if (!app.includes('const TARGET_STATUS_CACHE = new Map();')) {
+  const anchor = 'const TARGET_ERROR_RETRY_MS = 30000;';
+  if (!app.includes(anchor)) throw new Error('TornPulse live targets: scanner constants anchor not found');
+  app = app.replace(anchor, anchor + `
+const TARGET_READY_TTL_MS = 35000;
+const TARGET_TRANSIENT_TTL_MS = 120000;
+const TARGET_STABLE_TTL_MS = 300000;
+const TARGET_NEAR_EXPIRY_SECONDS = 8;
+const TARGET_STATUS_CACHE = new Map();
+const TARGET_API_CALL_REF = {current:[]};`);
+  console.log('✓ LIVE TARGETS shared cache + adaptive freshness constants');
+}
+
+app = tpTargetReplaceFunction(app, 'normalizeTargetState', `function normalizeTargetState(status) {
+  const stateRaw = String((status && status.state) || '').trim();
+  const descriptionRaw = String((status && status.description) || '').trim();
+  const raw = String(stateRaw || descriptionRaw || 'unknown').toLowerCase();
+  if (raw === 'okay' || raw.includes(' okay')) return 'okay';
+  if (raw.includes('hospital')) return 'hospital';
+  if (raw.includes('jail') && !raw.includes('federal')) return 'jail';
+  if (raw.includes('travel')) return 'travel';
+  if (raw.includes('abroad')) return 'abroad';
+  if (raw.includes('fallen') || raw === 'rip') return 'fallen';
+  if (raw.includes('federal')) return 'federal';
+  if (raw.includes('dormant')) return 'dormant';
+  if (raw.includes('awoken')) return 'awoken';
+  if (!raw || raw === 'unknown') return 'unknown';
+  return 'other';
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetStatusGlyph', `function targetStatusGlyph(status) {
+  if (status === 'okay') return '✓';
+  if (status === 'hospital') return 'H';
+  if (status === 'jail') return 'J';
+  if (status === 'travel') return 'T';
+  if (status === 'abroad') return 'A';
+  if (status === 'fallen') return 'F';
+  if (status === 'federal') return 'X';
+  if (status === 'dormant') return 'D';
+  if (status === 'awoken') return 'W';
+  if (status === 'checking') return '…';
+  if (status === 'error') return '!';
+  return '?';
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetStatusColor', `function targetStatusColor(status) {
+  if (status === 'okay') return C.green;
+  if (status === 'hospital') return C.red;
+  if (status === 'jail') return C.amber;
+  if (status === 'travel' || status === 'abroad') return '#72A7F7';
+  if (status === 'awoken') return '#D7A64B';
+  if (status === 'error') return '#F05B61';
+  if (status === 'checking') return '#72C7FF';
+  return C.muted;
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetUnavailable', `function targetUnavailable(status) {
+  return ['hospital','jail','travel','abroad','fallen','federal','dormant','awoken','other'].includes(String(status || ''));
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetStatusConfirmed', `function targetStatusConfirmed(status) {
+  return ['okay','hospital','jail','travel','abroad','fallen','federal','dormant','awoken','other'].includes(String(status || ''));
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetNeedsLiveCheck', `function targetNeedsLiveCheck(target, nowMs=Date.now()) {
+  if (!target) return true;
+  if (target.checking) return false;
+  const now = Number(nowMs || Date.now());
+  const retryAfter = Number(target.retryAfter || 0);
+  if (retryAfter > now) return false;
+  const status = String(target.status || 'unknown');
+  const age = targetStatusAgeMs(target,now);
+  if (status === 'unknown') return true;
+  if (status === 'error') return age >= TARGET_ERROR_RETRY_MS;
+  if (!targetStatusConfirmed(status)) return true;
+
+  const until = Number(target.until || 0);
+  const nowSec = Math.floor(now/1000);
+  if (['hospital','jail','travel'].includes(status)) {
+    if (until > nowSec + TARGET_NEAR_EXPIRY_SECONDS) return false;
+    if (until > 0 && until <= nowSec + TARGET_NEAR_EXPIRY_SECONDS) return true;
+    return age >= TARGET_TRANSIENT_TTL_MS;
+  }
+  if (status === 'abroad') {
+    if (until > nowSec + TARGET_NEAR_EXPIRY_SECONDS) return false;
+    if (until > 0 && until <= nowSec + TARGET_NEAR_EXPIRY_SECONDS) return true;
+    return age >= TARGET_TRANSIENT_TTL_MS;
+  }
+  if (status === 'okay') return age >= TARGET_READY_TTL_MS;
+  if (['fallen','federal','dormant','awoken','other'].includes(status)) return age >= TARGET_STABLE_TTL_MS;
+  return age >= TARGET_STATUS_TTL_MS;
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetStatusText', `function targetStatusText(target, clock) {
+  if (!target) return 'CHECK';
+  if (target.checking) return 'CHECK';
+  const status = String(target.status || 'unknown');
+  if (status === 'hospital' && Number(target.until) > 0) {
+    const left = Math.max(0, Number(target.until) - Math.floor(Number(clock || Date.now())/1000));
+    if (left <= 0) return 'VERIFY';
+    const m = Math.floor(left/60);
+    const s = left % 60;
+    return (m > 99 ? '99+' : String(m)) + ':' + String(s).padStart(2,'0');
+  }
+  if (status === 'okay') {
+    const activity = String(target.lastActionStatus || '').toLowerCase();
+    return activity === 'online' ? 'LIVE' : 'READY';
+  }
+  if (status === 'travel') return 'TRAVEL';
+  if (status === 'abroad') return 'ABROAD';
+  if (status === 'jail') return 'JAIL';
+  if (status === 'fallen') return 'FALLEN';
+  if (status === 'federal') return 'FED';
+  if (status === 'dormant') return 'DORMANT';
+  if (status === 'awoken') return 'AWOKEN';
+  if (status === 'other') return 'OTHER';
+  if (status === 'error') return 'RETRY';
+  return 'CHECK';
+}`);
+
+if (!app.includes('function targetLastActionText(')) {
+  const marker = 'function targetStatusText(target, clock) {';
+  const at = app.indexOf(marker);
+  if (at < 0) throw new Error('TornPulse live targets: targetStatusText insertion marker not found');
+  const helper = `function targetLastActionText(target) {
+  const state = String((target && target.lastActionStatus) || '').toUpperCase();
+  const relative = String((target && target.lastActionRelative) || '').trim();
+  if (!state) return 'ACTIVITY NOT LOADED';
+  return 'ACTIVITY ' + state + (relative ? (' • ' + relative) : '');
+}
+
+`;
+  app = app.slice(0,at) + helper + app.slice(at);
+  console.log('✓ LIVE TARGETS last-action helper');
+}
+
+// /user/{id}/profile is a current stable Public endpoint. It supplies both
+// profile.status and last_action. timestamp bypasses Torn's response cache.
+app = tpTargetReplaceFunction(app, 'fetchPublicTargetStatus', `async function fetchPublicTargetStatus(targetId, key) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const nowSec = Math.floor(Date.now()/1000);
+    const url = 'https://api.torn.com/v2/user/' + encodeURIComponent(targetId) + '/profile?striptags=true&timestamp=' + nowSec + '&comment=TornPulse-Targets';
+    const response = await fetch(url, {
+      headers:{Authorization:'ApiKey ' + key, Accept:'application/json'},
+      signal:controller.signal,
+    });
+    const json = await response.json().catch(()=>null);
+    if (!response.ok || (json && json.error)) {
+      const err = json && json.error;
+      const message = typeof err === 'string' ? err : (err && (err.error || err.message || err.code));
+      throw new Error(message || ('Torn API error ' + response.status));
+    }
+    const profile = json && json.profile;
+    if (!profile || typeof profile !== 'object') throw new Error('Torn returned no profile for this target');
+    const rawStatus = profile.status;
+    if (!rawStatus || !String(rawStatus.state || '').trim()) throw new Error('Torn returned no live status for this target');
+    const normalizedStatus = normalizeTargetState(rawStatus);
+    if (normalizedStatus === 'unknown') throw new Error('Torn returned an unknown live status for this target');
+    const lastAction = profile.last_action || {};
+    return {
+      name:String(profile.name || ''),
+      level:targetNumber(profile.level),
+      status:normalizedStatus,
+      statusRaw:String(rawStatus.state || ''),
+      until:targetNumber(rawStatus.until),
+      statusDescription:String(rawStatus.description || rawStatus.state || ''),
+      statusDetails:String(rawStatus.details || ''),
+      lastActionStatus:String(lastAction.status || '').toLowerCase(),
+      lastActionAt:targetNumber(lastAction.timestamp),
+      lastActionRelative:String(lastAction.relative || ''),
+      checkedAt:Date.now(),
+      retryAfter:0,
+      refreshError:'',
+      checking:false,
+    };
+  } catch (error) {
+    if (error && error.name === 'AbortError') throw new Error('Target status timed out');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetGroupInfo', `function targetGroupInfo(status) {
+  const key = String(status || 'unknown');
+  if (key === 'okay') return {key:'ready',label:'READY • ATTACKABLE',color:C.green};
+  if (key === 'hospital') return {key:'hospital',label:'HOSPITAL • UNAVAILABLE',color:C.red};
+  if (key === 'jail') return {key:'jail',label:'JAIL • UNAVAILABLE',color:C.amber};
+  if (key === 'error') return {key:'unchecked',label:'STATUS CHECK FAILED • TAP VERIFY',color:'#F05B61'};
+  if (key === 'unknown' || key === 'checking') return {key:'unchecked',label:'LIVE STATUS PENDING • TAP VERIFY',color:'#72C7FF'};
+  if (key === 'travel' || key === 'abroad') return {key:'away',label:'TRAVEL / ABROAD • UNAVAILABLE',color:'#72A7F7'};
+  if (['fallen','federal','dormant','awoken','other'].includes(key)) return {key:'away',label:'SPECIAL STATUS • UNAVAILABLE',color:C.muted};
+  return {key:'unchecked',label:'LIVE STATUS PENDING • TAP VERIFY',color:'#72C7FF'};
+}`);
+
+app = tpTargetReplaceFunction(app, 'targetStatusFilterMatch', `function targetStatusFilterMatch(target, filter, nowMs=Date.now()) {
+  if (filter === 'ALL') return true;
+  const status = targetEffectiveStatus(target,nowMs);
+  if (filter === 'READY') return status === 'okay';
+  if (filter === 'HOSP') return status === 'hospital';
+  if (filter === 'JAIL') return status === 'jail';
+  if (filter === 'AWAY') return ['travel','abroad','fallen','federal','dormant','awoken','other'].includes(status);
+  if (filter === 'UNCHECKED') return status === 'unknown' || status === 'error' || targetNeedsLiveCheck(target,nowMs);
+  return true;
+}`);
+
+// Replace the whole row rather than stacking more fragile one-line edits.
+// Unknown/stale targets get a VERIFY action. Every action does a new live API
+// check first; only status=Okay is allowed to open Torn's manual attack URL.
+app = tpTargetReplaceFunction(app, 'TargetRow', `function TargetRow({target, demo, clock, rank, onVerifyTarget}) {
+  const [expanded,setExpanded] = useState(false);
+  const [actionBusy,setActionBusy] = useState(false);
+  const sources = Array.isArray(target.sources) ? target.sources : (target.staticAfk ? ['AFK'] : ['BALDR']);
+  const hasBaldr = sources.includes('BALDR');
+  const hasAfk = sources.includes('AFK');
+  const sourceLabel = hasBaldr && hasAfk ? 'MERGED' : hasAfk ? 'CLASSIC' : 'LIVE';
+  const effectiveStatus = targetEffectiveStatus(target,clock);
+  const needsCheck = !demo && targetNeedsLiveCheck(target,clock);
+  const hardUnavailable = targetUnavailable(effectiveStatus) && !needsCheck;
+  const canAction = demo || (!target.checking && !actionBusy && !hardUnavailable);
+  const actionReady = effectiveStatus === 'okay';
+  const actionLabel = (target.checking || actionBusy) ? 'CHECK' : actionReady ? 'ATTACK' : canAction ? 'VERIFY' : 'WAIT';
+
+  const attack = async () => {
+    if (demo) return Alert.alert('Target Assistant demo','ATTACK opens this player in the official Torn app when installed, with TornPulse’s browser as the fallback.');
+    if (target.checking || actionBusy) return;
+    if (!onVerifyTarget) return Alert.alert('Live verification unavailable','Open the full Target Radar and try again.');
+    setActionBusy(true);
+    let liveCheck = null;
+    try {
+      liveCheck = await onVerifyTarget(target);
+    } catch (e) {
+      setActionBusy(false);
+      return Alert.alert('Could not verify target',e && e.message ? e.message : 'TornPulse could not confirm this player right now.');
+    }
+    setActionBusy(false);
+    if (!liveCheck || liveCheck.status !== 'okay') {
+      const liveLabel = liveCheck ? targetStatusText(liveCheck,Date.now()) : 'NOT READY';
+      const reason = liveCheck && liveCheck.statusDescription ? liveCheck.statusDescription : liveLabel;
+      return Alert.alert('Target unavailable',target.name + ' is currently ' + reason + '. TornPulse did not open the attack page.');
+    }
+    const attackUrl = 'https://www.torn.com/page.php?sid=attack&user2ID=' + encodeURIComponent(target.id);
+    const profileUrl = 'https://www.torn.com/profiles.php?XID=' + encodeURIComponent(target.id);
+    const openPreferred = async (url) => {
+      if (Platform.OS === 'android' && ComfortableOverlay?.openTornApp) {
+        try { await ComfortableOverlay.openTornApp(url); return; } catch (_) {}
+      }
+      if (Platform.OS === 'android' && ComfortableOverlay?.openAttackBrowser) { await ComfortableOverlay.openAttackBrowser(url); return; }
+      if (Platform.OS === 'android' && ComfortableOverlay?.openExternalUrl) { await ComfortableOverlay.openExternalUrl(url); return; }
+      await Linking.openURL(url);
+    };
+    try {
+      await openPreferred(attackUrl);
+    } catch (_) {
+      try {
+        await openPreferred(profileUrl);
+        Alert.alert('Attack page could not open','TornPulse opened the player profile instead. Tap Attack from there if needed.');
+      } catch (_) {
+        Alert.alert('Torn link unavailable','TornPulse could not open the official Torn app or a browser for this target.');
+      }
+    }
+  };
+
+  const displayTarget = targetDisplayTarget(target,clock);
+  const statusText = targetStatusText(displayTarget,clock);
+  const totalLabel = hasBaldr ? compactStat(target.total) : String(target.statCap || '<2K');
+  const statLabel = (value) => hasBaldr ? compactStat(value) : '—';
+  const railColor = targetStatusColor(effectiveStatus);
+  const unavailable = hardUnavailable;
+  return <View style={[styles.targetRow,!hasBaldr&&styles.targetRowNoStats,unavailable&&styles.targetRowUnavailable]}>
+    <View style={[styles.targetRail,{backgroundColor:railColor}]}/>
+    <Pressable onPress={() => setExpanded(v=>!v)} style={styles.targetBody}>
+      <View style={styles.targetLine1}>
+        <Text style={styles.targetRank}>{String(rank||1).padStart(2,'0')}</Text>
+        <Text numberOfLines={1} style={styles.targetName}>{target.name}</Text>
+        <Text style={styles.targetLv}>L{target.level || '?'}</Text>
+        <Text style={styles.targetTotal}>TOTAL {totalLabel}</Text>
+        <Text style={[styles.targetState,{color:railColor}]}>{statusText}</Text>
+      </View>
+      {hasBaldr ? <View style={styles.targetLine2}>
+        <Text style={styles.targetStat}>STR {statLabel(target.strength)}</Text>
+        <Text style={styles.targetStat}>DEF {statLabel(target.defense)}</Text>
+        <Text style={styles.targetStat}>SPD {statLabel(target.speed)}</Text>
+        <Text style={styles.targetStat}>DEX {statLabel(target.dexterity)}</Text>
+      </View> : null}
+      {expanded ? <View style={styles.targetExpanded}><Text style={styles.targetExpandedText}>ID {target.id}  •  {sourceLabel} INTEL  •  {targetCheckedLabel(target,clock)}  •  {targetLastActionText(target)}  •  {target.statusDescription || statusText}{target.refreshError ? ('  •  LAST REFRESH ERROR: ' + target.refreshError) : ''}</Text></View> : null}
+    </Pressable>
+    <Pressable onPress={attack} disabled={!canAction} style={[styles.targetAttack,canAction&&actionReady&&styles.targetAttackReady,canAction&&!actionReady&&{borderColor:'#668BB6',backgroundColor:'#182330'},!canAction&&styles.targetAttackOff]} accessibilityLabel={actionLabel + ' ' + target.name} accessibilityState={{disabled:!canAction}}>
+      <Text style={[styles.targetAttackText,canAction&&!actionReady&&{color:'#9CCBFF'},!canAction&&styles.targetAttackTextOff]}>{actionLabel}</Text>
+    </Pressable>
+  </View>;
+}`);
+
+// Seed the full page from the compact radar's live results and use one shared
+// call ledger so page changes cannot accidentally exceed our protected budget.
+app = tpTargetReplaceExact(
+  app,
+  '  const [statusById,setStatusById] = useState({});',
+  `  const [statusById,setStatusById] = useState(() => {
+    const seeded = {};
+    TARGET_STATUS_CACHE.forEach((value,id) => { seeded[id] = value; });
+    return seeded;
+  });`,
+  'shared target status state'
+);
+app = tpTargetReplaceExact(app,'  const scanLogRef = useRef([]);','  const scanLogRef = TARGET_API_CALL_REF;','shared API call ledger');
+
+// Full-page scanner: UNKNOWN/stale first, progressive four-at-a-time updates,
+// and failed refreshes no longer erase a previously valid status.
+app = tpTargetReplaceFunction(app, 'scanPage', `async function scanPage(auto=false) {
+    if (demo) return Alert.alert('Target Assistant demo','Refresh checks Torn status for the visible unified target page.');
+    if (scanning || !rawPageTargets.length) return;
+    const key = await getApiKey();
+    if (!key) return Alert.alert('Connect Torn first','Your TornPulse API key is required to check live target status.');
+    const current = Date.now();
+    const recent = scanLogRef.current.filter(ts => current-ts < TARGET_API_WINDOW_MS);
+    scanLogRef.current = recent;
+    const budget = Math.max(0,TARGET_API_BUDGET-recent.length);
+    const protectedCalls = auto ? TARGET_ATTACK_RESERVE : 1;
+    const scanBudget = Math.max(0,budget-protectedCalls);
+    if (scanBudget <= 0) {
+      const oldest = recent[0] || current;
+      const wait = Math.max(1,Math.ceil((TARGET_API_WINDOW_MS-(current-oldest))/1000));
+      setMessage(auto ? ('Attack reserve protected • scanner resumes in about ' + wait + 's') : ('Refresh cooling down • one attack check kept free • about ' + wait + 's'));
+      return;
+    }
+
+    const visiblePool = compact ? rawPageTargets.slice(0,2) : rawPageTargets;
+    const pendingPool = visiblePool.filter(t => targetNeedsLiveCheck(t,current));
+    const scanPool = auto ? pendingPool : (pendingPool.length ? pendingPool : visiblePool);
+    const candidates = scanPool.slice(0,scanBudget);
+    if (!candidates.length) {
+      if (!auto) setMessage('Visible target status is already fresh');
+      return;
+    }
+
+    setScanning(true);
+    setScanProgress({done:0,total:candidates.length});
+    setMessage('Live-checking ' + candidates.length + ' targets…');
+    setStatusById(prev => {
+      const next = {...prev};
+      candidates.forEach(t => {
+        const existing = TARGET_STATUS_CACHE.get(Number(t.id)) || next[t.id] || t;
+        const pending = {...existing,checking:true};
+        next[t.id] = pending;
+        TARGET_STATUS_CACHE.set(Number(t.id),pending);
+      });
+      return next;
+    });
+
+    let failures = 0;
+    try {
+      for (let i=0;i<candidates.length;i+=4) {
+        const group = candidates.slice(i,i+4);
+        group.forEach(() => scanLogRef.current.push(Date.now()));
+        const results = await Promise.all(group.map(async target => {
+          try {
+            return {id:target.id, ...(await fetchPublicTargetStatus(target.id,key))};
+          } catch (e) {
+            failures++;
+            const message = e && e.message ? e.message : 'Status error';
+            const previous = TARGET_STATUS_CACHE.get(Number(target.id)) || statusById[target.id] || target;
+            if (targetStatusConfirmed(previous.status)) {
+              return {...previous,id:target.id,checking:false,refreshError:message,retryAfter:Date.now()+TARGET_ERROR_RETRY_MS,lastAttemptAt:Date.now()};
+            }
+            return {id:target.id,name:target.name,level:target.level,status:'error',until:0,statusDescription:message,checkedAt:Date.now(),checking:false,refreshError:message,retryAfter:Date.now()+TARGET_ERROR_RETRY_MS,lastAttemptAt:Date.now()};
+          }
+        }));
+
+        results.forEach(result => TARGET_STATUS_CACHE.set(Number(result.id),result));
+        setStatusById(prev => {
+          const next = {...prev};
+          results.forEach(result => { next[result.id] = result; });
+          return next;
+        });
+        setScanProgress({done:Math.min(candidates.length,i+group.length),total:candidates.length});
+        setLastScanAt(Date.now());
+        if (i+4<candidates.length) await new Promise(resolve => setTimeout(resolve,600));
+      }
+      if (candidates.length < scanPool.length) setMessage('Checked ' + candidates.length + '/' + scanPool.length + ' • attack headroom protected');
+      else setMessage(failures ? ('Live sync finished • ' + failures + ' temporary check errors') : 'Live target status synced');
+    } finally {
+      setScanning(false);
+      setScanProgress({done:0,total:0});
+    }
+  }`);
+
+app = tpTargetReplaceFunction(app, 'applyTargetStatus', `function applyTargetStatus(id,result) {
+    const normalized = {...result,checkedAt:Number(result && result.checkedAt || 0),checking:false};
+    TARGET_STATUS_CACHE.set(Number(id),normalized);
+    setStatusById(prev => ({...prev,[id]:normalized}));
+    setLastScanAt(Date.now());
+  }`);
+
+// Final click-time gate. This is intentionally independent of displayed cache
+// freshness: even a READY row is verified again before Torn is opened.
+app = tpTargetReplaceFunction(app, 'verifyTargetReady', `async function verifyTargetReady(target) {
+    const key = await getApiKey();
+    if (!key) throw new Error('Connect Torn first so TornPulse can verify this target.');
+    const current = Date.now();
+    const recent = scanLogRef.current.filter(ts => current-ts < TARGET_API_WINDOW_MS);
+    scanLogRef.current = recent;
+    if (recent.length >= TARGET_API_BUDGET) {
+      const wait = Math.max(1,Math.ceil((TARGET_API_WINDOW_MS-(current-recent[0]))/1000));
+      throw new Error('Scanner is preserving Torn API headroom. Try again in about ' + wait + ' seconds.');
+    }
+    scanLogRef.current.push(current);
+    const previous = TARGET_STATUS_CACHE.get(Number(target.id)) || statusById[target.id] || target;
+    const checkingState = {...previous,checking:true};
+    TARGET_STATUS_CACHE.set(Number(target.id),checkingState);
+    setStatusById(prev => ({...prev,[target.id]:checkingState}));
+    try {
+      const result = await fetchPublicTargetStatus(target.id,key);
+      applyTargetStatus(target.id,result);
+      return result;
+    } catch (e) {
+      const message = e && e.message ? e.message : 'Status error';
+      const fallback = targetStatusConfirmed(previous.status)
+        ? {...previous,checking:false,refreshError:message,retryAfter:Date.now()+TARGET_ERROR_RETRY_MS,lastAttemptAt:Date.now()}
+        : {id:target.id,name:target.name,level:target.level,status:'error',until:0,statusDescription:message,checkedAt:Date.now(),checking:false,refreshError:message,retryAfter:Date.now()+TARGET_ERROR_RETRY_MS,lastAttemptAt:Date.now()};
+      TARGET_STATUS_CACHE.set(Number(target.id),fallback);
+      setStatusById(prev => ({...prev,[target.id]:fallback}));
+      throw e;
+    }
+  }`);
+
+// Auto scanner must use RAW API state (not the display-only hospital-expiry
+// projection) when deciding what needs a network refresh.
+app = app.replace(
+  /const autoPendingIds = (?:pageTargets|rawPageTargets)\.filter\(t => targetNeedsLiveCheck\(t,nowMs\)\)\.map\(t=>String\(t\.id\)\+'\:'+String\(Number\(t\.checkedAt\|\|0\)\)\)\.join\(','\);/,
+  "const autoPendingIds = rawPageTargets.filter(t => targetNeedsLiveCheck(t,nowMs)).map(t=>String(t.id)+':'+String(Number(t.checkedAt||0))).join(',');"
+);
+
+// Current status counters should reflect the effective second-by-second state.
+app = app.replace("const readyOnPage = pageTargets.filter(t => t.status === 'okay' && targetStatusFresh(t,nowMs)).length;","const readyOnPage = pageTargets.filter(t => targetEffectiveStatus(t,nowMs) === 'okay').length;");
+app = app.replace("const hospitalOnPage = pageTargets.filter(t => t.status === 'hospital').length;","const hospitalOnPage = pageTargets.filter(t => targetEffectiveStatus(t,nowMs) === 'hospital').length;");
+app = app.replace("const jailOnPage = pageTargets.filter(t => t.status === 'jail').length;","const jailOnPage = pageTargets.filter(t => targetEffectiveStatus(t,nowMs) === 'jail').length;");
+app = app.replace("const awayOnPage = pageTargets.filter(t => ['travel','fallen','federal'].includes(String(t.status||''))).length;","const awayOnPage = pageTargets.filter(t => ['travel','abroad','fallen','federal','dormant','awoken','other'].includes(targetEffectiveStatus(t,nowMs))).length;");
+app = app.replace("READY:levelFiltered.filter(t=>t.status==='okay' && targetStatusFresh(t,nowMs)).length,","READY:levelFiltered.filter(t=>targetEffectiveStatus(t,nowMs)==='okay').length,");
+app = app.replace("HOSP:levelFiltered.filter(t=>t.status==='hospital').length,","HOSP:levelFiltered.filter(t=>targetEffectiveStatus(t,nowMs)==='hospital').length,");
+app = app.replace("JAIL:levelFiltered.filter(t=>t.status==='jail').length,","JAIL:levelFiltered.filter(t=>targetEffectiveStatus(t,nowMs)==='jail').length,");
+app = app.replace("AWAY:levelFiltered.filter(t=>['travel','fallen','federal'].includes(String(t.status||''))).length,","AWAY:levelFiltered.filter(t=>['travel','abroad','fallen','federal','dormant','awoken','other'].includes(targetEffectiveStatus(t,nowMs))).length,");
+
+// READY + currently-online targets rise to the top within a level.
+app = app.replace(
+  "  const sourceRank = (target) => Array.isArray(target.sources) && target.sources.includes('BALDR') ? 0 : 1;\n  const orderedTargets = [...statusFiltered].sort((a,b) => Number(a.level)-Number(b.level) || availabilityRank(a)-availabilityRank(b) || sourceRank(a)-sourceRank(b)",
+  "  const sourceRank = (target) => Array.isArray(target.sources) && target.sources.includes('BALDR') ? 0 : 1;\n  const activityRank = (target) => { const state=String(target.lastActionStatus||'').toLowerCase(); return state==='online'?0:state==='idle'?1:state==='offline'?2:3; };\n  const orderedTargets = [...statusFiltered].sort((a,b) => Number(a.level)-Number(b.level) || availabilityRank(a)-availabilityRank(b) || activityRank(a)-activityRank(b) || sourceRank(a)-sourceRank(b)"
+);
+app = app.replace('const info = targetGroupInfo(target.status);','const info = targetGroupInfo(targetEffectiveStatus(target,nowMs));');
+
+// The compact Dashboard radar previously rendered rows without the verifier.
+// Wire it to the same mandatory click-time live gate as the full page.
+let compactVerifierHits = 0;
+app = app.replace(/<TargetRow\b([^>]*\btarget=\{t\}[^>]*\bclock=\{clock\})([^>]*)\/>/g, (whole,a,b) => {
+  if (whole.includes('onVerifyTarget=')) return whole;
+  compactVerifierHits++;
+  return '<TargetRow' + a + b + ' onVerifyTarget={verifyTargetReady}/>';
+});
+console.log(`${compactVerifierHits ? '✓' : '-'} LIVE TARGETS compact verifier wiring${compactVerifierHits ? ' ('+compactVerifierHits+')' : ' already present/skipped'}`);
+
+// Rename the old UNKNOWN filter to the more accurate CHECK queue.
+app = app.replace("['UNCHECKED','UNKNOWN']","['UNCHECKED','CHECK']");
+
+// Hard guards: never ship a half-applied target patch.
+const targetGuards = [
+  ['shared status cache','const TARGET_STATUS_CACHE = new Map();'],
+  ['shared API ledger','const TARGET_API_CALL_REF = {current:[]};'],
+  ['current profile endpoint','/profile?striptags=true&timestamp='],
+  ['cache bypass timestamp','&timestamp='],
+  ['last action data','lastActionStatus'],
+  ['dormant status support',"status === 'dormant'"],
+  ['awoken status support',"status === 'awoken'"],
+  ['abroad status support',"status === 'abroad'"],
+  ['manual verifier','async function verifyTargetReady(target)'],
+  ['manual attack URL','page.php?sid=attack&user2ID='],
+  ['verification before attack',"liveCheck.status !== 'okay'"],
+  ['progressive scanner','results.forEach(result => TARGET_STATUS_CACHE.set'],
+  ['unknown verify action',"canAction ? 'VERIFY' : 'WAIT'"],
+];
+for (const [label,marker] of targetGuards) {
+  if (!app.includes(marker)) throw new Error('TornPulse live targets guard failed: ' + label);
+}
+if (app.includes('autoAttack') || app.includes('AUTO ATTACK')) {
+  throw new Error('TornPulse live targets guard failed: automatic attack behavior detected');
+}
+
+setEmbedded('APP_JS',app);
+fs.writeFileSync(CONFIG_FILE,src,'utf8');
+console.log('✅ TornPulse Target Radar live-status overhaul applied — cache, current profile status, activity, smart scanning, VERIFY queue, and mandatory pre-attack gate.');
