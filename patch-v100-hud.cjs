@@ -3241,8 +3241,32 @@ function tpTargetReplaceFunction(text, functionName, replacement) {
     if (hit >= 0 && (start < 0 || hit < start)) start = hit;
   }
   if (start < 0) throw new Error(`TornPulse live targets: function ${functionName} not found`);
-  const open = text.indexOf('{', start);
-  if (open < 0) throw new Error(`TornPulse live targets: ${functionName} opening brace not found`);
+  // Find the FUNCTION BODY brace, not a destructuring brace inside parameters
+  // such as function TargetRow({target,...}) {.
+  const parenOpen = text.indexOf('(', start);
+  if (parenOpen < 0) throw new Error(`TornPulse live targets: ${functionName} parameter list not found`);
+  let parenDepth = 1;
+  let paramQuote = null;
+  let paramEscaped = false;
+  let parenClose = -1;
+  for (let i = parenOpen + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (paramQuote) {
+      if (paramEscaped) { paramEscaped = false; continue; }
+      if (ch === '\\') { paramEscaped = true; continue; }
+      if (ch === paramQuote) paramQuote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') { paramQuote = ch; continue; }
+    if (ch === '(') parenDepth++;
+    else if (ch === ')') {
+      parenDepth--;
+      if (parenDepth === 0) { parenClose = i; break; }
+    }
+  }
+  if (parenClose < 0) throw new Error(`TornPulse live targets: ${functionName} parameter list did not close`);
+  const open = text.indexOf('{', parenClose);
+  if (open < 0) throw new Error(`TornPulse live targets: ${functionName} body opening brace not found`);
   let depth = 1;
   let quote = null;
   let escaped = false;
