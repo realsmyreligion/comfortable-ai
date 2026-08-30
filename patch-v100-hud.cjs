@@ -2043,3 +2043,263 @@ if (overlay.includes('LAST ATTACK  •  $who  •  ${latest.result}$age')) throw
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse bigger left logo + full static LAST ATTACK applied.');
+// ===========================================================================
+// LOCKED REFERENCE HUD — ICON HEADERS + GLASS CARDS + CLEAN BLACK INTERIOR
+// Matches the approved TornPulse HUD composition while preserving live data.
+// ===========================================================================
+
+overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
+
+// Stronger smoky glass: still translucent, but removes distracting background
+// detail from behind the HUD cards and keeps the approved black-panel look.
+overlay = overlay.replaceAll(
+  'intArrayOf(Color.argb(168, 3, 4, 7), Color.argb(122, 0, 1, 3))',
+  'intArrayOf(Color.argb(198, 3, 4, 7), Color.argb(164, 0, 1, 3))'
+);
+
+// Rebuild the three live resource cards to match the approved layout:
+// icon + label header, large value, subline, bright bottom accent.
+overlay = replaceKotlinFunction(
+  overlay,
+  '    fun makeStatColumn(',
+  `    fun makeStatColumn(label: String, color: Int): Triple<LinearLayout, TextView, TextView> {
+      val column = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(7), dp(8), dp(7), dp(7))
+        minimumHeight = dp(88)
+        elevation = dp(2).toFloat()
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(15).toFloat()
+          setColor(Color.argb(170, 2, 4, 7))
+          setStroke(dp(1), Color.argb(150, Color.red(color), Color.green(color), Color.blue(color)))
+        }
+      }
+
+      val iconText = when (label) {
+        "HEALTH" -> "♡⌁"
+        "ENERGY" -> "ϟ"
+        "NERVE" -> "✺"
+        else -> "•"
+      }
+      val headRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+      }
+      val iconView = makeText(iconText, maxOf(9.2f, statLabelSize + 2.0f), color, true).apply {
+        typeface = Typeface.create("sans-serif", Typeface.BOLD)
+        includeFontPadding = false
+        maxLines = 1
+      }
+      val labelView = makeText(label, maxOf(7.5f, statLabelSize + 0.8f), color, true).apply {
+        letterSpacing = 0.055f
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        includeFontPadding = false
+        maxLines = 1
+      }
+      headRow.addView(iconView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        rightMargin = dp(5)
+      })
+      headRow.addView(labelView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+      val valueView = makeText("-- / --", maxOf(13.5f, barsSize + 0.5f), Color.rgb(247, 248, 250), true).apply {
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        setPadding(0, dp(5), 0, 0)
+        includeFontPadding = false
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      val timerView = makeText("--", maxOf(7.0f, statLabelSize - 0.2f), Color.rgb(184, 190, 199), true).apply {
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        setPadding(0, dp(4), 0, 0)
+        includeFontPadding = false
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      val accent = View(this).apply {
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(3).toFloat()
+          setColor(color)
+        }
+      }
+
+      column.addView(headRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      column.addView(valueView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      column.addView(timerView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      column.addView(accent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(3)).apply {
+        topMargin = dp(7)
+        leftMargin = dp(2)
+        rightMargin = dp(2)
+      })
+      return Triple(column, valueView, timerView)
+    }`,
+  'locked reference vital cards'
+);
+
+// Rebuild Torn Time as the matching fourth top card with its clock icon.
+overlay = finalHudSection(
+  overlay,
+  '    val tornClockRow = LinearLayout(this).apply {',
+  '    val statContainer = LinearLayout(this).apply {',
+  `    val tornClockRow = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER
+      setPadding(dp(7), dp(8), dp(7), dp(7))
+      minimumHeight = dp(88)
+      elevation = dp(2).toFloat()
+      visibility = if (hudCollapsed) View.GONE else View.VISIBLE
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(15).toFloat()
+        setColor(Color.argb(170, 2, 4, 7))
+        setStroke(dp(1), Color.argb(150, 227, 52, 60))
+      }
+    }
+    val timeHead = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER
+    }
+    makeText("◷", maxOf(9.2f, cooldownSize + 1.6f), Color.rgb(240, 242, 245), true).also {
+      it.typeface = Typeface.create("sans-serif", Typeface.BOLD)
+      it.includeFontPadding = false
+      timeHead.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        rightMargin = dp(5)
+      })
+    }
+    makeText("TORN TIME", maxOf(7.5f, cooldownSize - 0.2f), Color.rgb(240, 242, 245), true).also {
+      it.letterSpacing = 0.055f
+      it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      it.includeFontPadding = false
+      it.maxLines = 1
+      timeHead.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornClockRow.addView(timeHead, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+    tornClockTimeText = makeText("TCT --:--:--", maxOf(10.5f, barsSize - 1.0f), Color.rgb(247, 248, 250), true).also {
+      it.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+      it.setPadding(0, dp(5), 0, 0)
+      it.includeFontPadding = false
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornHourCountdownText = makeText("HOUR --:--:--", maxOf(7.0f, cooldownSize - 0.6f), Color.rgb(205, 209, 215), true).also {
+      it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+      it.setPadding(0, dp(4), 0, 0)
+      it.includeFontPadding = false
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    val timeAccent = View(this).apply {
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(3).toFloat()
+        setColor(Color.rgb(227, 52, 60))
+      }
+    }
+    tornClockRow.addView(timeAccent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(3)).apply {
+      topMargin = dp(7)
+      leftMargin = dp(2)
+      rightMargin = dp(2)
+    })
+    tornClockRowView = tornClockRow
+
+`,
+  'locked reference Torn Time card'
+);
+
+// Utility row: line-icon + label, then large green live state.
+overlay = replaceKotlinFunction(
+  overlay,
+  '    fun makeCooldownChip(',
+  `    fun makeCooldownChip(label: String, labelColor: Int): Pair<LinearLayout, TextView> {
+      val chip = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(6), dp(8), dp(6), dp(8))
+        minimumHeight = dp(58)
+        elevation = dp(2).toFloat()
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(15).toFloat()
+          setColor(Color.argb(158, 2, 4, 7))
+          setStroke(dp(1), Color.argb(135, Color.red(labelColor), Color.green(labelColor), Color.blue(labelColor)))
+        }
+      }
+      val iconText = when (label) {
+        "DRUG" -> "▱"
+        "BOOSTER" -> "▥"
+        "MEDICAL" -> "✚"
+        "SCANNER" -> "◎"
+        else -> "•"
+      }
+      val headRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+      }
+      val iconView = makeText(iconText, maxOf(8.8f, cooldownSize + 1.4f), labelColor, true).apply {
+        typeface = Typeface.create("sans-serif", Typeface.BOLD)
+        includeFontPadding = false
+        maxLines = 1
+      }
+      val labelView = makeText(label, maxOf(7.0f, cooldownSize - 0.1f), labelColor, true).apply {
+        letterSpacing = 0.055f
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        includeFontPadding = false
+        maxLines = 1
+      }
+      headRow.addView(iconView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        rightMargin = dp(5)
+      })
+      headRow.addView(labelView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+      val valueView = makeText("--", maxOf(9.5f, cooldownSize + 1.2f), Color.rgb(95, 214, 132), true).apply {
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        setPadding(0, dp(5), 0, 0)
+        includeFontPadding = false
+        maxLines = 1
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+      }
+      chip.addView(headRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      chip.addView(valueView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+      return Pair(chip, valueView)
+    }`,
+  'locked reference utility cards'
+);
+
+// Slightly more breathing room between the two four-card rows.
+overlay = overlay.replace(
+  'root.addView(statContainer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {\n      topMargin = dp(6)\n    })',
+  'root.addView(statContainer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {\n      topMargin = dp(8)\n    })'
+);
+overlay = overlay.replace(
+  'root.addView(cooldownRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {\n      topMargin = dp(5)\n    })',
+  'root.addView(cooldownRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {\n      topMargin = dp(7)\n    })'
+);
+
+// Footer matches the approved centered green status line.
+overlay = overlay.replace(
+  'hudFooterView = makeText("●  FLOATING HUD  •  ON SCREEN", maxOf(6.5f, cooldownSize - 1f), Color.rgb(111, 208, 141), true).also {',
+  'hudFooterView = makeText("●  FLOATING HUD  •  ON SCREEN", maxOf(7.0f, cooldownSize - 0.4f), Color.rgb(95, 214, 132), true).also {'
+);
+
+// Verification: make sure the approved card language is actually present.
+for (const marker of [
+  '"HEALTH" -> "♡⌁"',
+  '"ENERGY" -> "ϟ"',
+  '"NERVE" -> "✺"',
+  'makeText("◷"',
+  '"DRUG" -> "▱"',
+  '"MEDICAL" -> "✚"',
+  'cornerRadius = dp(15).toFloat()',
+  'setColor(Color.argb(170, 2, 4, 7))'
+]) {
+  if (!overlay.includes(marker)) throw new Error(`TornPulse locked HUD verification missing: ${marker}`);
+}
+
+setEmbedded('OVERLAY_SERVICE_KT', overlay);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ TornPulse LOCKED REFERENCE HUD applied — approved placement, icon headers, black glass cards.');
