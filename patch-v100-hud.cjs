@@ -1945,10 +1945,7 @@ setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ TornPulse static last-activity strip applied — no scrolling.');
 // ===========================================================================
-// BIGGER LEFT WORDMARK + WIDER LAST ATTACK STRIP
-// - make the TornPulse wordmark more noticeable on the left
-// - widen the overall HUD and give the ticker more usable room
-// - keep the last-attack strip static and readable, with no cutoff-prone age
+// BIGGER LEFT WORDMARK + FULL STATIC LAST ATTACK — ROBUST FIT PASS
 // ===========================================================================
 
 overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
@@ -1962,7 +1959,7 @@ function fitReplaceOnce(text, oldText, newText, label) {
   return text.replace(oldText, newText);
 }
 
-// Give the expanded HUD a little more width so the header breathes.
+// Slightly wider expanded HUD so the larger logo does not steal ticker room.
 overlay = fitReplaceOnce(
   overlay,
   `    val minWidthDp = when {
@@ -1971,14 +1968,14 @@ overlay = fitReplaceOnce(
       else -> 320
     }`,
   `    val minWidthDp = when {
-      compact -> 312
-      large -> 386
-      else -> 350
+      compact -> 306
+      large -> 378
+      else -> 354
     }`,
   'wider expanded HUD shell'
 );
 
-// Make the TornPulse wordmark noticeably larger on the left.
+// Bigger official TornPulse wordmark on the left.
 overlay = fitReplaceOnce(
   overlay,
   `    currentExpandedLogoWidthDp = when {
@@ -1987,9 +1984,9 @@ overlay = fitReplaceOnce(
       else -> 220
     }`,
   `    currentExpandedLogoWidthDp = when {
-      compact -> 220
-      large -> 286
-      else -> 254
+      compact -> 218
+      large -> 282
+      else -> 252
     }`,
   'bigger left wordmark width'
 );
@@ -2003,79 +2000,46 @@ overlay = fitReplaceOnce(
     }`,
   `    currentExpandedLogoHeightDp = when {
       compact -> 41
-      large -> 54
+      large -> 53
       else -> 47
     }`,
   'bigger left wordmark height'
 );
 
-// Make the activity strip use its space more efficiently.
+// Reduce only the activity-strip text size a touch so longer names/results fit.
 overlay = fitReplaceOnce(
   overlay,
-  `    eventTickerText = makeText("LIVE ACTIVITY", maxOf(6.5f, tickerSize), Color.rgb(220, 224, 229), true).also {
-      it.setPadding(dp(8), dp(4), dp(8), dp(4))
-      it.setSingleLine(true)
-      it.ellipsize = TextUtils.TruncateAt.END
-      it.setHorizontallyScrolling(false)
-      it.isSelected = false
-      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
-      it.visibility = if (hudCollapsed) View.GONE else View.VISIBLE
-      it.background = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = dp(8).toFloat()
-        setColor(Color.argb(96, 8, 9, 12))
-        setStroke(dp(1), Color.argb(90, 188, 194, 202))
-      }
-      headerRow.addView(it, 1, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-        leftMargin = dp(8)
-        rightMargin = dp(8)
-      })
-    }`,
-  `    eventTickerText = makeText("LIVE ACTIVITY", maxOf(6.1f, tickerSize - 0.2f), Color.rgb(220, 224, 229), true).also {
-      it.setPadding(dp(6), dp(4), dp(6), dp(4))
-      it.setSingleLine(true)
-      it.ellipsize = TextUtils.TruncateAt.END
-      it.setHorizontallyScrolling(false)
-      it.isSelected = false
-      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
-      it.visibility = if (hudCollapsed) View.GONE else View.VISIBLE
-      it.background = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = dp(8).toFloat()
-        setColor(Color.argb(92, 8, 9, 12))
-        setStroke(dp(1), Color.argb(90, 188, 194, 202))
-      }
-      headerRow.addView(it, 1, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-        leftMargin = dp(5)
-        rightMargin = dp(5)
-      })
-    }`,
-  'wider activity strip layout'
+  'eventTickerText = makeText("LIVE ACTIVITY", maxOf(6.5f, tickerSize), Color.rgb(220, 224, 229), true)',
+  'eventTickerText = makeText("LIVE ACTIVITY", maxOf(6.0f, tickerSize - 0.35f), Color.rgb(220, 224, 229), true)',
+  'slightly smaller activity text'
 );
 
-// Show the clean static message without the aging suffix so it fits.
+// Drop only the age suffix from LAST ATTACK; attacker and result remain static.
 overlay = fitReplaceOnce(
   overlay,
-  `          val age = if (latest.ended > 0L) "  •  \${formatAge(max(0L, nowUnix - latest.ended).toInt())}" else ""
-          display = "LAST ATTACK  •  $who  •  \${latest.result}$age"`,
-  `          display = "LAST ATTACK  •  $who  •  \${latest.result}"`,
-  'remove age from last-attack strip'
+  '          display = "LAST ATTACK  •  $who  •  ${latest.result}$age"',
+  '          display = "LAST ATTACK  •  $who  •  ${latest.result}"',
+  'full static last-attack message'
 );
 
-// Verification.
-if (!overlay.includes('compact -> 312') || !overlay.includes('else -> 350')) {
-  throw new Error('TornPulse HUD fit verification: expanded width update missing');
+// Tighten ticker side padding inside the ticker setup block only.
+{
+  const start = overlay.indexOf('eventTickerText = makeText("LIVE ACTIVITY"');
+  const end = start >= 0 ? overlay.indexOf('headerRow.addView(it, 1', start) : -1;
+  if (start < 0 || end < 0) throw new Error('TornPulse HUD fit verification: activity setup not found');
+  let block = overlay.slice(start, end);
+  if (!block.includes('it.setPadding(dp(8), dp(4), dp(8), dp(4))')) {
+    throw new Error('TornPulse HUD fit verification: ticker padding marker missing');
+  }
+  block = block.replace('it.setPadding(dp(8), dp(4), dp(8), dp(4))', 'it.setPadding(dp(5), dp(4), dp(5), dp(4))');
+  overlay = overlay.slice(0, start) + block + overlay.slice(end);
 }
-if (!overlay.includes('compact -> 220') || !overlay.includes('else -> 254')) {
-  throw new Error('TornPulse HUD fit verification: bigger wordmark update missing');
-}
-if (!overlay.includes('leftMargin = dp(5)') || !overlay.includes('rightMargin = dp(5)')) {
-  throw new Error('TornPulse HUD fit verification: wider activity strip margins missing');
-}
-if (overlay.includes('LAST ATTACK  •  $who  •  \${latest.result}$age')) {
-  throw new Error('TornPulse HUD fit verification: age suffix still present');
-}
+
+if (!overlay.includes('else -> 354')) throw new Error('TornPulse HUD fit verification: shell width missing');
+if (!overlay.includes('else -> 252')) throw new Error('TornPulse HUD fit verification: larger wordmark missing');
+if (!overlay.includes('maxOf(6.0f, tickerSize - 0.35f)')) throw new Error('TornPulse HUD fit verification: ticker sizing missing');
+if (overlay.includes('LAST ATTACK  •  $who  •  ${latest.result}$age')) throw new Error('TornPulse HUD fit verification: attack age suffix still present');
 
 setEmbedded('OVERLAY_SERVICE_KT', overlay);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
-console.log('✅ TornPulse bigger wordmark + wider last attack strip applied.');
+console.log('✅ TornPulse bigger left logo + full static LAST ATTACK applied.');
