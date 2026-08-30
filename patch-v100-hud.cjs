@@ -2689,23 +2689,8 @@ console.log('✅ TORNPULSE CLEAN-SLATE HUD applied — transparent parent, suppl
 
 overlay = extractEmbedded('OVERLAY_SERVICE_KT').value;
 
-function centerReplaceOnce(text, oldText, newText, label) {
-  const count = text.split(oldText).length - 1;
-  if (count !== 1) {
-    throw new Error(`TornPulse centered-icon pass: expected 1 match for ${label}, found ${count}`);
-  }
-  console.log(`✓ CENTER PASS ${label}`);
-  return text.replace(oldText, newText);
-}
-
-// Make the stat/timer line a touch more readable in case the runtime source still
-// carries the slightly smaller value from earlier passes.
-overlay = centerReplaceOnce(
-  overlay,
-  `      val timerView = makeText("--", maxOf(7.0f, statLabelSize - 0.2f), Color.rgb(190, 196, 204), true).apply {`,
-  `      val timerView = makeText("--", maxOf(7.3f, statLabelSize + 0.1f), Color.rgb(190, 196, 204), true).apply {`,
-  'bigger stat countdown text'
-);
+// The stat countdown size is already applied by the clean-slate card rebuild above.
+// Keep this final pass verification-only so it is idempotent across the patch chain.
 
 // If HEALTH is full/capped, let the existing runtime show its status text; otherwise
 // the countdown logic for the stat line remains intact.
