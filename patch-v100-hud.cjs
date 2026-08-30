@@ -2857,3 +2857,126 @@ app = updateStyleObject(app, 'tpCooldownIcon', block => {
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src, 'utf8');
 console.log('✅ Main dashboard symbols now match the floating HUD symbol set.');
+
+
+// ===========================================================================
+// MAIN SCREEN — EXACT FLOATING-HUD ICON ART
+// The previous pass targeted component names that are not used by the live
+// dashboard. This pass replaces the actual icon Text nodes used by the main
+// screen and uses PNGs drawn from the same geometry as makeHudGlyph().
+// ===========================================================================
+
+const TP_EXACT_HUD_ICON_BASE64 = {
+  'tp-hud-booster.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABPklEQVR42u3d0RGCMBRFQZKhDuuxA2ukA+qhEa3AL2ck793dCkg4Boyo2wYAAAAAAAAAAEATo+qBX8fzvdLxPF5nybmcXgPZBCAABIAAEAACQAAIgByj+gDu3hGsugNoBUAACEAApkAACAABIAAEgABIUmobc7UHQb+ptD08nPzsEIYTnx2Be4DwgKfJyx7HNGnZ43EJsA+AABAAmfbqA1jhfXblG1YrgEsAAkAACAABIAAEgAAQAAJAAAgAASAAWto7DOKuz+Or/0CUFQABCAABIAAEgAAQAAIgSIudwA47clYABIAAEAACQAAIAAEgAASAABAAAkAACAABIAAEgAD4UflnArv9tYwVAAEgANID6Pas/6rjsQJYAbxqkscxTV728U+TmH3cpSa2yqaPL6sCAAAAAAAAAAAAAP/zAfUfPDtNa6jXAAAAAElFTkSuQmCC',
+  'tp-hud-drug.png': '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',
+  'tp-hud-energy.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAACn0lEQVR42u3d0ZGCQBCEYdi6tEzAfIzCfEzAwLynq7qHqytRBGb66wiQ/qdndmFxmoiIiIiIiIhomqbpej8/uv/Gweb/ze8Owczq5yv/crrNEgAYEoDJfRJBAoQNfQAgAKh+ALxtfpcVwWB+ZuUDgACQXv3RADA/GADmS4C31OmZwFD9EoD5AGA+AAgAqh8AzA9aAbQHQOVLAEoFIO3VLgC8Ef3JrWKkm59c/fEzwFLznQvQ9yWAJR8A9H0A9On7XgrV9yWAvp8Lz0gxX/UHzwDMbwaAvh8MwJp9395BMQD0fQmwi/mdQRodq1/lNwNAr/6c5m7mL6n+I4G1V2q1mgGqmr/n9Ywu1d+h71/v58fWIIwO5lMzANLX+1vCX34GeNV8S8WDAmC9HwzA1n3/qABteV2jqvmqP3gGWHuf/0gwbX0tc7Xqr1b5R/9to9INspxrBkDnvl/lt5WZAZjfbAbYOx4/ddOrpdpINP/nGjxv8ImY+JlmJFb/J66n6kArAcJXMwCYss8Ybg6AZ/eGwDZ7DB02ssZeN7x6EnTZxRwVK4/56+mravxW6c1Hhzx+BlhqULfdQ0NgaPS3BuATVdr10bUECDY/HgAvlkqA6OpvCcCe3xCqmCgSINj8aAB8Q0gCbLqMBEAR49KOqEmAYPNjAfjLuNTDqRIgXP4zaMo+mh6fAOnfJYj+zyAfpZAA0ea3AeCV/u9cYHACiP5QAC6n28z8YACY3xAAvVwCmPoBwHwAMD8PgLX7f+JbwhLAEEip1Q+AcPNLA7BW/08/HeRomBmAAKD6AZDU/5kfnADM1wIoFQDV3wCAV/s/84MTgPnBADBfAlAXALzUKQGYDwDmA4AyAXimslV/cAIwf7nK3rDfKwLGExERERERPatvWFeaWcd6fRgAAAAASUVORK5CYII=',
+  'tp-hud-health.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAEKUlEQVR42u2d63EkIQyEd6iNwwE5GofiaByQE/H92qqrqVmveejR4ut/d/YdqNUIwYC43QAAAAAAAAAAAAAAAAAAAAAAAAAAQCkckY2/f37/jPy7r4+3IyOZivYcKiRlFYO6PYcXSV8fb8dqsqLI87DjwZm0AKyJihBBNZuOSkRZkFfFDjcBZCFsBXmVbHERgNdcb01e1v5biKCtHvnZyfutf9n7btHPI1uHokZRBRtCIoAiced+V7BhFHc1FZ+Nnsk5Zgm8anvWHm+4LZHOZK0IX5WWaGduerl1F8AI+VY7XFFCsLBjNKKN9sU1AqhlyCp2zPSpqY26SAdV+wo5LIDeBr2Js2gvuw2jImjKI9Kr3Qo2LM0B/qK2LOFyxVJPwY7RfjYrQpWWaM9+R0nE75/fPyOct0jiPUXwysn///y33682FbTbRjgTefXnrJk+Algsgt0c7ZYEQmxcPjDCvdlaEyHErWZ6uDeZAnC+DqcNavcGAkAAYGfcqxiy+rAJAhDOjh9/hxCKTwGqhznLC8DDMWofpbJyKrsTuOumVOhOYA/xlqR7HppUiwC9drIMJAfQmrN2TPwsbTY5EmYVbqOOd2XZY7Dg/W7Z0YrzboRtlhGgKTsjsq0qU1Gr4rTV/bE8iJmJwyEBeJ+dyzb6swl9xh/mV8Nmydmxaocnx21GddWWVKpinfHFXXV0kKwmSAJ32WPPjFkflNgK7k2C+Iy8UADRUaBSqZkI2/kYRATIocQV7Y70I3uxC+t+bBsBZsJ+peRXtlrXMydY9uGqTfXy8XIR4FXGX6EekVwO4EVGJNmvROfVt9XtyJWKrbYsi16Chk8BCmvwrCecUgogwyhQiCpZTjanqQ/AB6MYUaeqErbDGz3Z7jS0bOStEkHGaSDjhZZWfcRl6ktGUbZszvc4aBk1+r1eA+1Bmouczx5KiHr4cZWjntmUpd5y8xrZo45SjgYzNnlFCrcpYMYgbxFEHzLxnCaaCrHRobyi80OSwOyRIPKx6QixhqwCZgo2Z84JZtb5UauDsGXgzBNyVse4vKOT1TN6MvsAka9+ZpjzM+wLhG8EeY26V+2sKB6hMOefcaiPohEiV1X8qHCwNNW2pGL1L/WKZem+BYw6wbuGgNK+hEwE6B1VVt8PevrVk8hm/BqY9uhUtgcfqzxAmXoKWEnYyimhqvNTC2CWuOi3g1Wep5M5kx+x5Nrh/qDUpQyvUFw55EsLwMM5u90alrwcaiWgHUvHyN7LW+Gsh5hW/l8IQFAIOzpedgrI5IAKN5vLPatmHRGqPUXXqjt/9WZStUSxlACuqobNOOzqxA4RQEQEFlvBFV8iLf20auWbxkQAJ8dVf3+4fKHILF8UmQIEVgg8Qb+BCF6d56OU/IaRAAAAAAAAAAAAAAAAAAAAAAAAAAAAgDL4B3VNO62mQVT1AAAAAElFTkSuQmCC',
+  'tp-hud-medical.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAA4UlEQVR42u3dsQ2AIBBAUXAiNqNwDgs3cyOYAZMrON4bgETykepCKQAAAAAAAAAAAAAAwK5qxo/q3zMi1n3bnW6/LmfgbAIQAAJAAAgAASAABIAAEAACQAAIAAEgAASAABAAAkAACAABIAAEgAAQAAJgO+HDjlGDmqeIHkj1B3AFIAAEgAAQAAJAAAgAASAABIAAEAACQAAIAAEgAASAAEjAkzELPBmDKwABIAAEgAAQAAJAAAgAASAABIAAEAACQAAIAAEgAASAABAAAkAACAABIAAAAAAAAAAAAAAAAAD+mnQ/DJ7RU2IvAAAAAElFTkSuQmCC',
+  'tp-hud-nerve.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAACkklEQVR42u3d603DMBAA4MbqEuzCCIzbEdiFMeAXEkKINqkd3/m+7x8SiuPz+ZVHc7kAAAAAAAAAAAAAAACQ0pbthD/eXj/v/c/L7X1breyyCfBI0Ec1ysyyyydAj+AfbYyZZZdPgBHBjyRaIjSNX7uOTWBq13UTjNpTQtP4tTtAu1Ba0/trjwJbxgr/N2+ODubIsmesB7YsjX8kOL2S4cyyz06CFGuAo0HpEcyZZS83AuztFT2DWLXstCNAtrtqWevSovb+2WVnO9+lRoCVen/0OjWBql03VwKLOyUBss6nFdYBoUaAlYf/qHU0BZgCkABIACQAEgAJMJHHwhdNgJl732fKznrepgAedo04RP7M/ntD5uwra3veGI44xV0jZuWeQP3+3zMSYm9DRl7bhH4krOcc2uOxrLPO3yNhwZLt4+31c9Udypa5YVbksXAuSydAhXv+mWJzegKYAmLFpmn82klgDVA8CZrebxGo8QuPAqYAI4DeX3kUCHUzaM9dwMx7/Eh1axED9P33CheN/qpHpHpdM/WcR3vPy+19m9XLejfu7+cjUiXAaj+6vOJl7Baxl0c8ZvTj2QYiAZAASAAkALkSYMR2sfcxox8vZAJ4/MsIQPBOtOQ3g0YNr72O62bQwMCMDu6zxy/3evjeISzD7/odLSfir4aHXANk+HHnVV4Q3SI36r2eECWoIz4jc9YOatm3g63+bQM1frQEcGEoXoxKvRwaPQFLvBw6q6J7yzz7HGclZ6uQ7dE//TZzZAoxJFbeHZT+evjIIPQ85oh3FKK89xBuUdTz+7ujPh074qKWBDiYEGd8SPrZMiLvPpbel8/8eHQWrgQWJwEkABIACQAAAAAAAAAAAAAAAAAk8gXzFYcU0QSlowAAAABJRU5ErkJggg==',
+  'tp-hud-scanner.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAADjUlEQVR42u2dyZFbMQxERZQCmsx8mDh8mMyckX1SlU7WBhLdwHtnLQTQANfPf7kAAAAAAAAAAAAAAAAAAAAAQCvWBCN//fn9953v/Xx9LwQwJNhTRbEI+mwxLII+WwyLwM8WwiLws4WwCPxsIQTBn23Dwmmzq0EQ/Nm2rSkOejX7lNrSXgA7nJ3tZIc2Wgog07GnHOrYZkkBZDiy2oHuNixXx6mNqF3tWW7OUl9YcbMtcJDOwK5imhgXE5w2WZzautSz333PXd3mwBF61eBkVxAEf7YIrpP60GeduuP/f76+18i9gFeNznR+lsOz2qRYCVfH4O/KtKop3k4RSHYBqvPo2++/EhD17e3okv0nHf3sf2W1aadtEhXAbfXsUTVwOtQS1dnvGPz/tWFXm3b9rs1SsHKW3drieJxtOWZ/53ODp2cEQeb3CqjNILBqefTR/54S2H07KlcJrxOy8xWx3X9WdUEps2rYLARVLKPevq+2pGw/BjhxRj/T2Rm/9eg3qsQRlRnqMrBSO/CZ6Wv5WUDlbqJi8O27gJ0OcXgaSE0sbR4Pzz5H4LCRM2oWcEJYqqd25CtAtdOy9uedgp/V1lAN1A6HOQT4tI+iu8KxxXwamJExu57t73B0PS7N6XqxA7OAAf0zFYDgUwEIPBUAEAAggIISPuGNIfYCeGaa904gq9YXEEDD7FO2JdSydWcQnglE9QrfaR9FB4VnnRtweuo3y+cj1wEmDO5aDAJVM7LqpFILAewM1AkRuLffbhqodM9/9QllaQEoGbtDBF2fewiHAFXfs3fiyaQqgbW+K/jTc4Dvft9plnHNDpLi8uh9m1QeD1fpau1uCOkYoMpppd1mkHJ5dVxgikonvJvNio4+cd/RDrttt4OVROC8tBzVDnF/hcypew532SpRAT4VQYUQPv1flcFsqGSG00UMp+815rbwFx2leLuXKrwwQrxN1i+MUDO68pUxisGXFUDHcqvqgyOzgI5Lvl0S4Ng0cKoI1KvfcnCIY5fgYmd0dyhtFRNAh9WzXW2sqHK2T8CodQmu9ixnpykIwd2G5Z45FY50bLOsAHb17Q4XRyt0Y6360UxnK7VljADcplAdBq+Bg2bbJu3sLtWAG0IGVwN1G2wc7FYNXMRrl2HTHt1CACZCcO2uWoy4q8TQYYzSbsq1WwzdpqkjbsuacggFAAAAAAAAAAAAAAAAAAAAAODyD1v4pthTxF2GAAAAAElFTkSuQmCC',
+  'tp-hud-torn-time.png': 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAC00lEQVR42u2dsVIEMQxD1x5KCob//0aGgh4qCjruJptI1ns1cBtZkR1ub++6AAAAAAAAAAAAAAAAAAAAAGAUlbDIj8+v72d+7/3ttTBASLFTTVEUPdsMRdGzzVAUPtsIReGzjVAUPtsITfGz11CIlp0GTfGz11YpAj26+5SuZbwB7hB7tcgO12hpgJXC7hLU8ZolDbBCyNMCuq+hXIVTm6hd11NuYqn/Y8VtbY1AOoPdiWNiXyY4vcnidK2lvvtXivnf1z/xmqcM1CnFd0qDna2gKX62CXqKYMwFogZ41MmT78RVej9iiwEovr4J+oJomt2fnQLtKAhDobgBHnFsYvGfWftdKcAMwAzA7k9OARKABGDwSx4Ilxpg8i3dKqzWmBZACyD+k9vAMgMQ/55tgBZACyD+k9sACUACAAZgAIwdBLcmAP1fTyNaAC0AMABgAPg7YKUMthgg3AgYINwIL+lHrEcK+/uzk46znb6zd/4eBqAtYAD33T/NCLEGeH97rdVPAnE0QjvuuslG2K1RrxKRRNibCKuulSHwRiM4bAwMsCkRMIDpGfpZE6g/HYwEIA3WGiDl+T7/WefdWqz8+0cSYMI3gTl8IQUt4IAR3JKwVwuCETSHUrkEmPj++rPFOakFLSCcPrkL+EDJ+WcqkQAkwNlemJwCCk9UazchEotvOQQqPhrdtfh3HjGZAZgBdM7FCSmg9hT12xMAE+gWX7YFTDSB6pq2GMDl5gil4u96b2FbAqSaQP0r88pBkN2iJK2zpwvKtYoZwO3btXde44mUK9ddotYSXNdTzqIpGMF9DeW+c04I6XjNsga4q7c73LWr0MZG9dGVYjt8sHOcAdyOUBOG10ag7LVJiz0lDZRN3QiXvQYbgVM+Vo4BzI3gllq2EatmBNd2NWLiPmWGCTPKuCPX3WaYdkyN+Dh3yk0oAAAAAAAAAAAAAAAAAAAAAADXDzBb4frpSrNhAAAAAElFTkSuQmCC',
+};
+
+for (const [fileName, png64] of Object.entries(TP_EXACT_HUD_ICON_BASE64)) {
+  fs.writeFileSync(path.join(process.cwd(), fileName), Buffer.from(png64, 'base64'));
+}
+console.log('✓ exact HUD icon PNG assets written');
+
+app = extractEmbedded('APP_JS').value;
+
+// Ensure React Native Image is available for exact icon artwork.
+app = app.replace(
+  /import \{([^}]*)\} from 'react-native';/,
+  (m, names) => {
+    if (/(^|,\s*)Image(\s*,|$)/.test(names)) return m;
+    return `import {${names.trim()}, Image} from 'react-native';`;
+  }
+);
+
+const TP_HUD_GLYPH_HELPER = `
+const TP_HUD_ICON_IMAGES = {
+  HEALTH: require('./tp-hud-health.png'),
+  ENERGY: require('./tp-hud-energy.png'),
+  NERVE: require('./tp-hud-nerve.png'),
+  'TORN TIME': require('./tp-hud-torn-time.png'),
+  DRUG: require('./tp-hud-drug.png'),
+  BOOSTER: require('./tp-hud-booster.png'),
+  MEDICAL: require('./tp-hud-medical.png'),
+  SCANNER: require('./tp-hud-scanner.png'),
+};
+function TPHudGlyph({kind,size=22}) {
+  const source = TP_HUD_ICON_IMAGES[kind] || TP_HUD_ICON_IMAGES.SCANNER;
+  return <Image source={source} style={{width:size,height:size,resizeMode:'contain'}} />;
+}
+`;
+
+if (!app.includes('function TPHudGlyph(')) {
+  const helperAnchor = 'function StatusTag(';
+  const helperAt = app.indexOf(helperAnchor);
+  if (helperAt < 0) throw new Error('TornPulse exact dashboard HUD icons: StatusTag helper anchor not found');
+  app = app.slice(0, helperAt) + TP_HUD_GLYPH_HELPER + '\n' + app.slice(helperAt);
+  console.log('✓ exact HUD glyph helper injected');
+}
+
+let exactHudIconSwaps = 0;
+function swapIconText(regex, replacement, label) {
+  const before = app;
+  app = app.replace(regex, () => {
+    exactHudIconSwaps++;
+    return replacement;
+  });
+  if (app !== before) console.log(`✓ exact HUD icon ${label}`);
+}
+
+// Current redesigned dashboard components.
+swapIconText(
+  /<Text\b[^>]*styles\.tpRefMetricIcon[^>]*>[\s\S]*?<\/Text>/g,
+  '<TPHudGlyph kind={label} size={20}/>',
+  'dashboard vitals'
+);
+swapIconText(
+  /<Text\b[^>]*styles\.tpCooldownIcon[^>]*>[\s\S]*?<\/Text>/g,
+  '<TPHudGlyph kind={label} size={23}/>',
+  'dashboard cooldowns'
+);
+
+// Older/base dashboard components — retained as a compatibility fallback.
+swapIconText(
+  /<Text\b[^>]*styles\.metricBadgeText[^>]*>[\s\S]*?<\/Text>/g,
+  '<TPHudGlyph kind={label} size={20}/>',
+  'metric cards'
+);
+swapIconText(
+  /<Text\b[^>]*styles\.coolIcon[^>]*>[\s\S]*?<\/Text>/g,
+  '<TPHudGlyph kind={label} size={22}/>',
+  'cooldown cards'
+);
+
+// Scanner / radar tiles can be separate from the generic cooldown component.
+function replaceLiteralHudIcon(symbol, kind, size=22) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`<Text\\\\b([^>]*)>${escaped}<\\\\/Text>`, 'g');
+  app = app.replace(re, (m) => {
+    exactHudIconSwaps++;
+    return `<TPHudGlyph kind="${kind}" size={${size}}/>`;
+  });
+}
+replaceLiteralHudIcon('📡', 'SCANNER', 23);
+replaceLiteralHudIcon('🎯', 'SCANNER', 23);
+
+// If a dashboard still uses direct emoji values in generic props, the generic
+// component now ignores those values and renders by label. Leave other pages
+// untouched.
+
+// Hard verification: unlike the previous pass, do not allow a green build if
+// no live dashboard icon node was actually replaced.
+if (exactHudIconSwaps < 2) {
+  throw new Error(`TornPulse exact dashboard HUD icons: only ${exactHudIconSwaps} live icon nodes replaced`);
+}
+if (!app.includes('<TPHudGlyph kind={label}')) {
+  throw new Error('TornPulse exact dashboard HUD icons: generic dashboard icon replacement missing');
+}
+
+setEmbedded('APP_JS', app);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log(`✅ Main screen now uses the exact floating-HUD icon artwork (${exactHudIconSwaps} icon nodes replaced).`);
