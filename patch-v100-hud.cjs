@@ -6,7 +6,7 @@ const {execFileSync} = require('child_process');
 // This file replaces patch-v100-hud.cjs. It first runs the exact Build #69
 // version of that patch, then applies the reference-dashboard visual pass
 // and replaces the custom target scanner with a lightweight Baldr link hub.
-const BASE_COMMIT = '6db6f740aecff0b21e96e374b77f149c172e69bf';
+const BASE_COMMIT = 'ebaf14e5451a74af20fd1f5f89bfaff7159d5dbd';
 const BASE_PATH = 'patch-v100-hud.cjs';
 const CONFIG_FILE = 'app.config.js';
 const tempBase = path.join(process.cwd(), '.tornpulse-v100-base.cjs');
