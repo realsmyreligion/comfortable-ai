@@ -2768,3 +2768,92 @@ fs.writeFileSync(
   Buffer.from(TARGET_INTEL_HEADER_BASE64, 'base64')
 );
 console.log('✅ Updated tornpulse-header.png to the supplied Target Intelligence logo art.');
+
+
+// ---------------------------------------------------------------------------
+// MAIN DASHBOARD — use the same symbol language as the floating HUD.
+// HEALTH  ♡⌁   ENERGY  ϟ   NERVE  ✺   TORN TIME  ◷
+// DRUG    ◒    BOOSTER ↟   MEDICAL ✚   SCANNER    ◎
+// ---------------------------------------------------------------------------
+
+function replaceMainHudSymbol(text, regex, replacement, label) {
+  let hits = 0;
+  const out = text.replace(regex, (...args) => {
+    hits++;
+    return typeof replacement === 'function' ? replacement(...args) : replacement;
+  });
+  if (hits) console.log(`✓ MAIN HUD SYMBOL ${label} (${hits})`);
+  else console.log(`- MAIN HUD SYMBOL ${label} skipped`);
+  return out;
+}
+
+app = extractEmbedded('APP_JS').value;
+
+// Main vitals row.
+app = replaceMainHudSymbol(
+  app,
+  /(<TP(?:Ref)?Metric\b[^>]*label="HEALTH"[^>]*\bicon=")(?:♥|♡⌁)("[^>]*>)/g,
+  '$1♡⌁$2',
+  'HEALTH'
+);
+app = replaceMainHudSymbol(
+  app,
+  /(<TP(?:Ref)?Metric\b[^>]*label="ENERGY"[^>]*\bicon=")(?:ϟ|⚡)("[^>]*>)/g,
+  '$1ϟ$2',
+  'ENERGY'
+);
+app = replaceMainHudSymbol(
+  app,
+  /(<TP(?:Ref)?Metric\b[^>]*label="NERVE"[^>]*\bicon=")(?:✦|✺|🧠)("[^>]*>)/g,
+  '$1✺$2',
+  'NERVE'
+);
+app = replaceMainHudSymbol(
+  app,
+  /(<TP(?:Ref)?Metric\b[^>]*label="TORN TIME"[^>]*\bicon=")(?:◷|⏱|🕒)("[^>]*>)/g,
+  '$1◷$2',
+  'TORN TIME'
+);
+
+// Main cooldown / scanner row.
+app = replaceMainHudSymbol(
+  app,
+  /(<TPCooldownMini\b[^>]*\bicon=")(?:💊|●|◒)("[^>]*label="DRUG"[^>]*>)/g,
+  '$1◒$2',
+  'DRUG'
+);
+app = replaceMainHudSymbol(
+  app,
+  /(<TPCooldownMini\b[^>]*\bicon=")(?:🥤|▰|↟)("[^>]*label="BOOSTER"[^>]*>)/g,
+  '$1↟$2',
+  'BOOSTER'
+);
+app = replaceMainHudSymbol(
+  app,
+  /(<TPCooldownMini\b[^>]*\bicon=")(?:🩹|✚|\+)("[^>]*label="MEDICAL"[^>]*>)/g,
+  '$1✚$2',
+  'MEDICAL'
+);
+
+// TPScannerMini is the dashboard scanner tile. Match only its own label block.
+app = app.replace(
+  /(function TPScannerMini\(\)\s*\{[\s\S]*?<Text[^>]*>)(?:📡|◎)(<\/Text>[\s\S]*?<Text[^>]*>SCANNER<\/Text>)/,
+  '$1◎$2'
+);
+
+// Make the symbol cells feel like the HUD: centered and bold, without touching logic.
+app = updateStyleObject(app, 'tpRefMetricIcon', block => {
+  block = setStyleProp(block, 'fontWeight', "'900'");
+  block = setStyleProp(block, 'textAlign', "'center'");
+  return block;
+}, 'HUD-matched dashboard vital symbols');
+
+app = updateStyleObject(app, 'tpCooldownIcon', block => {
+  block = setStyleProp(block, 'fontWeight', "'900'");
+  block = setStyleProp(block, 'textAlign', "'center'");
+  return block;
+}, 'HUD-matched dashboard cooldown symbols');
+
+setEmbedded('APP_JS', app);
+fs.writeFileSync(CONFIG_FILE, src, 'utf8');
+console.log('✅ Main dashboard symbols now match the floating HUD symbol set.');
