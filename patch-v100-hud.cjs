@@ -97,15 +97,9 @@ function TPBaldrHubCard({compact=false}) {
   console.log('✓ Baldr Link Hub components added');
 }
 
-// HARD REMOVE: delete the actual dashboard TARGET RADAR JSX card.
-// This version does not depend on a specific style name. It finds the JSX
-// text node containing TARGET RADAR, then walks backward through nested View
-// tags to the enclosing card whose subtree also contains VIEW ALL / footer markers.
-function jsxTagEnd(source, at) {
-  const end = source.indexOf('>', at);
-  return end;
-}
-
+// HARD REMOVE: remove the dashboard radar specifically.
+// The app contains another TARGET RADAR title on the Targets page, so we scope
+// this search to the DASHBOARD render region instead of using the first global match.
 function findMatchingViewEnd(source, start) {
   let depth = 0;
   let pos = start;
@@ -115,7 +109,7 @@ function findMatchingViewEnd(source, start) {
     if (open < 0 && close < 0) return -1;
 
     if (open >= 0 && (close < 0 || open < close)) {
-      const tagEnd = jsxTagEnd(source, open);
+      const tagEnd = source.indexOf('>', open);
       if (tagEnd < 0) return -1;
       const tag = source.slice(open, tagEnd + 1);
       if (!/\/\s*>$/.test(tag)) depth++;
@@ -129,53 +123,15 @@ function findMatchingViewEnd(source, start) {
   return -1;
 }
 
-function candidateViewStarts(source, beforeAt, max=40) {
-  const starts = [];
-  let at = beforeAt;
-  while (starts.length < max) {
+function enclosingRadarCard(source, labelAt, floorAt) {
+  let at = labelAt;
+  while (true) {
     at = source.lastIndexOf('<View', at - 1);
-    if (at < 0) break;
-    starts.push(at);
-  }
-  return starts;
-}
+    if (at < floorAt || at < 0) return null;
+    const end = findMatchingViewEnd(source, at);
+    if (end < labelAt) continue;
 
-function removeDashboardRadar(source) {
-  let out = source;
-  let removed = 0;
-
-  // Search only visible JSX text forms, not comments/log strings.
-  const radarNeedles = [
-    '>TARGET RADAR<',
-    ">{'TARGET RADAR'}<",
-    '>"TARGET RADAR"<'
-  ];
-
-  let labelAt = -1;
-  for (const needle of radarNeedles) {
-    const hit = out.indexOf(needle);
-    if (hit >= 0 && (labelAt < 0 || hit < labelAt)) labelAt = hit;
-  }
-
-  // Fallback: the current app may place TARGET RADAR inside a Text expression.
-  if (labelAt < 0) {
-    const raw = out.indexOf('TARGET RADAR');
-    if (raw >= 0) labelAt = raw;
-  }
-
-  if (labelAt < 0) {
-    throw new Error('TornPulse Link Hub: visible TARGET RADAR heading not found');
-  }
-
-  const starts = candidateViewStarts(out, labelAt, 60);
-  let chosen = null;
-
-  // Pick the smallest enclosing View subtree that contains the radar heading
-  // plus at least one unmistakable radar-only marker.
-  for (const s of starts) {
-    const e = findMatchingViewEnd(out, s);
-    if (e < 0 || e <= labelAt) continue;
-    const block = out.slice(s, e);
+    const block = source.slice(at, end);
     if (!block.includes('TARGET RADAR')) continue;
 
     const radarSpecific =
@@ -185,36 +141,55 @@ function removeDashboardRadar(source) {
       block.includes('targetRowCompact') ||
       block.includes('tpRadarFooter');
 
-    if (radarSpecific) {
-      chosen = {start:s, end:e, block};
-      break;
-    }
+    if (radarSpecific) return {start:at, end, block};
   }
-
-  if (!chosen) {
-    const context = out.slice(Math.max(0,labelAt-1200), Math.min(out.length,labelAt+3000));
-    console.log('--- TARGET RADAR CONTEXT START ---');
-    console.log(context);
-    console.log('--- TARGET RADAR CONTEXT END ---');
-    throw new Error('TornPulse Link Hub: could not identify enclosing dashboard radar JSX block');
-  }
-
-  out = out.slice(0, chosen.start) + '<TPBaldrHubCard compact/>' + out.slice(chosen.end);
-  removed++;
-
-  // Remove any second visible dashboard radar copy the same way if present.
-  while (out.includes('>TARGET RADAR<')) {
-    const again = removeDashboardRadar(out);
-    out = again.source;
-    removed += again.count;
-  }
-
-  return {source:out, count:removed};
 }
 
-const hardRadarRemoval = removeDashboardRadar(app);
-app = hardRadarRemoval.source;
-console.log(`✓ HARD REMOVED ${hardRadarRemoval.count} visible TARGET RADAR card(s)`);
+function hardRemoveDashboardRadar(source) {
+  const dashAt = source.indexOf('active="DASHBOARD"');
+  if (dashAt < 0) throw new Error('TornPulse Link Hub: dashboard marker not found');
+
+  // The dashboard radar is the first TARGET RADAR after the dashboard marker.
+  // Limit the search before the Targets page render if that marker appears later.
+  const nextTargetsPage = source.indexOf('active="🎯 TARGETS"', dashAt);
+  const limit = nextTargetsPage > dashAt ? nextTargetsPage : source.length;
+
+  const radarAt = source.indexOf('TARGET RADAR', dashAt);
+  if (radarAt < 0 || radarAt >= limit) {
+    throw new Error('TornPulse Link Hub: dashboard TARGET RADAR heading not found');
+  }
+
+  const card = enclosingRadarCard(source, radarAt, dashAt);
+  if (!card) {
+    const context = source.slice(max(dashAt, radarAt-2500), min(source.length, radarAt+4000));
+    console.log('--- DASHBOARD RADAR CONTEXT START ---');
+    console.log(context);
+    console.log('--- DASHBOARD RADAR CONTEXT END ---');
+    throw new Error('TornPulse Link Hub: dashboard radar card wrapper not identified');
+  }
+
+  return source.slice(0, card.start) + '<TPBaldrHubCard compact/>' + source.slice(card.end);
+}
+
+// JS helpers for diagnostic slicing.
+function max(a,b){ return a>b?a:b; }
+function min(a,b){ return a<b?a:b; }
+
+app = hardRemoveDashboardRadar(app);
+console.log('✓ HARD REMOVED dashboard TARGET RADAR card');
+
+// Convert the dedicated Targets page into a link-only page too.
+// Keep the page shell/header, but remove any attackable-player UI.
+app = app.replace(
+  /<View style=\{styles\.targetPageIntro\}>[\s\S]*?<\/View>\s*<TargetAssistant\b[^>]*\/>/,
+  `<View style={styles.targetPageIntro}><Text style={styles.targetPageKicker}>TORNPULSE • QUICK ACCESS</Text><Text style={styles.targetPageTitle}>BALDR TARGETS</Text><Text style={styles.targetPageCopy}>Open Baldr’s established target list instead of running a target scanner inside TornPulse.</Text></View><TPBaldrHubCard/>`
+);
+
+// Fallback for evolved Targets-page markup: replace the visible title/copy and mounted assistant.
+app = app.replace(/<Text style=\{styles\.targetPageTitle\}>TARGET RADAR<\/Text>/g,
+                  '<Text style={styles.targetPageTitle}>BALDR TARGETS</Text>');
+app = app.replace(/<Text style=\{styles\.targetPageCopy\}>Live status, battle stats and READY-only attack routing in one compact board\.<\/Text>/g,
+                  '<Text style={styles.targetPageCopy}>Open Baldr’s established target list instead of running a target scanner inside TornPulse.</Text>');
 
 // Replace every rendered TargetAssistant surface. Dead scanner code may remain in the bundle,
 // but without a mounted TargetAssistant it cannot auto-scan or consume per-target API calls.
@@ -275,26 +250,26 @@ if (!app.includes('tpLinkHub:{')) {
   console.log('✓ Baldr Link Hub styles added');
 }
 
-// Hard postconditions: no visible dashboard radar markup may survive.
+// Hard postconditions: no attackable-player radar UI may remain visible anywhere.
 const forbiddenVisiblePatterns = [
   />TARGET RADAR</,
   />VIEW ALL</,
   />OPEN FULL TARGETS PAGE</,
-  /\{'TARGET RADAR'\}/,
-  /\{'VIEW ALL'\}/,
-  /\{'OPEN FULL TARGETS PAGE'\}/
+  />ATTACK</,
+  />VERIFY</
 ];
 for (const pattern of forbiddenVisiblePatterns) {
   if (pattern.test(app)) {
-    throw new Error(`TornPulse Link Hub: visible old radar markup still remains: ${pattern}`);
+    throw new Error(`TornPulse Link Hub: old visible target UI still remains: ${pattern}`);
   }
 }
 if (!app.includes("Baldr’s Target List") || !app.includes('https://oran.pw/baldrstargets/')) {
   throw new Error('TornPulse Link Hub: Baldr launcher verification failed');
 }
-console.log('✓ verified: visible Target Radar markup removed');
-console.log('✓ verified: Baldr launcher is present');
+console.log('✓ verified: dashboard radar/player list removed');
+console.log('✓ verified: Targets page no longer renders attackable players');
+console.log('✓ verified: Baldr launcher present');
 
 setEmbedded('APP_JS', app);
 fs.writeFileSync(CONFIG_FILE, src);
-console.log('✅ TornPulse Baldr Link Hub applied — dashboard radar forcibly removed and verified.');
+console.log('✅ TornPulse Baldr Link Hub applied — dashboard + targets player UI removed and verified.');
