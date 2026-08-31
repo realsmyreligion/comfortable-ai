@@ -7,6 +7,25 @@ execFileSync(process.execPath, [path.join(__dirname, 'tornpulse-dashboard-base.c
   stdio: 'inherit',
 });
 
+// Install the official full TP pulse emblem anywhere the Android/Expo project
+// may source its launcher, adaptive, splash or in-app application icon.
+const officialIcon = path.join(__dirname, 'tornpulse-app-icon.png');
+if (!fs.existsSync(officialIcon)) throw new Error('Missing tornpulse-app-icon.png');
+for (const target of [
+  'icon.png',
+  'adaptive-icon.png',
+  'splash-icon.png',
+  'tornpulse-icon.png',
+  path.join('assets', 'icon.png'),
+  path.join('assets', 'adaptive-icon.png'),
+  path.join('assets', 'splash-icon.png'),
+  path.join('assets', 'tornpulse-icon.png'),
+]) {
+  fs.mkdirSync(path.dirname(path.resolve(target)), { recursive: true });
+  fs.copyFileSync(officialIcon, target);
+}
+console.log('✓ official TP pulse app-icon assets installed');
+
 let src = fs.readFileSync('app.config.js', 'utf8');
 
 function getEmbedded(name) {
