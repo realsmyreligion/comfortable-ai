@@ -236,6 +236,26 @@ if (structuralChanges < 8) {
 }
 console.log(`✓ structural HUD remodel applied (${structuralChanges} layout changes)`);
 
+// The internal scanner no longer exists. Re-purpose its HUD tile as the
+// visual Baldr's List entry and use an unmistakable list symbol.
+const scannerLabels = (kt.match(/"SCANNER"/g) || []).length;
+if (scannerLabels < 1) {
+  throw new Error('Could not find the obsolete HUD SCANNER label');
+}
+kt = kt.replaceAll('"SCANNER"', '"BALDR LIST"');
+
+const scannerIcons = (kt.match(/"◎"/g) || []).length;
+if (scannerIcons < 1) {
+  throw new Error('Could not find the obsolete HUD scanner icon');
+}
+kt = kt.replaceAll('"◎"', '"📋"');
+
+// OPEN accurately describes the external-list slot; it is not a running
+// scanner state. Restrict this to exact string literals.
+const onLabels = (kt.match(/"ON"/g) || []).length;
+if (onLabels > 0) kt = kt.replaceAll('"ON"', '"OPEN"');
+console.log(`✓ removed Scanner HUD concept (${scannerLabels} label, ${scannerIcons} icon, ${onLabels} state)`);
+
 setEmbedded('OVERLAY_SERVICE_KT', kt);
 fs.writeFileSync('app.config.js', src, 'utf8');
 console.log('✓ TornPulse compact dashboard-matched HUD remodel complete');
