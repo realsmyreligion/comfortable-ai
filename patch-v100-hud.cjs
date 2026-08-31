@@ -28,6 +28,32 @@ console.log('✓ official TP pulse app-icon assets installed');
 
 let src = fs.readFileSync('app.config.js', 'utf8');
 
+const expoIconMarker = `  config.userInterfaceStyle = 'dark';`;
+const expoIconCount = src.split(expoIconMarker).length - 1;
+if (expoIconCount !== 1) {
+  throw new Error(`Expected one Expo icon configuration marker; found ${expoIconCount}`);
+}
+src = src.replace(expoIconMarker, `${expoIconMarker}
+  // Official TornPulse TP pulse emblem. Explicit config overrides any stale
+  // app.json/default icon retained by Expo or Android prebuild.
+  config.icon = './tornpulse-app-icon.png';
+  config.splash = {
+    ...(config.splash || {}),
+    image: './tornpulse-app-icon.png',
+    resizeMode: 'contain',
+    backgroundColor: '#050607',
+  };
+  config.android = {
+    ...(config.android || {}),
+    adaptiveIcon: {
+      ...((config.android && config.android.adaptiveIcon) || {}),
+      foregroundImage: './tornpulse-app-icon.png',
+      monochromeImage: './tornpulse-app-icon.png',
+      backgroundColor: '#050607',
+    },
+  };`);
+console.log('✓ Expo launcher, adaptive and splash icon configuration replaced');
+
 function getEmbedded(name) {
   const prefix = `const ${name} = `;
   const start = src.indexOf(prefix);
