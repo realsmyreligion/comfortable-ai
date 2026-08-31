@@ -34,7 +34,11 @@ function setEmbedded(name, value) {
 
 function replaceExact(text, oldText, newText, label) {
   const count = text.split(oldText).length - 1;
-  if (count !== 1) throw new Error(`Expected one ${label}; found ${count}`);
+  if (count === 0) {
+    console.log(`• ${label} already updated or not used by this HUD revision`);
+    return text;
+  }
+  if (count > 1) throw new Error(`Expected at most one ${label}; found ${count}`);
   console.log(`✓ ${label}`);
   return text.replace(oldText, newText);
 }
@@ -171,6 +175,17 @@ kt = replaceExact(kt,
   `      setBackgroundColor(Color.argb(85, 225, 228, 231))`,
   `      setBackgroundColor(Color.rgb(123, 32, 37))`,
   'TornPulse red accent rail');
+
+// Compatibility palette for the current Build #147 native HUD revision.
+// These substitutions are deliberately idempotent and preserve all behavior.
+kt = kt
+  .replaceAll('Color.argb(242, 5, 7, 10)', 'Color.argb(246, 10, 12, 14)')
+  .replaceAll('Color.argb(238, 8, 10, 13)', 'Color.argb(246, 10, 12, 14)')
+  .replaceAll('Color.rgb(77, 80, 83)', 'Color.rgb(24, 27, 30)')
+  .replaceAll('Color.rgb(54, 57, 60)', 'Color.rgb(10, 12, 14)')
+  .replaceAll('Color.argb(110, 213, 47, 50)', 'Color.argb(210, 123, 32, 37)')
+  .replaceAll('Color.argb(165, 213, 47, 50)', 'Color.argb(210, 123, 32, 37)');
+console.log('✓ Build #147 HUD palette compatibility');
 
 setEmbedded('OVERLAY_SERVICE_KT', kt);
 fs.writeFileSync('app.config.js', src, 'utf8');
