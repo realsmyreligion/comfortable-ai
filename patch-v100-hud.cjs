@@ -187,6 +187,55 @@ kt = kt
   .replaceAll('Color.argb(165, 213, 47, 50)', 'Color.argb(210, 123, 32, 37)');
 console.log('✓ Build #147 HUD palette compatibility');
 
+// Structural compaction for the current native eight-card HUD. This works on
+// the generated Kotlin layout rather than depending on one historical shell.
+let structuralChanges = 0;
+
+kt = kt.replace(/cornerRadius = dp\((8|9|1[0-9])\)\.toFloat\(\)/g, () => {
+  structuralChanges += 1;
+  return 'cornerRadius = dp(6).toFloat()';
+});
+
+kt = kt.replace(
+  /setPadding\(dp\((\d+)\), dp\((\d+)\), dp\((\d+)\), dp\((\d+)\)\)/g,
+  (whole, left, top, right, bottom) => {
+    const values = [left, top, right, bottom].map(Number);
+    if (Math.max(...values) < 4) return whole;
+    structuralChanges += 1;
+    const compact = values.map((value, index) => {
+      const factor = index === 1 || index === 3 ? 0.52 : 0.72;
+      return Math.max(value > 0 ? 1 : 0, Math.round(value * factor));
+    });
+    return `setPadding(dp(${compact[0]}), dp(${compact[1]}), dp(${compact[2]}), dp(${compact[3]}))`;
+  }
+);
+
+// Remove excessive transparent bleed-through from panel fill colors while
+// leaving text, alert and outline colors untouched.
+kt = kt.replace(
+  /setColor\(Color\.argb\((\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)\)/g,
+  (whole, alpha, red, green, blue) => {
+    const a = Number(alpha);
+    if (a >= 235) return whole;
+    structuralChanges += 1;
+    return `setColor(Color.argb(242, ${red}, ${green}, ${blue}))`;
+  }
+);
+
+// Compress common layout gaps without touching timing or data values.
+kt = kt.replace(/(topMargin|bottomMargin|leftMargin|rightMargin) = dp\((\d+)\)/g,
+  (whole, name, value) => {
+    const current = Number(value);
+    if (current < 4) return whole;
+    structuralChanges += 1;
+    return `${name} = dp(${Math.max(2, Math.round(current * 0.55))})`;
+  });
+
+if (structuralChanges < 8) {
+  throw new Error(`HUD structural remodel found only ${structuralChanges} layout hooks; refusing a cosmetic-only build`);
+}
+console.log(`✓ structural HUD remodel applied (${structuralChanges} layout changes)`);
+
 setEmbedded('OVERLAY_SERVICE_KT', kt);
 fs.writeFileSync('app.config.js', src, 'utf8');
 console.log('✓ TornPulse compact dashboard-matched HUD remodel complete');
