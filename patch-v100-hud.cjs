@@ -1,30 +1,68 @@
-const fs = require('fs');
-const path = require('path');
-const {execFileSync} = require('child_process');
+const fs=require('fs');
+const path=require('path');
+const {execFileSync}=require('child_process');
+let src=fs.readFileSync('app.config.js','utf8');
+function get(name){const p=`const ${name} = `,s=src.indexOf(p),a=s+p.length;if(s<0||src[a]!=='"')throw Error('Missing '+name);let i=a+1,e=false;for(;i<src.length;i++){const c=src[i];if(e){e=false;continue}if(c==='\\'){e=true;continue}if(c==='"')break}return{a,b:i+1,v:JSON.parse(src.slice(a,i+1))}}
+function set(name,v){const x=get(name);src=src.slice(0,x.a)+JSON.stringify(v)+src.slice(x.b)}
+function one(t,a,b,n){const c=t.split(a).length-1;if(c!==1)throw Error(`Expected 1 ${n}, found ${c}`);console.log('✓ '+n);return t.replace(a,b)}
 
-// TornPulse Baldr-link-only build.
-// Replay the verified Link Hub patch exactly, with no second visual rewrite.
-const VERIFIED_LINK_HUB_COMMIT = '564fa0ec238f9749daaf6bf35e18ed9093e8b817';
-const PATCH_PATH = 'patch-v100-hud.cjs';
-const tempPatch = path.join(process.cwd(), '.tornpulse-baldr-link-hub.cjs');
-
-try {
-  try {
-    execFileSync('git', ['fetch', '--depth=320', 'origin', 'main'], {stdio:'ignore'});
-  } catch (_) {}
-  const patch = execFileSync(
-    'git',
-    ['show', `${VERIFIED_LINK_HUB_COMMIT}:${PATCH_PATH}`],
-    {encoding:'utf8', maxBuffer:32 * 1024 * 1024}
-  );
-  fs.writeFileSync(tempPatch, patch, 'utf8');
-  execFileSync(process.execPath, [tempPatch], {stdio:'inherit'});
-} finally {
-  try { fs.unlinkSync(tempPatch); } catch (_) {}
-}
-
-const config = fs.readFileSync('app.config.js', 'utf8');
-if (!config.includes('Baldr’s Target List') || !config.includes('https://oran.pw/baldrstargets/')) {
-  throw new Error('TornPulse Baldr link verification failed');
-}
-console.log('✓ TornPulse Baldr link-only patch verified; no second dashboard/header pass applied.');
+// Preserve the stable v1.0 screen, replay the proven native HUD upgrade, then
+// discard that historical patch's screen edits before installing this remodel.
+const pristineApp=get('APP_JS').v;
+const nativePatchCommit='564fa0ec238f9749daaf6bf35e18ed9093e8b817';
+const tempPatch=path.join(process.cwd(),'.tornpulse-native-hud-upgrade.cjs');
+try{
+  try{execFileSync('git',['fetch','--depth=320','origin','main'],{stdio:'ignore'})}catch(_){}
+  const code=execFileSync('git',['show',`${nativePatchCommit}:patch-v100-hud.cjs`],{encoding:'utf8',maxBuffer:32*1024*1024});
+  fs.writeFileSync(tempPatch,code,'utf8');
+  execFileSync(process.execPath,[tempPatch],{stdio:'inherit'});
+}finally{try{fs.unlinkSync(tempPatch)}catch(_){}}
+src=fs.readFileSync('app.config.js','utf8');
+set('APP_JS',pristineApp);
+let app=get('APP_JS').v;
+app=one(app,"import {ActivityIndicator, Alert, AppState, NativeModules, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';","import {ActivityIndicator, Alert, AppState, Image, Linking, NativeModules, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';",'visual imports');
+const marker='export default function App() {';
+const helpers=`const BALDR_URL='https://oran.pw/baldrstargets/';
+async function openBaldrList(){try{await Linking.openURL(BALDR_URL)}catch(_){Alert.alert('Could not open Baldr’s List','Open https://oran.pw/baldrstargets/ in your browser.')}}
+function tornClock(ms){return new Date(ms).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'})}
+function tornCountdown(ms){const d=new Date(ms);return formatDuration((59-d.getUTCMinutes())*60+(60-d.getUTCSeconds()))}
+function TPHeader({refreshing,onRefresh,onSettings,onBack}){return <View style={styles.nHeader}><Pressable onPress={onBack||onRefresh} style={styles.nHeadBtn}><Text style={styles.nHeadBtnText}>{onBack?'‹':refreshing?'…':'↻'}</Text></Pressable><View style={styles.nLogoClip}><Image source={require('./tornpulse-header.png')} resizeMode="contain" style={styles.nLogo}/></View><Pressable onPress={onSettings} style={styles.nHeadBtn}><Text style={styles.nHeadBtnText}>⋮</Text></Pressable></View>}
+function TPResource({label,icon,bar,value,sub,accent,last}){const p=bar?projectBar(bar):null;return <View style={[styles.nResource,last&&styles.nResourceLast]}><View style={styles.nResHead}><View style={[styles.nResIcon,{borderColor:accent}]}><Text style={[styles.nResIconText,{color:accent}]}>{icon}</Text></View><Text style={styles.nResLabel}>{label}</Text></View><Text numberOfLines={1} style={styles.nResValue}>{p?(Math.floor(p.projected)+' / '+p.maximum):value}</Text>{p?<View style={styles.nTrack}><View style={[styles.nFill,{width:p.percent+'%',backgroundColor:accent}]}/></View>:<Text style={styles.nResSub}>{sub}</Text>}</View>}
+function TPMini({label,icon,value,accent,onPress}){const W=onPress?Pressable:View;return <W onPress={onPress} style={styles.nMini}><View style={[styles.nMiniIcon,{borderColor:accent}]}><Text style={styles.nMiniIconText}>{icon}</Text></View><View><Text style={styles.nMiniLabel}>{label}</Text><Text style={[styles.nMiniValue,{color:accent}]}>{value}</Text></View></W>}
+function TPBaldrCard(){return <Pressable onPress={openBaldrList} style={styles.nBaldr}><View style={styles.nBaldrMark}><Text style={styles.nBaldrArrow}>↗</Text></View><View style={{flex:1}}><Text style={styles.nEyebrow}>EXTERNAL ATTACK TOOL</Text><Text style={styles.nBaldrTitle}>Baldr’s List</Text><Text style={styles.nBaldrCopy}>Open the established Baldr target list in your browser.</Text></View><View style={styles.nBaldrBtn}><Text style={styles.nBaldrBtnText}>OPEN  ›</Text></View></Pressable>}
+`;
+app=one(app,marker,helpers+marker,'remodel components');
+app=one(app,"  const [clock, setClock] = useState(Date.now());\n  const pendingHudStart = useRef(false);","  const [clock, setClock] = useState(Date.now());\n  const [activePage, setActivePage] = useState('DASHBOARD');\n  const pendingHudStart = useRef(false);",'page navigation');
+const startText='  return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.content}>';
+const start=app.indexOf(startText),end=app.indexOf('\n}\n\nconst C={',start);if(start<0||end<0)throw Error('Connected screen boundaries missing');
+const screen=`  if(activePage==='SETTINGS')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.nPage}>
+    <TPHeader onBack={()=>setActivePage('DASHBOARD')} onSettings={()=>setActivePage('DASHBOARD')}/>
+    <View style={styles.nTitleRow}><View><Text style={styles.nEyebrow}>TORNPULSE 1.0 CONTROL</Text><Text style={styles.nPageTitle}>Settings</Text></View><StatusTag tone={hudRunning?'live':'muted'}>{hudRunning?'HUD ACTIVE':'HUD READY'}</StatusTag></View>
+    <View style={styles.nSettings}><Text style={styles.nSettingsKicker}>FLOATING HUD</Text><Text style={styles.nSettingsTitle}>{hudRunning?'OVERLAY ACTIVE':'OVERLAY READY'}</Text><Text style={styles.nSettingsCopy}>Keep Health, Energy, Nerve and cooldowns visible over Torn.</Text><Pressable onPress={hudRunning?stopHud:startHud} disabled={hudBusy} style={styles.nPrimary}><Text style={styles.nPrimaryText}>{hudBusy?'WORKING…':hudRunning?'STOP HUD':'START HUD'}</Text></Pressable><Text style={styles.nField}>HUD SIZE</Text><View style={styles.presetPills}>{['compact','standard','large'].map(v=><Pressable key={v} onPress={()=>setSetting('hudPreset',v)} style={[styles.preset,settings.hudPreset===v&&styles.presetOn]}><Text style={[styles.presetText,settings.hudPreset===v&&styles.presetTextOn]}>{v.toUpperCase()}</Text></Pressable>)}</View><Pressable onPress={resetHudPosition} style={styles.nOutline}><Text style={styles.nOutlineText}>RESET HUD POSITION</Text></Pressable></View>
+    <Text style={styles.nGroup}>NOTIFICATIONS</Text><ToggleRow label="COOLDOWN READY ALERTS" detail="Drug • Booster • Medical" value={settings.cooldownAlerts!==false} onPress={()=>setSetting('cooldownAlerts',settings.cooldownAlerts===false)}/><ToggleRow label="STATUS RELEASE ALERTS" detail="Hospital and Jail release" value={settings.statusAlerts!==false} onPress={()=>setSetting('statusAlerts',settings.statusAlerts===false)}/><ToggleRow label="INCOMING ATTACK ALERTS" detail={snapshot.attackAccess?'Delivered by TornPulse':'Limited read-only key required'} value={snapshot.attackAccess&&settings.attackAlerts!==false} disabled={!snapshot.attackAccess} onPress={()=>setSetting('attackAlerts',settings.attackAlerts===false)}/>
+    <Text style={styles.nGroup}>CAP WARNINGS</Text><Text style={styles.alertLabel}>ENERGY CAP WARNING</Text><View style={styles.pills}>{[10,15,20,30].map(v=><Pressable key={v} onPress={()=>setWarn('energyWarningMinutes',v)} style={[styles.pill,settings.energyWarningMinutes===v&&styles.pillOn]}><Text style={[styles.pillText,settings.energyWarningMinutes===v&&styles.pillTextOn]}>{v}m</Text></Pressable>)}</View><Text style={styles.alertLabel}>NERVE CAP WARNING</Text><View style={styles.pills}>{[10,15,20,30].map(v=><Pressable key={v} onPress={()=>setWarn('nerveWarningMinutes',v)} style={[styles.pill,settings.nerveWarningMinutes===v&&styles.pillOn]}><Text style={[styles.pillText,settings.nerveWarningMinutes===v&&styles.pillTextOn]}>{v}m</Text></Pressable>)}</View>
+    {!snapshot.demo?<><Text style={styles.nGroup}>SYSTEM</Text><View style={styles.nSettings}><DiagnosticRow label="TORN API" value={snapshot.attackAccess?'LIMITED ACCESS':'CORE ACCESS'} tone={snapshot.attackAccess?'live':'warn'}/><DiagnosticRow label="LIVE DATA" value={staleData?'STALE / RETRYING':'CONNECTED'} tone={staleData?'warn':'live'}/><DiagnosticRow label="FLOATING OVERLAY" value={overlayReady?'PERMISSION GRANTED':'PERMISSION NEEDED'} tone={overlayReady?'live':'warn'}/><DiagnosticRow label="NOTIFICATIONS" value={notificationReady?'PERMISSION GRANTED':'PERMISSION NEEDED'} tone={notificationReady?'live':'warn'}/><Pressable onPress={()=>refreshSystemState().catch(()=>{})} style={styles.nOutline}><Text style={styles.nOutlineText}>REFRESH SYSTEM CHECK</Text></Pressable></View></>:null}
+    <Pressable onPress={snapshot.demo?()=>setSnapshot(null):disconnect} style={styles.nDisconnect}><Text style={styles.nDisconnectText}>{snapshot.demo?'EXIT DEMO':'DISCONNECT API KEY'}</Text></Pressable>
+  </ScrollView></SafeAreaView>;
+  return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.nPage}>
+    <TPHeader refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync()} onSettings={()=>setActivePage('SETTINGS')}/>{error?<View style={styles.error}><View style={styles.errorRail}/><Text style={styles.errorText}>{error}</Text></View>:null}
+    <View style={styles.nResourceStrip}>{snapshot.life?<TPResource label="HEALTH" icon="♡" bar={snapshot.life} accent={C.life}/>:null}<TPResource label="ENERGY" icon="ϟ" bar={snapshot.energy} accent={C.energy}/><TPResource label="NERVE" icon="✤" bar={snapshot.nerve} accent={C.red}/><TPResource label="TORN TIME" icon="◷" value={tornClock(clock)} sub={tornCountdown(clock)} accent="#B8BDC5" last/></View>
+    <View style={styles.nMiniStrip}><TPMini icon="💊" label="DRUG" value={drug===0?'READY':formatDuration(drug)} accent={drug===0?C.green:C.life}/><TPMini icon="🥤" label="BOOSTER" value={booster===0?'READY':formatDuration(booster)} accent={booster===0?C.green:C.amber}/><TPMini icon="🩹" label="MEDICAL" value={medical===0?'READY':formatDuration(medical)} accent={medical===0?C.green:C.red}/><TPMini icon="↗" label="BALDR" value="OPEN" accent={C.red} onPress={openBaldrList}/></View>
+    <TPBaldrCard/><View style={styles.nStatus}><View style={{flex:1}}><Text style={styles.nEyebrow}>CURRENT STATUS</Text><Text style={styles.nStatusTitle}>{statusState.toUpperCase()}</Text><Text style={styles.nStatusCopy}>{statusDescription}</Text></View><StatusTag tone={statusTone(statusState)}>{statusSeconds>0?formatDuration(statusSeconds):(statusState.toLowerCase().includes('okay')?'CLEAR':'ACTIVE')}</StatusTag></View>
+    <View style={styles.nHud}><View style={{flex:1}}><Text style={styles.nEyebrow}>FLOATING HUD  ●  {hudRunning?'ACTIVE':'READY'}</Text><Text style={styles.nHudTitle}>OVERLAY {hudRunning?'ACTIVE':'READY'}</Text><Text style={styles.nHudCopy}>Launch, stop, or tune the overlay from TornPulse.</Text></View><View style={styles.nHudActions}><Pressable onPress={hudRunning?stopHud:startHud} disabled={hudBusy} style={styles.nHudStart}><Text style={styles.nHudStartText}>{hudBusy?'…':hudRunning?'STOP HUD':'START HUD'}</Text></Pressable><Pressable onPress={()=>setActivePage('SETTINGS')} style={styles.nHudSettings}><Text style={styles.nHudSettingsText}>SETTINGS  ›</Text></Pressable></View></View>
+    <View style={styles.nNext}><View style={styles.nextRail}/><View style={{flex:1}}><Text style={styles.nEyebrow}>NEXT MOVE</Text><Text style={styles.nextTitle}>{next.title}</Text><Text style={styles.nextDetail}>{next.detail}</Text></View></View><Text style={styles.nSync}>LAST SYNC  {relativeAge(Math.floor(Number(snapshot.fetchedAt||0)/1000),clock)}  •  v1.0.0</Text>
+  </ScrollView></SafeAreaView>;`;
+app=app.slice(0,start)+screen+app.slice(end);
+const at=app.lastIndexOf('\n});');if(at<0)throw Error('Style endpoint missing');
+const css=`,
+ nPage:{paddingHorizontal:10,paddingTop:Platform.OS==='android'?24:6,paddingBottom:38},nHeader:{height:86,flexDirection:'row',alignItems:'center',borderBottomWidth:1,borderBottomColor:'#7B2025',marginBottom:12},nHeadBtn:{width:48,height:52,alignItems:'center',justifyContent:'center'},nHeadBtnText:{color:'#F2F3F5',fontSize:31,fontWeight:'500'},nLogoClip:{flex:1,height:82,alignItems:'center',justifyContent:'center',overflow:'hidden'},nLogo:{width:210,height:108},
+ nResourceStrip:{minHeight:116,flexDirection:'row',borderWidth:1,borderColor:'#2A3037',borderRadius:17,backgroundColor:'#090C10',overflow:'hidden',marginBottom:10},nResource:{flex:1,paddingHorizontal:9,paddingVertical:11,borderRightWidth:1,borderRightColor:'#2A3037'},nResourceLast:{borderRightWidth:0},nResHead:{flexDirection:'row',alignItems:'center',gap:6},nResIcon:{width:36,height:36,borderWidth:2,borderRadius:11,alignItems:'center',justifyContent:'center'},nResIconText:{fontSize:20,fontWeight:'900'},nResLabel:{color:'#9BA2AC',fontSize:7.5,fontWeight:'900',letterSpacing:.8},nResValue:{color:'#F3F5F7',fontSize:16,fontWeight:'900',marginTop:13},nTrack:{height:6,borderRadius:4,backgroundColor:'#252A31',overflow:'hidden',marginTop:11},nFill:{height:'100%',borderRadius:4},nResSub:{color:'#858E99',fontSize:9,fontWeight:'800',marginTop:9},
+ nMiniStrip:{minHeight:86,flexDirection:'row',borderWidth:1,borderColor:'#2A3037',borderRadius:16,backgroundColor:'#0B0E12',overflow:'hidden',marginBottom:12},nMini:{flex:1,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:8,borderRightWidth:1,borderRightColor:'#2A3037'},nMiniIcon:{width:38,height:38,borderWidth:1.5,borderRadius:19,alignItems:'center',justifyContent:'center'},nMiniIconText:{fontSize:20},nMiniLabel:{color:'#A3AAB4',fontSize:7.5,fontWeight:'900',letterSpacing:.8},nMiniValue:{fontSize:10,fontWeight:'900',marginTop:4},
+ nBaldr:{minHeight:116,flexDirection:'row',alignItems:'center',gap:13,borderWidth:1,borderColor:'#63272B',borderRadius:17,backgroundColor:'#100A0C',padding:16,marginBottom:12},nBaldrMark:{width:52,height:52,borderWidth:2,borderColor:C.red,borderRadius:26,alignItems:'center',justifyContent:'center'},nBaldrArrow:{color:C.red,fontSize:27,fontWeight:'900'},nEyebrow:{color:'#89929E',fontSize:8,fontWeight:'900',letterSpacing:1.2},nBaldrTitle:{color:'#F4F5F7',fontSize:22,fontWeight:'900',marginTop:3},nBaldrCopy:{color:'#929AA5',fontSize:9,lineHeight:14,marginTop:4},nBaldrBtn:{height:43,minWidth:76,borderWidth:1,borderColor:C.red,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:'#211012'},nBaldrBtnText:{color:'#F26065',fontSize:9,fontWeight:'900'},
+ nStatus:{minHeight:105,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,borderWidth:1,borderColor:'#2A3037',borderRadius:16,backgroundColor:'#0B0E12',padding:15,marginBottom:12},nStatusTitle:{color:'#F3F5F7',fontSize:22,fontWeight:'900',marginTop:4},nStatusCopy:{color:'#9BA3AD',fontSize:10,lineHeight:15,marginTop:5,maxWidth:245},nHud:{minHeight:164,flexDirection:'row',gap:12,borderWidth:1,borderColor:'#40474F',borderRadius:17,backgroundColor:'#30343A',padding:16,marginBottom:12},nHudTitle:{color:'#F5F6F7',fontSize:22,fontWeight:'900',marginTop:14},nHudCopy:{color:'#C1C5CA',fontSize:10,lineHeight:16,marginTop:7},nHudActions:{width:118,gap:9,justifyContent:'center'},nHudStart:{height:56,borderWidth:1,borderColor:'#5C8064',borderRadius:12,alignItems:'center',justifyContent:'center',backgroundColor:'#26342A'},nHudStartText:{color:'#74DF83',fontSize:10,fontWeight:'900'},nHudSettings:{height:46,borderWidth:1,borderColor:'#5A6068',borderRadius:11,alignItems:'center',justifyContent:'center'},nHudSettingsText:{color:'#D1D4D8',fontSize:8,fontWeight:'900'},nNext:{backgroundColor:'#0B0E12',borderWidth:1,borderColor:'#2A3037',flexDirection:'row',padding:15,borderRadius:15,marginBottom:12},nSync:{color:'#6E7681',fontSize:8,fontWeight:'900',textAlign:'center'},
+ nTitleRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:14,paddingHorizontal:4},nPageTitle:{color:'#F4F5F7',fontSize:29,fontWeight:'900'},nSettings:{borderWidth:1,borderColor:'#2A3037',borderRadius:16,backgroundColor:'#0B0E12',padding:15,marginBottom:12},nSettingsKicker:{color:C.red,fontSize:8,fontWeight:'900'},nSettingsTitle:{color:'#F4F5F7',fontSize:21,fontWeight:'900',marginTop:4},nSettingsCopy:{color:'#9BA3AD',fontSize:10,lineHeight:16,marginTop:6},nPrimary:{height:48,borderRadius:10,backgroundColor:'#7E2529',alignItems:'center',justifyContent:'center',marginTop:13},nPrimaryText:{color:'#FFF',fontSize:10,fontWeight:'900'},nField:{color:'#89929E',fontSize:8,fontWeight:'900',marginTop:14,marginBottom:8},nOutline:{height:42,borderWidth:1,borderColor:'#3C434B',borderRadius:9,alignItems:'center',justifyContent:'center',marginTop:10},nOutlineText:{color:'#C9CDD2',fontSize:8,fontWeight:'900'},nGroup:{color:'#89929E',fontSize:9,fontWeight:'900',marginTop:10,marginBottom:8},nDisconnect:{height:48,borderWidth:1,borderColor:'#633034',borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#160A0B',marginTop:14},nDisconnectText:{color:'#B8797C',fontSize:9,fontWeight:'900'}
+`;
+app=app.slice(0,at)+css+app.slice(at);
+for(const x of ['TARGET RADAR','OPEN FULL TARGETS PAGE','VERIFY','TargetAssistant','TPScannerMini'])if(app.includes(x))throw Error('Forbidden target UI remains: '+x);
+if(!app.includes('Baldr’s List')||!app.includes('https://oran.pw/baldrstargets/'))throw Error('Baldr link missing');
+set('APP_JS',app);fs.writeFileSync('app.config.js',src,'utf8');console.log('✓ TornPulse remodel complete — no target radar, Baldr link verified.');
