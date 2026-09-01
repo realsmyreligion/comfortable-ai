@@ -474,12 +474,6 @@ const newTornClockPanel = `    // TORNPULSE_DIGITAL_TORN_CLOCK — a server-sync
 kt = replaceExact(kt, oldTornClockPanel, newTornClockPanel, 'icon-free digital Torn Time panel');
 
 replaceNative(
-  `    timeIconShell.addView(makeHudGlyph("TORN TIME", Color.rgb(238, 240, 244), 18), LinearLayout.LayoutParams(dp(18), dp(18)))`,
-  `    timeIconShell.addView(makeText("◷", 18f, Color.rgb(238, 240, 244), true), LinearLayout.LayoutParams(dp(18), dp(18)))`,
-  'Torn Time header symbol'
-);
-
-replaceNative(
   `    val now = currentTornEpochSeconds()\n    if (now == null) {\n      tornClockTimeText?.apply {\n        text = "TCT  SYNCING"\n        setTextColor(Color.rgb(190, 195, 200))\n      }\n      tornHourCountdownText?.apply {\n        text = "HOUR  --:--:--"\n        setTextColor(Color.rgb(190, 195, 200))\n      }\n      return\n    }`,
   `    // Torn time is UTC. Prefer Torn's own timestamp anchor; use device UTC\n    // only during the few moments before the first successful server sync.\n    val now = currentTornEpochSeconds() ?: (System.currentTimeMillis() / 1000L)`,
   'live Torn server-time fallback'
