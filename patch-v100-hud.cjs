@@ -16,10 +16,12 @@ for (const target of [
   'adaptive-icon.png',
   'splash-icon.png',
   'tornpulse-icon.png',
+  'tornpulse-app-icon-v2.png',
   path.join('assets', 'icon.png'),
   path.join('assets', 'adaptive-icon.png'),
   path.join('assets', 'splash-icon.png'),
   path.join('assets', 'tornpulse-icon.png'),
+  path.join('assets', 'tornpulse-app-icon-v2.png'),
 ]) {
   fs.mkdirSync(path.dirname(path.resolve(target)), { recursive: true });
   fs.copyFileSync(officialIcon, target);
@@ -27,11 +29,13 @@ for (const target of [
 console.log('✓ official TP pulse app-icon assets installed');
 
 // Install the eight dashboard category images supplied for this revision.
-for (const name of ['health', 'energy', 'nerve', 'happiness', 'drug', 'booster', 'medical', 'baldr']) {
+// Nerve was already installed by the preceding dashboard build and is not part
+// of this supplied asset pack, so preserve it instead of failing the upgrade.
+for (const name of ['health', 'energy', 'happiness', 'drug', 'booster', 'medical', 'baldr']) {
   const source = path.join(__dirname, `tp-${name}.png`);
   if (!fs.existsSync(source)) throw new Error(`Missing category image: tp-${name}.png`);
 }
-console.log('✓ eight dashboard category images installed');
+console.log('✓ supplied dashboard category images installed; existing Nerve icon preserved');
 
 let src = fs.readFileSync('app.config.js', 'utf8');
 
@@ -43,10 +47,10 @@ if (expoIconCount !== 1) {
 src = src.replace(expoIconMarker, `${expoIconMarker}
   // Official TornPulse TP pulse emblem. Explicit config overrides any stale
   // app.json/default icon retained by Expo or Android prebuild.
-  config.icon = './tornpulse-app-icon.png';
+  config.icon = './tornpulse-app-icon-v2.png';
   config.splash = {
     ...(config.splash || {}),
-    image: './tornpulse-app-icon.png',
+    image: './tornpulse-app-icon-v2.png',
     resizeMode: 'contain',
     backgroundColor: '#050607',
   };
@@ -54,8 +58,8 @@ src = src.replace(expoIconMarker, `${expoIconMarker}
     ...(config.android || {}),
     adaptiveIcon: {
       ...((config.android && config.android.adaptiveIcon) || {}),
-      foregroundImage: './tornpulse-app-icon.png',
-      monochromeImage: './tornpulse-app-icon.png',
+      foregroundImage: './tornpulse-app-icon-v2.png',
+      monochromeImage: './tornpulse-app-icon-v2.png',
       backgroundColor: '#050607',
     },
   };`);
@@ -97,6 +101,20 @@ function replaceExact(text, oldText, newText, label) {
 
 let kt = getEmbedded('OVERLAY_SERVICE_KT').value;
 let api = getEmbedded('TORN_API_JS').value;
+let app = getEmbedded('APP_JS').value;
+
+// Force the in-app CONNECTING TO TORN screen onto a versioned asset name.
+// Metro/Expo and Android may otherwise retain the previous square TP bitmap
+// even after its source file has been overwritten.
+for (const legacyRequire of [
+  "require('./tornpulse-icon.png')",
+  "require('./splash-icon.png')",
+  "require('./icon.png')",
+]) {
+  app = app.split(legacyRequire).join("require('./tornpulse-app-icon-v2.png')");
+}
+setEmbedded('APP_JS', app);
+console.log('✓ connecting screen switched to cache-safe full TP pulse emblem');
 
 // Keep the remodeled fourth vital live in the main app as well as the native
 // overlay. Earlier builds fetched Happiness natively but discarded it in the
