@@ -96,6 +96,29 @@ function replaceExact(text, oldText, newText, label) {
 }
 
 let kt = getEmbedded('OVERLAY_SERVICE_KT').value;
+let api = getEmbedded('TORN_API_JS').value;
+
+// Keep the remodeled fourth vital live in the main app as well as the native
+// overlay. Earlier builds fetched Happiness natively but discarded it in the
+// React Native API normalizer.
+api = replaceExact(
+  api,
+  `  const lifeRaw = payload?.bars?.life;\n  if (!energyRaw || !nerveRaw || !lifeRaw) throw new Error('Unexpected Torn bars response.');\n  return {energy: normalizeBar(energyRaw), nerve: normalizeBar(nerveRaw), life: normalizeBar(lifeRaw)};`,
+  `  const lifeRaw = payload?.bars?.life;\n  const happyRaw = payload?.bars?.happy;\n  if (!energyRaw || !nerveRaw || !lifeRaw || !happyRaw) throw new Error('Unexpected Torn bars response.');\n  return {energy: normalizeBar(energyRaw), nerve: normalizeBar(nerveRaw), life: normalizeBar(lifeRaw), happy: normalizeBar(happyRaw)};`,
+  'main API Happiness normalization'
+);
+api = replaceExact(
+  api,
+  `  const {energy, nerve, life} = validateBars(barsPayload);`,
+  `  const {energy, nerve, life, happy} = validateBars(barsPayload);`,
+  'main API Happiness snapshot binding'
+);
+api = replaceExact(
+  api,
+  `    life,\n    cooldowns,`,
+  `    life,\n    happy,\n    cooldowns,`,
+  'main API Happiness snapshot output'
+);
 
 // Match the remodeled app: deep charcoal, subtle red outline, compact corners.
 const oldShell = `      background = GradientDrawable(
@@ -305,6 +328,156 @@ const onLabels = (kt.match(/"ON"/g) || []).length;
 if (onLabels > 0) kt = kt.replaceAll('"ON"', '"OPEN"');
 console.log(`✓ removed Scanner HUD concept (${scannerLabels} guaranteed list label, ${scannerIcons} legacy icon, ${onLabels} state)`);
 
+// Replace the native floating-HUD canvas symbols with the same supplied PNG
+// artwork used by the React Native dashboard. The images are embedded in the
+// generated Kotlin so Android's overlay service can render them directly.
+function replaceNative(oldText, newText, label) {
+  const count = kt.split(oldText).length - 1;
+  if (count !== 1) throw new Error(`Expected exactly one native ${label}; found ${count}`);
+  kt = kt.replace(oldText, newText);
+  console.log(`✓ native ${label}`);
+}
+
+const nativeIconData = {};
+for (const name of ['health', 'energy', 'nerve', 'happiness', 'drug', 'booster', 'medical', 'baldr']) {
+  nativeIconData[name] = fs.readFileSync(path.join(__dirname, `tp-${name}.png`)).toString('base64');
+}
+
+const iconEngineStart = kt.indexOf('  // TORNPULSE_CLEAN_SLATE_ICON_ENGINE');
+const iconEngineEnd = kt.indexOf('  private fun applyCollapsedState()', iconEngineStart);
+if (iconEngineStart < 0 || iconEngineEnd < 0) throw new Error('Native HUD icon engine not found');
+const nativeIconEngine = `  // TORNPULSE_CATEGORY_IMAGE_ENGINE
+  private val TP_HEALTH_ICON = "${nativeIconData.health}"
+  private val TP_ENERGY_ICON = "${nativeIconData.energy}"
+  private val TP_NERVE_ICON = "${nativeIconData.nerve}"
+  private val TP_HAPPINESS_ICON = "${nativeIconData.happiness}"
+  private val TP_DRUG_ICON = "${nativeIconData.drug}"
+  private val TP_BOOSTER_ICON = "${nativeIconData.booster}"
+  private val TP_MEDICAL_ICON = "${nativeIconData.medical}"
+  private val TP_BALDR_ICON = "${nativeIconData.baldr}"
+
+  private fun makeHudGlyph(kind: String, color: Int, sizeDp: Int = 18): View {
+    val normalized = kind.replace("📋", "").trim()
+    val encoded = when (normalized) {
+      "HEALTH" -> TP_HEALTH_ICON
+      "ENERGY" -> TP_ENERGY_ICON
+      "NERVE" -> TP_NERVE_ICON
+      "HAPPINESS" -> TP_HAPPINESS_ICON
+      "DRUG" -> TP_DRUG_ICON
+      "BOOSTER" -> TP_BOOSTER_ICON
+      "MEDICAL" -> TP_MEDICAL_ICON
+      "BALDR LIST" -> TP_BALDR_ICON
+      else -> TP_BALDR_ICON
+    }
+    val bytes = Base64.decode(encoded, Base64.DEFAULT)
+    return ImageView(this).apply {
+      setImageBitmap(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+      scaleType = ImageView.ScaleType.FIT_CENTER
+      adjustViewBounds = true
+      contentDescription = normalized
+      minimumWidth = dp(sizeDp)
+      minimumHeight = dp(sizeDp)
+    }
+  }
+
+`;
+kt = kt.slice(0, iconEngineStart) + nativeIconEngine + kt.slice(iconEngineEnd);
+console.log('✓ native floating HUD uses all eight supplied category images');
+
+replaceNative(
+  `    timeIconShell.addView(makeHudGlyph("TORN TIME", Color.rgb(238, 240, 244), 18), LinearLayout.LayoutParams(dp(18), dp(18)))`,
+  `    timeIconShell.addView(makeText("◷", 18f, Color.rgb(238, 240, 244), true), LinearLayout.LayoutParams(dp(18), dp(18)))`,
+  'Torn Time header symbol'
+);
+
+// Happiness takes the fourth vital card. Torn Time remains live but moves to
+// its own full-width strip directly beneath the HUD header.
+replaceNative(
+  `    val life: BarState,\n    val energy: BarState,`,
+  `    val life: BarState,\n    val happy: BarState,\n    val energy: BarState,`,
+  'Happiness snapshot field'
+);
+replaceNative(
+  `  private var lifeValueText: TextView? = null\n  private var energyValueText: TextView? = null`,
+  `  private var lifeValueText: TextView? = null\n  private var happinessValueText: TextView? = null\n  private var energyValueText: TextView? = null`,
+  'Happiness value reference'
+);
+replaceNative(
+  `  private var lifeCooldownText: TextView? = null\n  private var energyCooldownText: TextView? = null`,
+  `  private var lifeCooldownText: TextView? = null\n  private var happinessCooldownText: TextView? = null\n  private var energyCooldownText: TextView? = null`,
+  'Happiness subtitle reference'
+);
+replaceNative(
+  `    tornClockRowView = tornClockRow\n\n    val statContainer`,
+  `    tornClockRowView = tornClockRow\n    root.addView(tornClockRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })\n\n    val statContainer`,
+  'top Torn Time strip'
+);
+replaceNative(
+  `    val lifeStat = makeStatColumn("HEALTH", Color.rgb(74, 144, 226))\n    val energyStat = makeStatColumn("ENERGY", Color.rgb(139, 195, 74))\n    val nerveStat = makeStatColumn("NERVE", Color.rgb(231, 76, 60))\n    statContainer.addView(lifeStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(2) })\n    statContainer.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })\n    statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })\n    statContainer.addView(tornClockRow, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })\n    lifeValueText = lifeStat.second\n    energyValueText = energyStat.second\n    nerveValueText = nerveStat.second\n    lifeCooldownText = lifeStat.third\n    energyCooldownText = energyStat.third\n    nerveCooldownText = nerveStat.third`,
+  `    val lifeStat = makeStatColumn("HEALTH", Color.rgb(74, 144, 226))\n    val energyStat = makeStatColumn("ENERGY", Color.rgb(139, 195, 74))\n    val nerveStat = makeStatColumn("NERVE", Color.rgb(231, 76, 60))\n    val happinessStat = makeStatColumn("HAPPINESS", Color.rgb(216, 200, 91))\n    statContainer.addView(lifeStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(2) })\n    statContainer.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })\n    statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })\n    statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })\n    lifeValueText = lifeStat.second\n    energyValueText = energyStat.second\n    nerveValueText = nerveStat.second\n    happinessValueText = happinessStat.second\n    lifeCooldownText = lifeStat.third\n    energyCooldownText = energyStat.third\n    nerveCooldownText = nerveStat.third\n    happinessCooldownText = happinessStat.third`,
+  'Happiness fourth vital card'
+);
+replaceNative(
+  `        life = readBar(bars.getJSONObject("life")),\n        energy = readBar(bars.getJSONObject("energy")),`,
+  `        life = readBar(bars.getJSONObject("life")),\n        happy = readBar(bars.getJSONObject("happy")),\n        energy = readBar(bars.getJSONObject("energy")),`,
+  'Happiness API bar'
+);
+replaceNative(
+  `  private fun renderBars(lifeCurrent: Int, lifeMax: Int, energyCurrent: Int, energyMax: Int, nerveCurrent: Int, nerveMax: Int) {\n    renderBarValue(lifeValueText, lifeCurrent, lifeMax, Color.rgb(74, 144, 226))\n    renderBarValue(energyValueText, energyCurrent, energyMax, Color.rgb(139, 195, 74))\n    renderBarValue(nerveValueText, nerveCurrent, nerveMax, Color.rgb(231, 76, 60))\n  }`,
+  `  private fun renderBars(lifeCurrent: Int, lifeMax: Int, energyCurrent: Int, energyMax: Int, nerveCurrent: Int, nerveMax: Int, happinessCurrent: Int, happinessMax: Int) {\n    renderBarValue(lifeValueText, lifeCurrent, lifeMax, Color.rgb(74, 144, 226))\n    renderBarValue(energyValueText, energyCurrent, energyMax, Color.rgb(139, 195, 74))\n    renderBarValue(nerveValueText, nerveCurrent, nerveMax, Color.rgb(231, 76, 60))\n    renderBarValue(happinessValueText, happinessCurrent, happinessMax, Color.rgb(216, 200, 91))\n  }`,
+  'Happiness value renderer'
+);
+replaceNative(
+  `    lifeValueText?.text = "-- / --"\n    energyValueText?.text = "-- / --"\n    nerveValueText?.text = "-- / --"`,
+  `    lifeValueText?.text = "-- / --"\n    energyValueText?.text = "-- / --"\n    nerveValueText?.text = "-- / --"\n    happinessValueText?.text = "-- / --"`,
+  'empty Happiness value'
+);
+replaceNative(
+  `    lifeValueText?.setTextColor(Color.rgb(137, 145, 156))\n    energyValueText?.setTextColor(Color.rgb(137, 145, 156))\n    nerveValueText?.setTextColor(Color.rgb(137, 145, 156))`,
+  `    lifeValueText?.setTextColor(Color.rgb(137, 145, 156))\n    energyValueText?.setTextColor(Color.rgb(137, 145, 156))\n    nerveValueText?.setTextColor(Color.rgb(137, 145, 156))\n    happinessValueText?.setTextColor(Color.rgb(137, 145, 156))`,
+  'empty Happiness color'
+);
+replaceNative(
+  `      nerveCooldownText?.text = "--"\n      renderCooldownStrip`,
+  `      nerveCooldownText?.text = "--"\n      happinessCooldownText?.text = "--"\n      renderCooldownStrip`,
+  'empty Happiness subtitle'
+);
+replaceNative(
+  `    val life = projected(snap.life, elapsed)\n    val energy = projected(snap.energy, elapsed)\n    val nerve = projected(snap.nerve, elapsed)`,
+  `    val life = projected(snap.life, elapsed)\n    val energy = projected(snap.energy, elapsed)\n    val nerve = projected(snap.nerve, elapsed)\n    val happiness = projected(snap.happy, elapsed)`,
+  'live Happiness projection'
+);
+replaceNative(
+  `    renderBars(life, snap.life.maximum, energy, snap.energy.maximum, nerve, snap.nerve.maximum)`,
+  `    renderBars(life, snap.life.maximum, energy, snap.energy.maximum, nerve, snap.nerve.maximum, happiness, snap.happy.maximum)`,
+  'live Happiness render call'
+);
+replaceNative(
+  `    nerveCooldownText?.apply {\n      text = nerveFull\n      setTextColor(if (nerve >= snap.nerve.maximum) Color.rgb(231, 76, 60) else timerMuted)\n    }`,
+  `    nerveCooldownText?.apply {\n      text = nerveFull\n      setTextColor(if (nerve >= snap.nerve.maximum) Color.rgb(231, 76, 60) else timerMuted)\n    }\n    happinessCooldownText?.apply {\n      text = "CURRENT"\n      setTextColor(Color.rgb(216, 200, 91))\n    }`,
+  'Happiness card subtitle'
+);
+replaceNative(
+  `    lifeValueText = null\n    energyValueText = null`,
+  `    lifeValueText = null\n    happinessValueText = null\n    energyValueText = null`,
+  'clear Happiness value reference'
+);
+replaceNative(
+  `    lifeCooldownText = null\n    energyCooldownText = null`,
+  `    lifeCooldownText = null\n    happinessCooldownText = null\n    energyCooldownText = null`,
+  'clear Happiness subtitle reference'
+);
+
+if ((kt.match(/TORNPULSE_CATEGORY_IMAGE_ENGINE/g) || []).length !== 1 || kt.includes('makeHudGlyph("TORN TIME"')) {
+  throw new Error('Native category image verification failed');
+}
+console.log('✓ native Torn Time moved above four-image vital strip');
+
+if (!api.includes('happy: normalizeBar(happyRaw)') || !api.includes('const {energy, nerve, life, happy}')) {
+  throw new Error('Main API Happiness verification failed');
+}
+
+setEmbedded('TORN_API_JS', api);
 setEmbedded('OVERLAY_SERVICE_KT', kt);
 fs.writeFileSync('app.config.js', src, 'utf8');
 console.log('✓ TornPulse compact dashboard-matched HUD remodel complete');
