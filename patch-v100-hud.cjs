@@ -113,8 +113,26 @@ for (const legacyRequire of [
 ]) {
   app = app.split(legacyRequire).join("require('./tornpulse-app-icon-v2.png')");
 }
+
+const oldLoadingScreen = `  if (loading) return <SafeAreaView style={styles.center}><StatusBar style="light"/>
+    <View style={styles.bootMark}><View style={styles.bootSlash}/><Text style={styles.bootLetters}>TP</Text></View>
+    <Text style={styles.bootTitle}>TORNPULSE</Text><Text style={styles.bootSub}>CONNECTING TO TORN</Text><ActivityIndicator size="small" color={C.red} style={{marginTop:18}}/>
+  </SafeAreaView>;`;
+const newLoadingScreen = `  if (loading) return <SafeAreaView style={styles.center}><StatusBar style="light"/>
+    <View style={styles.bootLogoStage}><View style={styles.bootHaloOuter}/><View style={styles.bootHaloInner}/><Image source={require('./tornpulse-app-icon-v2.png')} resizeMode="contain" style={styles.bootLogo}/></View>
+    <Text style={styles.bootTitle}>TORNPULSE</Text><View style={styles.bootRule}/><Text style={styles.bootSub}>CONNECTING TO TORN</Text><ActivityIndicator size="small" color="#EF3038" style={{marginTop:20}}/>
+  </SafeAreaView>;`;
+const oldLoadingCount = app.split(oldLoadingScreen).length - 1;
+if (oldLoadingCount !== 1) throw new Error(`Expected one drawn TP loading screen; found ${oldLoadingCount}`);
+app = app.replace(oldLoadingScreen, newLoadingScreen);
+
+const oldLoadingStyles = `bootMark:{width:70,height:70,borderWidth:1,borderColor:C.line2,backgroundColor:C.surface,alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'},bootSlash:{position:'absolute',width:10,height:100,backgroundColor:C.red,transform:[{rotate:'18deg'}],left:8},bootLetters:{color:C.text,fontWeight:'900',fontSize:22,letterSpacing:2},bootTitle:{color:C.text,fontWeight:'900',fontSize:27,letterSpacing:2.4,marginTop:18},bootSub:{color:C.muted,fontWeight:'800',fontSize:10,letterSpacing:2,marginTop:7},`;
+const newLoadingStyles = `bootLogoStage:{width:230,height:230,alignItems:'center',justifyContent:'center',position:'relative'},bootHaloOuter:{position:'absolute',width:216,height:216,borderRadius:108,borderWidth:1,borderColor:'#4B1519',backgroundColor:'#08090B'},bootHaloInner:{position:'absolute',width:184,height:184,borderRadius:92,borderWidth:1,borderColor:'#8D2027'},bootLogo:{width:220,height:220},bootTitle:{color:C.text,fontWeight:'900',fontSize:30,letterSpacing:3.2,marginTop:10},bootRule:{width:74,height:2,backgroundColor:'#D52F36',marginTop:12,marginBottom:10},bootSub:{color:'#9CA3AE',fontWeight:'800',fontSize:10,letterSpacing:2.5},`;
+const oldStyleCount = app.split(oldLoadingStyles).length - 1;
+if (oldStyleCount !== 1) throw new Error(`Expected one legacy loading-screen style block; found ${oldStyleCount}`);
+app = app.replace(oldLoadingStyles, newLoadingStyles);
 setEmbedded('APP_JS', app);
-console.log('✓ connecting screen switched to cache-safe full TP pulse emblem');
+console.log('✓ connecting screen redesigned around cache-safe full TP pulse emblem');
 
 // Keep the remodeled fourth vital live in the main app as well as the native
 // overlay. Earlier builds fetched Happiness natively but discarded it in the
