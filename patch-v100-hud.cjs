@@ -384,10 +384,115 @@ const nativeIconEngine = `  // TORNPULSE_CATEGORY_IMAGE_ENGINE
 kt = kt.slice(0, iconEngineStart) + nativeIconEngine + kt.slice(iconEngineEnd);
 console.log('✓ native floating HUD uses all eight supplied category images');
 
+const oldTornClockPanel = `    val tornClockRow = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER
+      setPadding(dp(5), dp(4), dp(5), dp(4))
+      minimumHeight = dp(92)
+      visibility = if (hudCollapsed) View.GONE else View.VISIBLE
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(6).toFloat()
+        setColor(Color.argb(242, 2, 3, 5))
+        setStroke(dp(1), Color.argb(175, 227, 52, 60))
+      }
+    }
+    val timeHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+    val timeIconShell = LinearLayout(this).apply {
+      gravity = Gravity.CENTER
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(6).toFloat()
+        setColor(Color.argb(242, 238, 240, 244))
+        setStroke(dp(1), Color.argb(200, 238, 240, 244))
+      }
+    }
+    timeIconShell.addView(makeHudGlyph("TORN TIME", Color.rgb(238, 240, 244), 18), LinearLayout.LayoutParams(dp(18), dp(18)))
+    timeHead.addView(timeIconShell, LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(4) })
+    makeText("TORN TIME", maxOf(7.5f, cooldownSize - 0.2f), Color.rgb(238, 240, 244), true).also {
+      it.letterSpacing = 0.055f; it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); it.includeFontPadding = false; it.maxLines = 1
+      timeHead.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornClockRow.addView(timeHead, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    tornClockTimeText = makeText("TCT --:--:--", maxOf(10.5f, barsSize - 1f), Color.rgb(247, 248, 250), true).also {
+      it.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); it.setPadding(0, dp(5), 0, 0); it.includeFontPadding = false; it.maxLines = 1; it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornHourCountdownText = makeText("HOUR --:--:--", maxOf(7f, cooldownSize - .6f), Color.rgb(205, 209, 215), true).also {
+      it.typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); it.setPadding(0, dp(4), 0, 0); it.includeFontPadding = false; it.maxLines = 1; it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    val timeAccent = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; cornerRadius = dp(3).toFloat(); setColor(Color.rgb(227,52,60)) } }
+    tornClockRow.addView(timeAccent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(3)).apply { topMargin = dp(4); leftMargin = dp(2); rightMargin = dp(2) })
+    tornClockRowView = tornClockRow`;
+
+const newTornClockPanel = `    // TORNPULSE_DIGITAL_TORN_CLOCK — a server-synchronized UTC/TCT display.
+    val tornClockRow = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER
+      setPadding(dp(8), dp(7), dp(8), dp(7))
+      minimumHeight = dp(78)
+      visibility = if (hudCollapsed) View.GONE else View.VISIBLE
+      background = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(Color.rgb(8, 10, 12), Color.rgb(2, 3, 5))
+      ).apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(6).toFloat()
+        setStroke(dp(1), Color.argb(205, 198, 45, 53))
+      }
+    }
+    makeText("TORN CITY  •  SERVER TIME", maxOf(6.8f, cooldownSize - 1.2f), Color.rgb(200, 69, 75), true).also {
+      it.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+      it.letterSpacing = 0.12f
+      it.includeFontPadding = false
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornClockTimeText = makeText("--:--:--", maxOf(17f, barsSize + 3.5f), Color.rgb(248, 249, 250), true).also {
+      it.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+      it.letterSpacing = 0.08f
+      it.setPadding(0, dp(3), 0, 0)
+      it.includeFontPadding = false
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    tornHourCountdownText = makeText("NEXT HOUR  --:--:--", maxOf(7.2f, cooldownSize - .4f), Color.rgb(205, 209, 215), true).also {
+      it.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+      it.letterSpacing = 0.055f
+      it.setPadding(0, dp(3), 0, 0)
+      it.includeFontPadding = false
+      it.maxLines = 1
+      it.textAlignment = View.TEXT_ALIGNMENT_CENTER
+      tornClockRow.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+    val timeAccent = View(this).apply { background = GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; cornerRadius = dp(2).toFloat(); setColor(Color.rgb(227,52,60)) } }
+    tornClockRow.addView(timeAccent, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(5) })
+    tornClockRowView = tornClockRow`;
+kt = replaceExact(kt, oldTornClockPanel, newTornClockPanel, 'icon-free digital Torn Time panel');
+
 replaceNative(
   `    timeIconShell.addView(makeHudGlyph("TORN TIME", Color.rgb(238, 240, 244), 18), LinearLayout.LayoutParams(dp(18), dp(18)))`,
   `    timeIconShell.addView(makeText("◷", 18f, Color.rgb(238, 240, 244), true), LinearLayout.LayoutParams(dp(18), dp(18)))`,
   'Torn Time header symbol'
+);
+
+replaceNative(
+  `    val now = currentTornEpochSeconds()\n    if (now == null) {\n      tornClockTimeText?.apply {\n        text = "TCT  SYNCING"\n        setTextColor(Color.rgb(190, 195, 200))\n      }\n      tornHourCountdownText?.apply {\n        text = "HOUR  --:--:--"\n        setTextColor(Color.rgb(190, 195, 200))\n      }\n      return\n    }`,
+  `    // Torn time is UTC. Prefer Torn's own timestamp anchor; use device UTC\n    // only during the few moments before the first successful server sync.\n    val now = currentTornEpochSeconds() ?: (System.currentTimeMillis() / 1000L)`,
+  'live Torn server-time fallback'
+);
+replaceNative(
+  `      text = "TCT  \${clockStamp(daySeconds)}"`,
+  `      text = clockStamp(daySeconds)`,
+  'digital Torn clock face'
+);
+replaceNative(
+  `      text = "HOUR  \${clockStamp(remaining)}"`,
+  `      text = "NEXT HOUR  \${clockStamp(remaining)}"`,
+  'digital next-hour countdown'
 );
 
 // Happiness takes the fourth vital card. Torn Time remains live but moves to
