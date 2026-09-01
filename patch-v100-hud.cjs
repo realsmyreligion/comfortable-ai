@@ -402,6 +402,18 @@ const nativeIconEngine = `  // TORNPULSE_CATEGORY_IMAGE_ENGINE
   private val TP_MEDICAL_ICON = "${nativeIconData.medical}"
   private val TP_BALDR_ICON = "${nativeIconData.baldr}"
 
+  private fun openBaldrList() {
+    try {
+      val intent = Intent(
+        Intent.ACTION_VIEW,
+        android.net.Uri.parse("https://oran.pw/baldrstargets/")
+      ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+      startActivity(intent)
+    } catch (_: Exception) {
+      // Keep the floating HUD stable if no browser is currently available.
+    }
+  }
+
   private fun makeHudGlyph(kind: String, color: Int, sizeDp: Int = 18): View {
     val normalized = kind.replace("📋", "").trim()
     val encoded = when (normalized) {
@@ -423,6 +435,28 @@ const nativeIconEngine = `  // TORNPULSE_CATEGORY_IMAGE_ENGINE
       contentDescription = normalized
       minimumWidth = dp(sizeDp)
       minimumHeight = dp(sizeDp)
+      if (normalized == "BALDR LIST") {
+        isClickable = true
+        isFocusable = true
+        contentDescription = "Open Baldr's List"
+        setOnClickListener {
+          performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+          openBaldrList()
+        }
+        // The glyph is placed inside the Baldr tile's visual shell. Make that
+        // shell clickable too, giving the user a practical finger-sized target.
+        post {
+          (parent as? View)?.apply {
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Open Baldr's List"
+            setOnClickListener {
+              performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+              openBaldrList()
+            }
+          }
+        }
+      }
     }
   }
 
