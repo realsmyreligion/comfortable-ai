@@ -398,7 +398,8 @@ const collapsedFunction = '  private fun applyCollapsedState() {';
 const collapsedFunctionCount = kt.split(collapsedFunction).length - 1;
 if (collapsedFunctionCount !== 1) throw new Error(`Expected one applyCollapsedState function; found ${collapsedFunctionCount}`);
 kt = kt.replace(collapsedFunction, `${collapsedFunction}
-    overlayView?.post { railView ->
+    overlayView?.post {
+      val railView = overlayView ?: return@post
       val railParams = params ?: return@post
       val screen = resources.displayMetrics
       val expectedWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
