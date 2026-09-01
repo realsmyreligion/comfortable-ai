@@ -26,6 +26,13 @@ for (const target of [
 }
 console.log('✓ official TP pulse app-icon assets installed');
 
+// Install the eight dashboard category images supplied for this revision.
+for (const name of ['health', 'energy', 'nerve', 'happiness', 'drug', 'booster', 'medical', 'baldr']) {
+  const source = path.join(__dirname, `tp-${name}.png`);
+  if (!fs.existsSync(source)) throw new Error(`Missing category image: tp-${name}.png`);
+}
+console.log('✓ eight dashboard category images installed');
+
 let src = fs.readFileSync('app.config.js', 'utf8');
 
 const expoIconMarker = `  config.userInterfaceStyle = 'dark';`;
