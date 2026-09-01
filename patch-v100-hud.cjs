@@ -357,6 +357,59 @@ if (structuralChanges < 8) {
 }
 console.log(`✓ structural HUD remodel applied (${structuralChanges} layout changes)`);
 
+// Dock the HUD to the Android screen's right edge on first use of this build.
+// The migration runs once so an existing left/center saved position is moved,
+// then normal drag persistence takes over again. Clearing/resetting the saved
+// position also returns to this right-edge default.
+const rightDockPattern = /(\s+val display = resources\.displayMetrics\n)\s+val savedX = prefs\.getInt\("x", dp\(\d+\)\)/;
+const rightDockMatches = kt.match(rightDockPattern);
+if (!rightDockMatches) throw new Error('Could not locate native HUD saved X position');
+kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_rail_v1", false)
+    if (!rightRailMigrated) {
+      hudCollapsed = true
+      prefs.edit().putBoolean("right_rail_v1", true).putBoolean("collapsed", true).apply()
+    }
+    val initialDockWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
+    val defaultRightX = max(0, display.widthPixels - dp(initialDockWidthDp) - dp(8))
+    val rightDockMigrated = prefs.getBoolean("right_dock_v1", false)
+    val savedX = if (rightDockMigrated) prefs.getInt("x", defaultRightX) else defaultRightX
+    if (!rightDockMigrated) {
+      prefs.edit().putBoolean("right_dock_v1", true).putInt("x", defaultRightX).apply()
+    }`);
+console.log('✓ floating HUD defaults and migrates to the right edge');
+
+// A side rail must begin collapsed. Upgrade the native default and any
+// preference-backed default without removing the user's ability to expand it.
+let collapsedDefaults = 0;
+kt = kt.replace(/private var hudCollapsed = false/g, () => {
+  collapsedDefaults += 1;
+  return 'private var hudCollapsed = true';
+});
+kt = kt.replace(/getBoolean\("collapsed", false\)/g, () => {
+  collapsedDefaults += 1;
+  return 'getBoolean("collapsed", true)';
+});
+if (collapsedDefaults < 1) throw new Error('Could not locate native HUD collapsed-state default');
+
+// Re-anchor after every collapse/expand layout pass. The width changes in
+// place, so calculate the rendered width after layout and grow inward from the
+// fixed right edge rather than letting the panel drift toward screen center.
+const collapsedFunction = '  private fun applyCollapsedState() {';
+const collapsedFunctionCount = kt.split(collapsedFunction).length - 1;
+if (collapsedFunctionCount !== 1) throw new Error(`Expected one applyCollapsedState function; found ${collapsedFunctionCount}`);
+kt = kt.replace(collapsedFunction, `${collapsedFunction}
+    overlayView?.post { railView ->
+      val railParams = params ?: return@post
+      val screen = resources.displayMetrics
+      val expectedWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
+      val renderedWidth = max(railView.width, dp(expectedWidthDp))
+      railParams.x = max(0, screen.widthPixels - renderedWidth - dp(8))
+      try { windowManager.updateViewLayout(railView, railParams) } catch (_: Exception) {}
+      getSharedPreferences("comfortable_hud", Context.MODE_PRIVATE)
+        .edit().putInt("x", railParams.x).apply()
+    }`);
+console.log('✓ HUD starts as a right-side rail and expands inward');
+
 // The internal scanner no longer exists. Re-purpose its HUD tile as the
 // visual Baldr's List entry and use an unmistakable list symbol.
 const scannerLabels = (kt.match(/"SCANNER"/g) || []).length;
