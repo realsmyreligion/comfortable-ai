@@ -231,7 +231,7 @@ kt = replaceExact(kt,
 kt = replaceExact(kt,
   `  private var currentMinWidthDp = 238
   private var currentCollapsedWidthDp = 170`,
-  `  private var currentMinWidthDp = 168
+  `  private var currentMinWidthDp = 118
   private var currentCollapsedWidthDp = 44`,
   'compact default dimensions');
 
@@ -364,10 +364,10 @@ console.log(`✓ structural HUD remodel applied (${structuralChanges} layout cha
 const rightDockPattern = /(\s+val display = resources\.displayMetrics\n)\s+val savedX = prefs\.getInt\("x", dp\(\d+\)\)/;
 const rightDockMatches = kt.match(rightDockPattern);
 if (!rightDockMatches) throw new Error('Could not locate native HUD saved X position');
-kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_compact_tile_v1", false)
+kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("approved_right_rail_v1", false)
     if (!rightRailMigrated) {
       hudCollapsed = false
-      prefs.edit().putBoolean("right_compact_tile_v1", true).putBoolean("hud_collapsed", false).apply()
+      prefs.edit().putBoolean("approved_right_rail_v1", true).putBoolean("hud_collapsed", false).apply()
     }
     val initialDockWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
     val defaultRightX = max(0, display.widthPixels - dp(initialDockWidthDp) - dp(8))
@@ -714,15 +714,11 @@ replaceNative(
     statContainer.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })`,
-  `    val vitalRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-    val vitalRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-    vitalRowOne.addView(lifeStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
-    vitalRowOne.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
-    vitalRowTwo.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
-    vitalRowTwo.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
-    statContainer.addView(vitalRowOne, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    statContainer.addView(vitalRowTwo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
-  'compact two-by-two vital tile grid'
+  `    statContainer.addView(lifeStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    statContainer.addView(energyStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
+    statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
+    statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })`,
+  'single-column vital rail'
 );
 replaceNative(
   `    val cooldownRow = LinearLayout(this).apply {
@@ -736,16 +732,84 @@ replaceNative(
     cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })`,
-  `    val utilityRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-    val utilityRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-    utilityRowOne.addView(drugChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
-    utilityRowOne.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
-    utilityRowTwo.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
-    utilityRowTwo.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
-    cooldownRow.addView(utilityRowOne, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    cooldownRow.addView(utilityRowTwo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
-  'compact two-by-two utility tile grid'
+  `    cooldownRow.addView(drugChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
+    cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
+    cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })`,
+  'single-column utility rail'
 );
+
+// Match the approved mockup: each item is one short horizontal rail row with
+// the supplied image at left and its live label/value at right.
+const statFunctionPattern = /    fun makeStatColumn\(label: String, color: Int\): Triple<LinearLayout, TextView, TextView> \{[\s\S]*?      return Triple\(column, valueView, timerView\)\n    \}/;
+if (!statFunctionPattern.test(kt)) throw new Error('Could not locate vital row renderer');
+kt = kt.replace(statFunctionPattern, `    fun makeStatColumn(label: String, color: Int): Triple<LinearLayout, TextView, TextView> {
+      val row = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(4), dp(3), dp(4), dp(3))
+        minimumHeight = dp(48)
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(4).toFloat()
+          setColor(Color.argb(246, 3, 4, 6))
+          setStroke(dp(1), Color.argb(110, 72, 78, 86))
+        }
+      }
+      val iconShell = LinearLayout(this).apply { gravity = Gravity.CENTER }
+      iconShell.addView(makeHudGlyph(label, color, 25), LinearLayout.LayoutParams(dp(25), dp(25)))
+      row.addView(iconShell, LinearLayout.LayoutParams(dp(32), dp(32)).apply { rightMargin = dp(4) })
+      val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+      val labelView = makeText(label, 7.2f, color, true).apply {
+        letterSpacing = 0.035f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
+      }
+      val valueView = makeText("-- / --", 10.2f, Color.rgb(247, 248, 250), true).apply {
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
+      }
+      val timerView = makeText("--", 6.2f, Color.rgb(190, 196, 204), true).apply {
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
+      }
+      copy.addView(labelView)
+      copy.addView(valueView)
+      copy.addView(timerView)
+      row.addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+      return Triple(row, valueView, timerView)
+    }`);
+
+const utilityFunctionPattern = /    fun makeCooldownChip\(label: String, labelColor: Int\): Pair<LinearLayout, TextView> \{[\s\S]*?      return Pair\(chip, valueView\)\n    \}/;
+if (!utilityFunctionPattern.test(kt)) throw new Error('Could not locate utility row renderer');
+kt = kt.replace(utilityFunctionPattern, `    fun makeCooldownChip(label: String, labelColor: Int): Pair<LinearLayout, TextView> {
+      val chip = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(4), dp(3), dp(4), dp(3))
+        minimumHeight = dp(43)
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.RECTANGLE
+          cornerRadius = dp(4).toFloat()
+          setColor(Color.argb(246, 3, 4, 6))
+          setStroke(dp(1), Color.argb(110, 72, 78, 86))
+        }
+      }
+      val iconShell = LinearLayout(this).apply { gravity = Gravity.CENTER }
+      iconShell.addView(makeHudGlyph(label, labelColor, 25), LinearLayout.LayoutParams(dp(25), dp(25)))
+      chip.addView(iconShell, LinearLayout.LayoutParams(dp(32), dp(32)).apply { rightMargin = dp(4) })
+      val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+      val labelView = makeText(label.replace("📋", "").trim(), 7.0f, labelColor, true).apply {
+        letterSpacing = .035f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
+      }
+      val valueView = makeText("--", 9.2f, Color.rgb(95,214,132), true).apply {
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
+      }
+      copy.addView(labelView)
+      copy.addView(valueView)
+      chip.addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+      return Pair(chip, valueView)
+    }`);
+
+// Runtime width variants are all constrained to the same approved slim rail.
+kt = kt.replace(/    val minWidthDp = when \{[\s\S]*?\n    \}/, `    val minWidthDp = 118`);
+kt = kt.replace('setPadding(\n        if (hudCollapsed) 0 else dp(8),\n        if (hudCollapsed) 0 else dp(7),\n        if (hudCollapsed) 0 else dp(8),\n        if (hudCollapsed) 0 else dp(7)\n      )', 'setPadding(dp(3), dp(4), dp(3), dp(4))');
 
 // Fit all nine information blocks down a normal Android display.
 kt = kt
@@ -785,10 +849,10 @@ kt = kt.replace(windowParamsPattern, `    val lp = WindowManager.LayoutParams(
       dp(currentMinWidthDp),
       WindowManager.LayoutParams.WRAP_CONTENT,`);
 
-if (!kt.includes('vitalRowOne') || !kt.includes('utilityRowOne') || !kt.includes('right_compact_tile_v1')) {
+if (!kt.includes('single-column') && (!kt.includes('approved_right_rail_v1') || !kt.includes('minimumHeight = dp(48)'))) {
   throw new Error('Right sidebar structural verification failed');
 }
-console.log('✓ complete HUD rebuilt as one fixed-width compact right-side tile');
+console.log('✓ complete HUD rebuilt as the approved fixed-width right-edge rail');
 
 if ((kt.match(/TORNPULSE_CATEGORY_IMAGE_ENGINE/g) || []).length !== 1 || kt.includes('makeHudGlyph("TORN TIME"')) {
   throw new Error('Native category image verification failed');

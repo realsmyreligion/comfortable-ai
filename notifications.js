@@ -14,6 +14,11 @@ Notifications.setNotificationHandler({
   }),
 });
 
+export async function getNotificationPermission() {
+  const current = await Notifications.getPermissionsAsync();
+  return Boolean(current.granted);
+}
+
 export async function prepareNotifications() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
@@ -26,7 +31,6 @@ export async function prepareNotifications() {
 
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
-
   const requested = await Notifications.requestPermissionsAsync();
   return requested.granted;
 }
@@ -42,14 +46,8 @@ async function clearOurAlerts() {
 
 async function schedule(title, body, date, kind) {
   if (!(date instanceof Date) || date.getTime() <= Date.now() + 5000) return;
-
   await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      sound: 'default',
-      data: {source: SOURCE, kind},
-    },
+    content: {title, body, sound: 'default', data: {source: SOURCE, kind}},
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
       date,
@@ -58,77 +56,45 @@ async function schedule(title, body, date, kind) {
   });
 }
 
-function atUnix(unixSeconds) {
-  return new Date(Number(unixSeconds || 0) * 1000);
-}
+function atUnix(unixSeconds) { return new Date(Number(unixSeconds || 0) * 1000); }
+function warningAt(unixSeconds, minutes) { return new Date(Number(unixSeconds || 0) * 1000 - Number(minutes || 0) * 60_000); }
 
-function warningAt(unixSeconds, minutes) {
-  return new Date(Number(unixSeconds || 0) * 1000 - Number(minutes || 0) * 60_000);
-}
+let scheduling = Promise.resolve();
 
-export async function scheduleSnapshotAlerts(snapshot, settings) {
+async function scheduleSnapshotAlertsNow(snapshot, settings) {
   await clearOurAlerts();
 
-  // TornPulse's release adapter normalizes bar full_time into an absolute
-  // Unix timestamp before this function is called.
   if (snapshot.energy.full_time > 0) {
-    await schedule(
-      'ϟ Energy warning',
-      `Energy reaches cap in ${settings.energyWarningMinutes} minutes.`,
-      warningAt(snapshot.energy.full_time, settings.energyWarningMinutes),
-      'energy-warning'
-    );
-    await schedule(
-      'ϟ Energy full',
-      'Your Energy is full.',
-      atUnix(snapshot.energy.full_time),
-      'energy-full'
-    );
+    await schedule('ϟ Energy warning', `Energy reaches cap in ${settings.energyWarningMinutes} minutes.`, warningAt(snapshot.energy.full_time, settings.energyWarningMinutes), 'energy-warning');
+    await schedule('ϟ Energy full', 'Your Energy is full.', atUnix(snapshot.energy.full_time), 'energy-full');
   }
 
   if (snapshot.nerve.full_time > 0) {
-    await schedule(
-      '✺ Nerve warning',
-      `Nerve reaches cap in ${settings.nerveWarningMinutes} minutes.`,
-      warningAt(snapshot.nerve.full_time, settings.nerveWarningMinutes),
-      'nerve-warning'
-    );
-    await schedule(
-      '✺ Nerve full',
-      'Your Nerve is full.',
-      atUnix(snapshot.nerve.full_time),
-      'nerve-full'
-    );
+    await schedule('✺ Nerve warning', `Nerve reaches cap in ${settings.nerveWarningMinutes} minutes.`, warningAt(snapshot.nerve.full_time, settings.nerveWarningMinutes), 'nerve-warning');
+    await schedule('✺ Nerve full', 'Your Nerve is full.', atUnix(snapshot.nerve.full_time), 'nerve-full');
   }
 
-  if (settings.cooldownAlerts) {
+  if (settings.cooldownAlerts !== false) {
     const now = Date.now();
+    if (snapshot.cooldowns.drug > 5) await schedule('💊 Drug ready', 'Your drug cooldown is clear.', new Date(now + snapshot.cooldowns.drug * 1000), 'drug');
+    if (snapshot.cooldowns.booster > 5) await schedule('🥤 Booster ready', 'Your booster cooldown is clear.', new Date(now + snapshot.cooldowns.booster * 1000), 'booster');
+    if (snapshot.cooldowns.medical > 5) await schedule('✚ Medical ready', 'Your medical cooldown is clear.', new Date(now + snapshot.cooldowns.medical * 1000), 'medical');
+  }
 
-    if (snapshot.cooldowns.drug > 5) {
-      await schedule(
-        '💊 Drug ready',
-        'Your drug cooldown is clear.',
-        new Date(now + snapshot.cooldowns.drug * 1000),
-        'drug'
-      );
-    }
-
-    if (snapshot.cooldowns.booster > 5) {
-      await schedule(
-        '🥤 Booster ready',
-        'Your booster cooldown is clear.',
-        new Date(now + snapshot.cooldowns.booster * 1000),
-        'booster'
-      );
-    }
-
-    if (snapshot.cooldowns.medical > 5) {
-      await schedule(
-        '✚ Medical ready',
-        'Your medical cooldown is clear.',
-        new Date(now + snapshot.cooldowns.medical * 1000),
-        'medical'
-      );
+  if (settings.statusAlerts !== false) {
+    const state = String(snapshot.status?.state || '').toLowerCase();
+    const until = Number(snapshot.status?.until || 0);
+    if (until > Math.floor(Date.now()/1000) + 5 && (state.includes('hospital') || state.includes('jail'))) {
+      const label = state.includes('hospital') ? 'Hospital' : 'Jail';
+      await schedule(`✓ ${label} clear`, `Your ${label.toLowerCase()} status should now be clear.`, atUnix(until), `status-${label.toLowerCase()}`);
     }
   }
+}
+
+export function scheduleSnapshotAlerts(snapshot, settings) {
+  scheduling = scheduling.then(
+    () => scheduleSnapshotAlertsNow(snapshot, settings),
+    () => scheduleSnapshotAlertsNow(snapshot, settings)
+  );
+  return scheduling;
 }
