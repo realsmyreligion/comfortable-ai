@@ -38,12 +38,13 @@ function embedded(name) {
 
 const hud = embedded('OVERLAY_SERVICE_KT');
 const required = [
-  'private var currentMinWidthDp = 118',
+  'private var currentMinWidthDp = 100',
   'approved_right_rail_v1',
   'gravity = Gravity.TOP or Gravity.END',
   'railParams.x = 0',
   'lp.width = targetWidth',
   'hudCollapsed = !hudCollapsed',
+  'params = lp\n    applyCollapsedState()',
   'minimumHeight = dp(48)',
   'minimumHeight = dp(43)',
   'TORNPULSE_CATEGORY_IMAGE_ENGINE',

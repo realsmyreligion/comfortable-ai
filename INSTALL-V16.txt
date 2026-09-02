@@ -1,0 +1,17 @@
+TORNPULSE V16 — THINNER LOCKED RIGHT-EDGE RAIL
+
+1. Extract this ZIP.
+2. Upload every included file and folder to the root of the comfortable-ai GitHub repository.
+3. Allow matching files to be replaced.
+4. Commit the upload and let the Android workflow run.
+
+This package restores the clean pre-patch app.config.js required by the workflow,
+applies the approved narrow right-edge HUD, and converts every supplied TornPulse
+picture into a genuine Android-safe PNG before the GitHub build.
+
+The HUD is hard-anchored flush to the right edge. Horizontal dragging is
+disabled, vertical positioning remains available, and tapping the TP emblem
+switches between the full rail and the compact minimized tab.
+
+The expanded rail is now 100dp wide instead of 118dp. Its icons, logo, and
+typography have been tightened proportionally; the minimized tab stays 44dp.

@@ -231,7 +231,7 @@ kt = replaceExact(kt,
 kt = replaceExact(kt,
   `  private var currentMinWidthDp = 238
   private var currentCollapsedWidthDp = 170`,
-  `  private var currentMinWidthDp = 118
+  `  private var currentMinWidthDp = 100
   private var currentCollapsedWidthDp = 44`,
   'compact default dimensions');
 
@@ -756,13 +756,13 @@ kt = kt.replace(statFunctionPattern, `    fun makeStatColumn(label: String, colo
         }
       }
       val iconShell = LinearLayout(this).apply { gravity = Gravity.CENTER }
-      iconShell.addView(makeHudGlyph(label, color, 25), LinearLayout.LayoutParams(dp(25), dp(25)))
-      row.addView(iconShell, LinearLayout.LayoutParams(dp(32), dp(32)).apply { rightMargin = dp(4) })
+      iconShell.addView(makeHudGlyph(label, color, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
+      row.addView(iconShell, LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(3) })
       val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-      val labelView = makeText(label, 7.2f, color, true).apply {
+      val labelView = makeText(label, 6.4f, color, true).apply {
         letterSpacing = 0.035f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
       }
-      val valueView = makeText("-- / --", 10.2f, Color.rgb(247, 248, 250), true).apply {
+      val valueView = makeText("-- / --", 9.0f, Color.rgb(247, 248, 250), true).apply {
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
       }
       val timerView = makeText("--", 6.2f, Color.rgb(190, 196, 204), true).apply {
@@ -791,13 +791,13 @@ kt = kt.replace(utilityFunctionPattern, `    fun makeCooldownChip(label: String,
         }
       }
       val iconShell = LinearLayout(this).apply { gravity = Gravity.CENTER }
-      iconShell.addView(makeHudGlyph(label, labelColor, 25), LinearLayout.LayoutParams(dp(25), dp(25)))
-      chip.addView(iconShell, LinearLayout.LayoutParams(dp(32), dp(32)).apply { rightMargin = dp(4) })
+      iconShell.addView(makeHudGlyph(label, labelColor, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
+      chip.addView(iconShell, LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(3) })
       val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-      val labelView = makeText(label.replace("📋", "").trim(), 7.0f, labelColor, true).apply {
+      val labelView = makeText(label.replace("📋", "").trim(), 6.2f, labelColor, true).apply {
         letterSpacing = .035f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
       }
-      val valueView = makeText("--", 9.2f, Color.rgb(95,214,132), true).apply {
+      val valueView = makeText("--", 8.4f, Color.rgb(95,214,132), true).apply {
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
       }
       copy.addView(labelView)
@@ -807,7 +807,7 @@ kt = kt.replace(utilityFunctionPattern, `    fun makeCooldownChip(label: String,
     }`);
 
 // Runtime width variants are all constrained to the same approved slim rail.
-kt = kt.replace(/    val minWidthDp = when \{[\s\S]*?\n    \}/, `    val minWidthDp = 118`);
+kt = kt.replace(/    val minWidthDp = when \{[\s\S]*?\n    \}/, `    val minWidthDp = 100`);
 kt = kt.replace('setPadding(\n        if (hudCollapsed) 0 else dp(8),\n        if (hudCollapsed) 0 else dp(7),\n        if (hudCollapsed) 0 else dp(8),\n        if (hudCollapsed) 0 else dp(7)\n      )', 'setPadding(dp(3), dp(4), dp(3), dp(4))');
 
 // Fit all nine information blocks down a normal Android display.
@@ -847,7 +847,7 @@ kt = kt
   .replaceAll('lp.x = min(max(0, lp.x), max(0, display.widthPixels - targetWidth))', 'lp.gravity = Gravity.TOP or Gravity.END\n      lp.width = targetWidth\n      lp.x = 0')
   .replaceAll('if (hudCollapsed) decodeInlineLogo(HUD_TP_BASE64) else decodeInlineLogo(HUD_WORDMARK_BASE64)', 'decodeInlineLogo(HUD_TP_BASE64)');
 
-kt = kt.replace(/    currentExpandedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoWidthDp = 108');
+kt = kt.replace(/    currentExpandedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoWidthDp = 90');
 kt = kt.replace(/    currentExpandedLogoHeightDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoHeightDp = 76');
 kt = kt.replace(/    currentCollapsedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentCollapsedLogoWidthDp = 40');
 kt = kt.replace(/    currentCollapsedLogoHeightDp = when \{[\s\S]*?\n    \}/, '    currentCollapsedLogoHeightDp = 40');
@@ -859,6 +859,10 @@ kt = kt.replace(`    root.setPadding(
       if (hudCollapsed) 0 else dp(8),
       if (hudCollapsed) 0 else dp(7)
     )`, `    root.setPadding(if (hudCollapsed) 0 else dp(3), if (hudCollapsed) 0 else dp(4), if (hudCollapsed) 0 else dp(3), if (hudCollapsed) 0 else dp(4))`);
+
+// Apply the right anchor and collapsed/expanded visibility immediately on
+// service start, rather than waiting for the first logo tap.
+kt = kt.replace('    params = lp\n    render()', '    params = lp\n    applyCollapsedState()\n    render()');
 
 // Give the WindowManager overlay a real width. This prevents MATCH_PARENT
 // descendants from expanding a WRAP_CONTENT overlay to the full screen.
