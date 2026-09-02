@@ -231,7 +231,7 @@ kt = replaceExact(kt,
 kt = replaceExact(kt,
   `  private var currentMinWidthDp = 238
   private var currentCollapsedWidthDp = 170`,
-  `  private var currentMinWidthDp = 112
+  `  private var currentMinWidthDp = 168
   private var currentCollapsedWidthDp = 44`,
   'compact default dimensions');
 
@@ -364,10 +364,10 @@ console.log(`✓ structural HUD remodel applied (${structuralChanges} layout cha
 const rightDockPattern = /(\s+val display = resources\.displayMetrics\n)\s+val savedX = prefs\.getInt\("x", dp\(\d+\)\)/;
 const rightDockMatches = kt.match(rightDockPattern);
 if (!rightDockMatches) throw new Error('Could not locate native HUD saved X position');
-kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_sidebar_v1", false)
+kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_compact_tile_v1", false)
     if (!rightRailMigrated) {
       hudCollapsed = false
-      prefs.edit().putBoolean("right_sidebar_v1", true).putBoolean("hud_collapsed", false).apply()
+      prefs.edit().putBoolean("right_compact_tile_v1", true).putBoolean("hud_collapsed", false).apply()
     }
     val initialDockWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
     val defaultRightX = max(0, display.widthPixels - dp(initialDockWidthDp) - dp(8))
@@ -714,11 +714,15 @@ replaceNative(
     statContainer.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })`,
-  `    statContainer.addView(lifeStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    statContainer.addView(energyStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
-  'stacked vital sidebar cards'
+  `    val vitalRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    val vitalRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    vitalRowOne.addView(lifeStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    vitalRowOne.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    vitalRowTwo.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    vitalRowTwo.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    statContainer.addView(vitalRowOne, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
+    statContainer.addView(vitalRowTwo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
+  'compact two-by-two vital tile grid'
 );
 replaceNative(
   `    val cooldownRow = LinearLayout(this).apply {
@@ -732,18 +736,22 @@ replaceNative(
     cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })`,
-  `    cooldownRow.addView(drugChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
-    cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
-  'stacked utility sidebar cards'
+  `    val utilityRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    val utilityRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    utilityRowOne.addView(drugChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    utilityRowOne.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    utilityRowTwo.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    utilityRowTwo.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    cooldownRow.addView(utilityRowOne, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
+    cooldownRow.addView(utilityRowTwo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
+  'compact two-by-two utility tile grid'
 );
 
 // Fit all nine information blocks down a normal Android display.
 kt = kt
-  .replaceAll('minimumHeight = dp(98)', 'minimumHeight = dp(54)')
-  .replaceAll('minimumHeight = dp(62)', 'minimumHeight = dp(42)')
-  .replaceAll('minimumHeight = dp(78)', 'minimumHeight = dp(56)')
+  .replaceAll('minimumHeight = dp(98)', 'minimumHeight = dp(66)')
+  .replaceAll('minimumHeight = dp(62)', 'minimumHeight = dp(46)')
+  .replaceAll('minimumHeight = dp(78)', 'minimumHeight = dp(52)')
   .replaceAll('LinearLayout.LayoutParams(dp(34), dp(34))', 'LinearLayout.LayoutParams(dp(22), dp(22))')
   .replaceAll('LinearLayout.LayoutParams(dp(30), dp(30))', 'LinearLayout.LayoutParams(dp(20), dp(20))')
   .replaceAll('makeHudGlyph(label, color, 18)', 'makeHudGlyph(label, color, 13)')
@@ -766,10 +774,21 @@ kt = kt.replaceAll('hudFooterView?.visibility = visible', 'hudFooterView?.visibi
 kt = kt.replaceAll('statusText?.visibility = visible', 'statusText?.visibility = View.GONE');
 kt = kt.replaceAll('if (hudCollapsed) eventTickerText?.visibility = View.GONE else renderEventTicker()', 'eventTickerText?.visibility = View.GONE');
 
-if (!kt.includes('orientation = LinearLayout.VERTICAL') || !kt.includes('right_sidebar_v1')) {
+// Give the WindowManager overlay a real width. This prevents MATCH_PARENT
+// descendants from expanding a WRAP_CONTENT overlay to the full screen.
+const windowParamsPattern = `    val lp = WindowManager.LayoutParams(
+      WindowManager.LayoutParams.WRAP_CONTENT,
+      WindowManager.LayoutParams.WRAP_CONTENT,`;
+const windowParamsCount = kt.split(windowParamsPattern).length - 1;
+if (windowParamsCount !== 1) throw new Error(`Expected one HUD WindowManager layout; found ${windowParamsCount}`);
+kt = kt.replace(windowParamsPattern, `    val lp = WindowManager.LayoutParams(
+      dp(currentMinWidthDp),
+      WindowManager.LayoutParams.WRAP_CONTENT,`);
+
+if (!kt.includes('vitalRowOne') || !kt.includes('utilityRowOne') || !kt.includes('right_compact_tile_v1')) {
   throw new Error('Right sidebar structural verification failed');
 }
-console.log('✓ complete nine-block HUD rebuilt as a narrow vertical right sidebar');
+console.log('✓ complete HUD rebuilt as one fixed-width compact right-side tile');
 
 if ((kt.match(/TORNPULSE_CATEGORY_IMAGE_ENGINE/g) || []).length !== 1 || kt.includes('makeHudGlyph("TORN TIME"')) {
   throw new Error('Native category image verification failed');
