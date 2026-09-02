@@ -1,0 +1,9 @@
+TORNPULSE V13 — CLEAN BUILD FIX
+
+1. Extract this ZIP.
+2. Upload every included file and folder to the root of the comfortable-ai GitHub repository.
+3. Allow matching files to be replaced.
+4. Commit the upload and let the Android workflow run.
+
+This package restores the clean pre-patch app.config.js required by the workflow,
+then applies the approved narrow right-edge HUD during the GitHub build.
