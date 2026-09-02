@@ -2,6 +2,24 @@ const fs = require('fs');
 
 const source = fs.readFileSync('app.config.js', 'utf8');
 
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+for (const image of [
+  'tornpulse-app-icon.png',
+  'tp-health.png',
+  'tp-energy.png',
+  'tp-nerve.png',
+  'tp-happiness.png',
+  'tp-drug.png',
+  'tp-booster.png',
+  'tp-medical.png',
+  'tp-baldr.png',
+]) {
+  const bytes = fs.readFileSync(image);
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(pngSignature)) {
+    throw new Error(`${image} is not a genuine Android-safe PNG`);
+  }
+}
+
 function embedded(name) {
   const prefix = `const ${name} = `;
   const start = source.indexOf(prefix);
