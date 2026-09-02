@@ -40,6 +40,10 @@ const hud = embedded('OVERLAY_SERVICE_KT');
 const required = [
   'private var currentMinWidthDp = 118',
   'approved_right_rail_v1',
+  'gravity = Gravity.TOP or Gravity.END',
+  'railParams.x = 0',
+  'lp.width = targetWidth',
+  'hudCollapsed = !hudCollapsed',
   'minimumHeight = dp(48)',
   'minimumHeight = dp(43)',
   'TORNPULSE_CATEGORY_IMAGE_ENGINE',
@@ -55,6 +59,9 @@ for (const marker of required) {
 for (const forbidden of ['vitalRowOne', 'vitalRowTwo', 'utilityRowOne', 'utilityRowTwo']) {
   if (hud.includes(forbidden)) throw new Error(`Legacy grid remains: ${forbidden}`);
 }
+
+if (hud.includes('Gravity.TOP or Gravity.START')) throw new Error('HUD is not locked to right-edge gravity');
+if (hud.includes('initialX + dx.toInt()')) throw new Error('Horizontal HUD dragging is still enabled');
 
 const directRows = (hud.match(/addView\([^\n]+LinearLayout\.LayoutParams\(LinearLayout\.LayoutParams\.MATCH_PARENT/g) || []).length;
 if (directRows < 8) throw new Error(`Expected at least eight full-width rail rows; found ${directRows}`);

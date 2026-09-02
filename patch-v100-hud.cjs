@@ -369,13 +369,10 @@ kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolea
       hudCollapsed = false
       prefs.edit().putBoolean("approved_right_rail_v1", true).putBoolean("hud_collapsed", false).apply()
     }
-    val initialDockWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
-    val defaultRightX = max(0, display.widthPixels - dp(initialDockWidthDp) - dp(8))
-    val rightDockMigrated = prefs.getBoolean("right_dock_v1", false)
-    val savedX = if (rightDockMigrated) prefs.getInt("x", defaultRightX) else defaultRightX
-    if (!rightDockMigrated) {
-      prefs.edit().putBoolean("right_dock_v1", true).putInt("x", defaultRightX).apply()
-    }`);
+    // Gravity.END makes x the distance from the right edge. Zero is therefore
+    // a true flush-right anchor on every Android display size and density.
+    val savedX = 0
+    prefs.edit().putInt("x", 0).apply()`);
 console.log('✓ floating HUD defaults and migrates to the right edge');
 
 // The new right sidebar is the complete HUD, so it must remain expanded.
@@ -403,7 +400,9 @@ kt = kt.replace(collapsedFunction, `${collapsedFunction}
       val screen = resources.displayMetrics
       val expectedWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
       val renderedWidth = max(railView.width, dp(expectedWidthDp))
-      railParams.x = max(0, screen.widthPixels - renderedWidth - dp(8))
+      railParams.gravity = Gravity.TOP or Gravity.END
+      railParams.width = dp(expectedWidthDp)
+      railParams.x = 0
       try { windowManager.updateViewLayout(railView, railParams) } catch (_: Exception) {}
       getSharedPreferences("comfortable_hud", Context.MODE_PRIVATE)
         .edit().putInt("x", railParams.x).apply()
@@ -833,10 +832,33 @@ kt = kt
 
 // The sidebar is always visible. Disable the old logo-collapse toggle and hide
 // wide-only header/footer text that would force the narrow rail to expand.
-kt = kt.replaceAll('hudCollapsed = !hudCollapsed', 'hudCollapsed = false');
+kt = kt.replaceAll('hudCollapsed = !hudCollapsed', 'hudCollapsed = !hudCollapsed');
 kt = kt.replaceAll('hudFooterView?.visibility = visible', 'hudFooterView?.visibility = View.GONE');
 kt = kt.replaceAll('statusText?.visibility = visible', 'statusText?.visibility = View.GONE');
 kt = kt.replaceAll('if (hudCollapsed) eventTickerText?.visibility = View.GONE else renderEventTicker()', 'eventTickerText?.visibility = View.GONE');
+
+// Hard-lock the overlay's horizontal coordinate while retaining vertical drag.
+// The TP emblem remains the minimize/expand control in both states.
+kt = kt
+  .replaceAll('gravity = Gravity.TOP or Gravity.START', 'gravity = Gravity.TOP or Gravity.END')
+  .replaceAll('lp.x = min(max(0, initialX + dx.toInt()), max(0, display.widthPixels - width))', 'lp.x = 0')
+  .replaceAll('prefs.edit().putInt("x", lp.x).putInt("y", lp.y).apply()', 'prefs.edit().putInt("x", 0).putInt("y", lp.y).apply()')
+  .replaceAll('hudCollapsed = false\n              expanded = false', 'hudCollapsed = !hudCollapsed\n              expanded = !hudCollapsed')
+  .replaceAll('lp.x = min(max(0, lp.x), max(0, display.widthPixels - targetWidth))', 'lp.gravity = Gravity.TOP or Gravity.END\n      lp.width = targetWidth\n      lp.x = 0')
+  .replaceAll('if (hudCollapsed) decodeInlineLogo(HUD_TP_BASE64) else decodeInlineLogo(HUD_WORDMARK_BASE64)', 'decodeInlineLogo(HUD_TP_BASE64)');
+
+kt = kt.replace(/    currentExpandedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoWidthDp = 108');
+kt = kt.replace(/    currentExpandedLogoHeightDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoHeightDp = 76');
+kt = kt.replace(/    currentCollapsedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentCollapsedLogoWidthDp = 40');
+kt = kt.replace(/    currentCollapsedLogoHeightDp = when \{[\s\S]*?\n    \}/, '    currentCollapsedLogoHeightDp = 40');
+
+// The rebuilt root used the old dashboard padding during state changes.
+kt = kt.replace(`    root.setPadding(
+      if (hudCollapsed) 0 else dp(8),
+      if (hudCollapsed) 0 else dp(7),
+      if (hudCollapsed) 0 else dp(8),
+      if (hudCollapsed) 0 else dp(7)
+    )`, `    root.setPadding(if (hudCollapsed) 0 else dp(3), if (hudCollapsed) 0 else dp(4), if (hudCollapsed) 0 else dp(3), if (hudCollapsed) 0 else dp(4))`);
 
 // Give the WindowManager overlay a real width. This prevents MATCH_PARENT
 // descendants from expanding a WRAP_CONTENT overlay to the full screen.
