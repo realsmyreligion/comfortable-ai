@@ -364,10 +364,10 @@ console.log(`✓ structural HUD remodel applied (${structuralChanges} layout cha
 const rightDockPattern = /(\s+val display = resources\.displayMetrics\n)\s+val savedX = prefs\.getInt\("x", dp\(\d+\)\)/;
 const rightDockMatches = kt.match(rightDockPattern);
 if (!rightDockMatches) throw new Error('Could not locate native HUD saved X position');
-kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_rail_v1", false)
+kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_rail_v2", false)
     if (!rightRailMigrated) {
       hudCollapsed = true
-      prefs.edit().putBoolean("right_rail_v1", true).putBoolean("collapsed", true).apply()
+      prefs.edit().putBoolean("right_rail_v2", true).putBoolean("hud_collapsed", true).apply()
     }
     val initialDockWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
     val defaultRightX = max(0, display.widthPixels - dp(initialDockWidthDp) - dp(8))
@@ -385,9 +385,9 @@ kt = kt.replace(/private var hudCollapsed = false/g, () => {
   collapsedDefaults += 1;
   return 'private var hudCollapsed = true';
 });
-kt = kt.replace(/getBoolean\("collapsed", false\)/g, () => {
+kt = kt.replace(/getBoolean\("(hud_collapsed|collapsed)", false\)/g, (whole, key) => {
   collapsedDefaults += 1;
-  return 'getBoolean("collapsed", true)';
+  return `getBoolean("${key}", true)`;
 });
 if (collapsedDefaults < 1) throw new Error('Could not locate native HUD collapsed-state default');
 
