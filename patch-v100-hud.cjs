@@ -231,7 +231,7 @@ kt = replaceExact(kt,
 kt = replaceExact(kt,
   `  private var currentMinWidthDp = 238
   private var currentCollapsedWidthDp = 170`,
-  `  private var currentMinWidthDp = 100
+  `  private var currentMinWidthDp = 168
   private var currentCollapsedWidthDp = 44`,
   'compact default dimensions');
 
@@ -364,15 +364,18 @@ console.log(`✓ structural HUD remodel applied (${structuralChanges} layout cha
 const rightDockPattern = /(\s+val display = resources\.displayMetrics\n)\s+val savedX = prefs\.getInt\("x", dp\(\d+\)\)/;
 const rightDockMatches = kt.match(rightDockPattern);
 if (!rightDockMatches) throw new Error('Could not locate native HUD saved X position');
-kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("approved_right_rail_v1", false)
+kt = kt.replace(rightDockPattern, `$1    val rightRailMigrated = prefs.getBoolean("right_compact_tile_v1", false)
     if (!rightRailMigrated) {
       hudCollapsed = false
-      prefs.edit().putBoolean("approved_right_rail_v1", true).putBoolean("hud_collapsed", false).apply()
+      prefs.edit().putBoolean("right_compact_tile_v1", true).putBoolean("hud_collapsed", false).apply()
     }
-    // Gravity.END makes x the distance from the right edge. Zero is therefore
-    // a true flush-right anchor on every Android display size and density.
-    val savedX = 0
-    prefs.edit().putInt("x", 0).apply()`);
+    val initialDockWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
+    val defaultRightX = max(0, display.widthPixels - dp(initialDockWidthDp) - dp(8))
+    val rightDockMigrated = prefs.getBoolean("right_dock_v1", false)
+    val savedX = if (rightDockMigrated) prefs.getInt("x", defaultRightX) else defaultRightX
+    if (!rightDockMigrated) {
+      prefs.edit().putBoolean("right_dock_v1", true).putInt("x", defaultRightX).apply()
+    }`);
 console.log('✓ floating HUD defaults and migrates to the right edge');
 
 // The new right sidebar is the complete HUD, so it must remain expanded.
@@ -400,9 +403,7 @@ kt = kt.replace(collapsedFunction, `${collapsedFunction}
       val screen = resources.displayMetrics
       val expectedWidthDp = if (hudCollapsed) currentCollapsedWidthDp else currentMinWidthDp
       val renderedWidth = max(railView.width, dp(expectedWidthDp))
-      railParams.gravity = Gravity.TOP or Gravity.END
-      railParams.width = dp(expectedWidthDp)
-      railParams.x = 0
+      railParams.x = max(0, screen.widthPixels - renderedWidth - dp(8))
       try { windowManager.updateViewLayout(railView, railParams) } catch (_: Exception) {}
       getSharedPreferences("comfortable_hud", Context.MODE_PRIVATE)
         .edit().putInt("x", railParams.x).apply()
@@ -713,11 +714,15 @@ replaceNative(
     statContainer.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })`,
-  `    statContainer.addView(lifeStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-    statContainer.addView(energyStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
-    statContainer.addView(nerveStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
-    statContainer.addView(happinessStat.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })`,
-  'single-column vital rail'
+  `    val vitalRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    val vitalRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    vitalRowOne.addView(lifeStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    vitalRowOne.addView(energyStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    vitalRowTwo.addView(nerveStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    vitalRowTwo.addView(happinessStat.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    statContainer.addView(vitalRowOne, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
+    statContainer.addView(vitalRowTwo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
+  'compact two-by-two vital tile grid'
 );
 replaceNative(
   `    val cooldownRow = LinearLayout(this).apply {
@@ -731,84 +736,16 @@ replaceNative(
     cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1); rightMargin = dp(1) })
     cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(2) })`,
-  `    cooldownRow.addView(drugChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-    cooldownRow.addView(boosterChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
-    cooldownRow.addView(medicalChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })
-    cooldownRow.addView(scannerChip.first, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) })`,
-  'single-column utility rail'
+  `    val utilityRowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    val utilityRowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    utilityRowOne.addView(drugChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    utilityRowOne.addView(boosterChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    utilityRowTwo.addView(medicalChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(1) })
+    utilityRowTwo.addView(scannerChip.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(1) })
+    cooldownRow.addView(utilityRowOne, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(2) })
+    cooldownRow.addView(utilityRowTwo, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))`,
+  'compact two-by-two utility tile grid'
 );
-
-// Match the approved mockup: each item is one short horizontal rail row with
-// the supplied image at left and its live label/value at right.
-const statFunctionPattern = /    fun makeStatColumn\(label: String, color: Int\): Triple<LinearLayout, TextView, TextView> \{[\s\S]*?      return Triple\(column, valueView, timerView\)\n    \}/;
-if (!statFunctionPattern.test(kt)) throw new Error('Could not locate vital row renderer');
-kt = kt.replace(statFunctionPattern, `    fun makeStatColumn(label: String, color: Int): Triple<LinearLayout, TextView, TextView> {
-      val row = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(4), dp(3), dp(4), dp(3))
-        minimumHeight = dp(48)
-        background = GradientDrawable().apply {
-          shape = GradientDrawable.RECTANGLE
-          cornerRadius = dp(4).toFloat()
-          setColor(Color.argb(246, 3, 4, 6))
-          setStroke(dp(1), Color.argb(110, 72, 78, 86))
-        }
-      }
-      val iconShell = LinearLayout(this).apply { gravity = Gravity.CENTER }
-      iconShell.addView(makeHudGlyph(label, color, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
-      row.addView(iconShell, LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(3) })
-      val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-      val labelView = makeText(label, 6.4f, color, true).apply {
-        letterSpacing = 0.035f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
-      }
-      val valueView = makeText("-- / --", 9.0f, Color.rgb(247, 248, 250), true).apply {
-        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
-      }
-      val timerView = makeText("--", 6.2f, Color.rgb(190, 196, 204), true).apply {
-        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
-      }
-      copy.addView(labelView)
-      copy.addView(valueView)
-      copy.addView(timerView)
-      row.addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-      return Triple(row, valueView, timerView)
-    }`);
-
-const utilityFunctionPattern = /    fun makeCooldownChip\(label: String, labelColor: Int\): Pair<LinearLayout, TextView> \{[\s\S]*?      return Pair\(chip, valueView\)\n    \}/;
-if (!utilityFunctionPattern.test(kt)) throw new Error('Could not locate utility row renderer');
-kt = kt.replace(utilityFunctionPattern, `    fun makeCooldownChip(label: String, labelColor: Int): Pair<LinearLayout, TextView> {
-      val chip = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(4), dp(3), dp(4), dp(3))
-        minimumHeight = dp(43)
-        background = GradientDrawable().apply {
-          shape = GradientDrawable.RECTANGLE
-          cornerRadius = dp(4).toFloat()
-          setColor(Color.argb(246, 3, 4, 6))
-          setStroke(dp(1), Color.argb(110, 72, 78, 86))
-        }
-      }
-      val iconShell = LinearLayout(this).apply { gravity = Gravity.CENTER }
-      iconShell.addView(makeHudGlyph(label, labelColor, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
-      chip.addView(iconShell, LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(3) })
-      val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-      val labelView = makeText(label.replace("📋", "").trim(), 6.2f, labelColor, true).apply {
-        letterSpacing = .035f; typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
-      }
-      val valueView = makeText("--", 8.4f, Color.rgb(95,214,132), true).apply {
-        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); includeFontPadding = false; maxLines = 1
-      }
-      copy.addView(labelView)
-      copy.addView(valueView)
-      chip.addView(copy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-      return Pair(chip, valueView)
-    }`);
-
-// Runtime width variants are all constrained to the same approved slim rail.
-kt = kt.replace(/    val minWidthDp = when \{[\s\S]*?\n    \}/, `    val minWidthDp = 100`);
-kt = kt.replace('setPadding(\n        if (hudCollapsed) 0 else dp(8),\n        if (hudCollapsed) 0 else dp(7),\n        if (hudCollapsed) 0 else dp(8),\n        if (hudCollapsed) 0 else dp(7)\n      )', 'setPadding(dp(3), dp(4), dp(3), dp(4))');
 
 // Fit all nine information blocks down a normal Android display.
 kt = kt
@@ -832,37 +769,10 @@ kt = kt
 
 // The sidebar is always visible. Disable the old logo-collapse toggle and hide
 // wide-only header/footer text that would force the narrow rail to expand.
-kt = kt.replaceAll('hudCollapsed = !hudCollapsed', 'hudCollapsed = !hudCollapsed');
+kt = kt.replaceAll('hudCollapsed = !hudCollapsed', 'hudCollapsed = false');
 kt = kt.replaceAll('hudFooterView?.visibility = visible', 'hudFooterView?.visibility = View.GONE');
 kt = kt.replaceAll('statusText?.visibility = visible', 'statusText?.visibility = View.GONE');
 kt = kt.replaceAll('if (hudCollapsed) eventTickerText?.visibility = View.GONE else renderEventTicker()', 'eventTickerText?.visibility = View.GONE');
-
-// Hard-lock the overlay's horizontal coordinate while retaining vertical drag.
-// The TP emblem remains the minimize/expand control in both states.
-kt = kt
-  .replaceAll('gravity = Gravity.TOP or Gravity.START', 'gravity = Gravity.TOP or Gravity.END')
-  .replaceAll('lp.x = min(max(0, initialX + dx.toInt()), max(0, display.widthPixels - width))', 'lp.x = 0')
-  .replaceAll('prefs.edit().putInt("x", lp.x).putInt("y", lp.y).apply()', 'prefs.edit().putInt("x", 0).putInt("y", lp.y).apply()')
-  .replaceAll('hudCollapsed = false\n              expanded = false', 'hudCollapsed = !hudCollapsed\n              expanded = !hudCollapsed')
-  .replaceAll('lp.x = min(max(0, lp.x), max(0, display.widthPixels - targetWidth))', 'lp.gravity = Gravity.TOP or Gravity.END\n      lp.width = targetWidth\n      lp.x = 0')
-  .replaceAll('if (hudCollapsed) decodeInlineLogo(HUD_TP_BASE64) else decodeInlineLogo(HUD_WORDMARK_BASE64)', 'decodeInlineLogo(HUD_TP_BASE64)');
-
-kt = kt.replace(/    currentExpandedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoWidthDp = 90');
-kt = kt.replace(/    currentExpandedLogoHeightDp = when \{[\s\S]*?\n    \}/, '    currentExpandedLogoHeightDp = 76');
-kt = kt.replace(/    currentCollapsedLogoWidthDp = when \{[\s\S]*?\n    \}/, '    currentCollapsedLogoWidthDp = 40');
-kt = kt.replace(/    currentCollapsedLogoHeightDp = when \{[\s\S]*?\n    \}/, '    currentCollapsedLogoHeightDp = 40');
-
-// The rebuilt root used the old dashboard padding during state changes.
-kt = kt.replace(`    root.setPadding(
-      if (hudCollapsed) 0 else dp(8),
-      if (hudCollapsed) 0 else dp(7),
-      if (hudCollapsed) 0 else dp(8),
-      if (hudCollapsed) 0 else dp(7)
-    )`, `    root.setPadding(if (hudCollapsed) 0 else dp(3), if (hudCollapsed) 0 else dp(4), if (hudCollapsed) 0 else dp(3), if (hudCollapsed) 0 else dp(4))`);
-
-// Apply the right anchor and collapsed/expanded visibility immediately on
-// service start, rather than waiting for the first logo tap.
-kt = kt.replace('    params = lp\n    render()', '    params = lp\n    applyCollapsedState()\n    render()');
 
 // Give the WindowManager overlay a real width. This prevents MATCH_PARENT
 // descendants from expanding a WRAP_CONTENT overlay to the full screen.
@@ -875,10 +785,10 @@ kt = kt.replace(windowParamsPattern, `    val lp = WindowManager.LayoutParams(
       dp(currentMinWidthDp),
       WindowManager.LayoutParams.WRAP_CONTENT,`);
 
-if (!kt.includes('single-column') && (!kt.includes('approved_right_rail_v1') || !kt.includes('minimumHeight = dp(48)'))) {
+if (!kt.includes('vitalRowOne') || !kt.includes('utilityRowOne') || !kt.includes('right_compact_tile_v1')) {
   throw new Error('Right sidebar structural verification failed');
 }
-console.log('✓ complete HUD rebuilt as the approved fixed-width right-edge rail');
+console.log('✓ complete HUD rebuilt as one fixed-width compact right-side tile');
 
 if ((kt.match(/TORNPULSE_CATEGORY_IMAGE_ENGINE/g) || []).length !== 1 || kt.includes('makeHudGlyph("TORN TIME"')) {
   throw new Error('Native category image verification failed');

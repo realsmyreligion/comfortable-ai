@@ -5,6 +5,8 @@
       "distribution": "internal",
       "android": {"buildType": "apk"}
     },
-    "production": {}
+    "production": {
+      "android": {"buildType": "app-bundle"}
+    }
   }
 }

@@ -1,6 +1,6 @@
 {
-  "name": "comfortable-ai",
-  "version": "0.5.0",
+  "name": "tornpulse",
+  "version": "1.0.0",
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
@@ -8,6 +8,7 @@
     "android": "expo start --android",
     "prebuild:android": "expo prebuild --platform android --clean",
     "apk:debug": "npm run prebuild:android && cd android && ./gradlew assembleDebug",
+    "bundle:release": "npm run prebuild:android && cd android && ./gradlew bundleRelease",
     "selftest": "node scripts/self-test.cjs"
   },
   "dependencies": {
