@@ -2,7 +2,7 @@ const fs = require('fs');
 const FILE = 'app.config.js';
 let src = fs.readFileSync(FILE, 'utf8');
 
-if (src.includes("config.version = '1.0.0';") && src.includes('TORNPULSE_CHAT_HUB_V1')) {
+if (src.includes("config.version = '1.0.0';") && (src.includes('TORNPULSE_CHAT_HUB_V1') || src.includes('TORNPULSE_CHAT_SCREEN_V2'))) {
   console.log('✓ Finished TornPulse v1.0 source detected; legacy v0.9.0 migration skipped');
   process.exit(0);
 }

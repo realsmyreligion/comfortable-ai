@@ -32,6 +32,11 @@ function replaceOnce(text, oldText, newText, label) {
 
 let app = getEmbedded('APP_JS').value;
 
+if (app.includes('TORNPULSE_CHAT_SCREEN_V2')) {
+  console.log('✓ Permanent TornPulse in-app chat screen already installed');
+  process.exit(0);
+}
+
 if (!app.includes('TORNPULSE_CHAT_HUB_V1')) {
   const baldrFunction = `async function openBaldrList(){try{const supported=await Linking.canOpenURL(BALDR_URL);if(!supported)throw Error('Unsupported link');await Linking.openURL(BALDR_URL)}catch(_){Alert.alert('Could not open Baldr’s List','Open https://oran.pw/baldrstargets/ in your browser.')}}`;
   const chatFunctions = `${baldrFunction}

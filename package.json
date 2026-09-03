@@ -17,6 +17,7 @@
     "expo-secure-store": "*",
     "expo-status-bar": "*",
     "react": "19.2.3",
-    "react-native": "0.86.0"
+    "react-native": "0.86.0",
+    "react-native-webview": "14.0.1"
   }
 }

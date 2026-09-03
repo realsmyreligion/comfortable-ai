@@ -4,7 +4,7 @@ const { execFileSync } = require('child_process');
 
 const finishedSource = fs.readFileSync(path.join(__dirname, 'app.config.js'), 'utf8');
 if (finishedSource.includes("config.version = '1.0.0';") &&
-    finishedSource.includes('TORNPULSE_CHAT_HUB_V1') &&
+    (finishedSource.includes('TORNPULSE_CHAT_HUB_V1') || finishedSource.includes('TORNPULSE_CHAT_SCREEN_V2')) &&
     finishedSource.includes('hudCollapsed = !hudCollapsed') &&
     finishedSource.includes('currentMinWidthDp = 118')) {
   console.log('✓ Finished thin right-edge TornPulse HUD detected; legacy HUD migration skipped');
