@@ -2,6 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+const finishedSource = fs.readFileSync(path.join(__dirname, 'app.config.js'), 'utf8');
+if (finishedSource.includes("config.version = '1.0.0';") &&
+    finishedSource.includes('TORNPULSE_CHAT_HUB_V1') &&
+    finishedSource.includes('hudCollapsed = !hudCollapsed') &&
+    finishedSource.includes('currentMinWidthDp = 118')) {
+  console.log('✓ Finished thin right-edge TornPulse HUD detected; legacy HUD migration skipped');
+  process.exit(0);
+}
+
 // First apply the verified dashboard/header remodel from Build #147.
 execFileSync(process.execPath, [path.join(__dirname, 'tornpulse-dashboard-base.cjs')], {
   stdio: 'inherit',

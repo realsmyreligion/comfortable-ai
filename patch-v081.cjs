@@ -3,6 +3,11 @@ const fs = require('fs');
 const FILE = 'app.config.js';
 let src = fs.readFileSync(FILE, 'utf8');
 
+if (src.includes("config.version = '1.0.0';") && src.includes('TORNPULSE_CHAT_HUB_V1')) {
+  console.log('✓ Finished TornPulse v1.0 source detected; legacy v0.8.1 migration skipped');
+  process.exit(0);
+}
+
 function swap(oldText, newText, label) {
   if (src.includes(newText) && !src.includes(oldText)) {
     console.log(`✓ ${label} already applied`);
