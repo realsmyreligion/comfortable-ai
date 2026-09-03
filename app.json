@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "android": {
-      "package": "com.tornpulse.app",
+      "package": "com.comfortableai.torncopilot",
       "versionCode": 23,
       "permissions": ["POST_NOTIFICATIONS", "VIBRATE"]
     },
