@@ -1,0 +1,27 @@
+TORNPULSE v1.0.1 — ITEM MARKET
+
+WHAT CHANGED
+- Removed the Faction / Global Chat card and Chat screen.
+- Removed the react-native-webview package dependency.
+- Added an Item Market card to the TornPulse dashboard.
+- Added searchable Torn item names from the official Torn API.
+- Added live market listings sorted from lowest price upward.
+- Added BUY ON TORN buttons that open the official Torn Item Market purchase page.
+- Kept purchases outside the API so every purchase is confirmed by the player in Torn.
+- Bumped Android versionCode from 23 to 24.
+
+FILES TO UPLOAD / REPLACE IN THE GITHUB REPOSITORY ROOT
+1. app.config.js
+2. app.json
+3. package.json
+4. patch-v113-item-market.cjs
+
+IMPORTANT
+- Keep patch-v113-item-market.cjs after patch-v112-native-chat-screen.cjs in the build sequence.
+- If the workflow automatically runs patches in filename order, v113 will remove v112 Chat and install Item Market.
+- The connected Torn API key must allow the public Torn items selection and market itemmarket selection.
+- Torn globally caches Item Market API results, so a manual refresh can occasionally return the same prices briefly.
+
+RELEASE
+App version: 1.0.1
+Android versionCode: 24

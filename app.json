@@ -2,16 +2,24 @@
   "expo": {
     "name": "TornPulse",
     "slug": "tornpulse",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "com.comfortableai.torncopilot",
-      "versionCode": 23,
-      "permissions": ["POST_NOTIFICATIONS", "VIBRATE"]
+      "versionCode": 24,
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
     },
     "plugins": [
-      ["expo-notifications", {"defaultChannel": "torn-alerts"}],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "torn-alerts"
+        }
+      ],
       "expo-secure-store"
     ]
   }
