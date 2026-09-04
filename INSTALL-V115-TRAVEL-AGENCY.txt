@@ -1,0 +1,38 @@
+TORNPULSE v1.1.0 — TRAVEL AGENCY HUB
+
+WHAT CHANGED
+- Chat is not present in the running TornPulse app.
+- Added a Travel Agency card to the main TornPulse dashboard.
+- Detects an active Torn flight through the read-only Torn API.
+- Shows origin, destination, live countdown, local arrival time, and Torn arrival time.
+- Automatically schedules an Android notification 5 minutes before landing.
+- Automatically schedules another Android notification when the flight lands.
+- Includes a button to open Torn's official Travel Agency for player-controlled travel.
+- Keeps the existing Item Market and all HUD features.
+- Bumped app version to 1.1.0 and Android versionCode to 25.
+
+UPLOAD / REPLACE THESE FILES IN THE GITHUB REPOSITORY ROOT
+1. app.config.js
+2. app.json
+3. package.json
+4. notifications.js
+5. patch-v081.cjs
+6. patch-v082.cjs
+7. patch-v090.cjs
+8. patch-v100.cjs
+9. patch-v100-hud.cjs
+10. patch-v110-chat-hub.cjs
+11. patch-v112-native-chat-screen.cjs
+12. patch-v113-item-market.cjs
+13. patch-v115-travel-agency.cjs
+
+BUILD NOTES
+- Existing legacy patches safely skip when the newer Item Market / Travel source is present.
+- patch-v115-travel-agency.cjs is idempotent and exits successfully after installation.
+- The app refreshes its Torn snapshot when opened and every two minutes while active.
+- Scheduled landing alerts can fire while TornPulse is closed, provided Android notification permission remains enabled.
+- Flight detection first uses Torn's user/travel response and falls back to the profile status/arrival timestamp.
+
+RELEASE
+App version: 1.1.0
+Android versionCode: 25

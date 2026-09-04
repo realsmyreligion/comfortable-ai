@@ -14,11 +14,6 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function getNotificationPermission() {
-  const current = await Notifications.getPermissionsAsync();
-  return Boolean(current.granted);
-}
-
 export async function prepareNotifications() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {
@@ -56,12 +51,15 @@ async function schedule(title, body, date, kind) {
   });
 }
 
-function atUnix(unixSeconds) { return new Date(Number(unixSeconds || 0) * 1000); }
-function warningAt(unixSeconds, minutes) { return new Date(Number(unixSeconds || 0) * 1000 - Number(minutes || 0) * 60_000); }
+function atUnix(unixSeconds) {
+  return new Date(Number(unixSeconds || 0) * 1000);
+}
 
-let scheduling = Promise.resolve();
+function warningAt(unixSeconds, minutes) {
+  return new Date(Number(unixSeconds || 0) * 1000 - Number(minutes || 0) * 60_000);
+}
 
-async function scheduleSnapshotAlertsNow(snapshot, settings) {
+export async function scheduleSnapshotAlerts(snapshot, settings) {
   await clearOurAlerts();
 
   if (snapshot.energy.full_time > 0) {
@@ -74,27 +72,17 @@ async function scheduleSnapshotAlertsNow(snapshot, settings) {
     await schedule('✺ Nerve full', 'Your Nerve is full.', atUnix(snapshot.nerve.full_time), 'nerve-full');
   }
 
-  if (settings.cooldownAlerts !== false) {
+  if (settings.cooldownAlerts) {
     const now = Date.now();
     if (snapshot.cooldowns.drug > 5) await schedule('💊 Drug ready', 'Your drug cooldown is clear.', new Date(now + snapshot.cooldowns.drug * 1000), 'drug');
     if (snapshot.cooldowns.booster > 5) await schedule('🥤 Booster ready', 'Your booster cooldown is clear.', new Date(now + snapshot.cooldowns.booster * 1000), 'booster');
     if (snapshot.cooldowns.medical > 5) await schedule('✚ Medical ready', 'Your medical cooldown is clear.', new Date(now + snapshot.cooldowns.medical * 1000), 'medical');
   }
 
-  if (settings.statusAlerts !== false) {
-    const state = String(snapshot.status?.state || '').toLowerCase();
-    const until = Number(snapshot.status?.until || 0);
-    if (until > Math.floor(Date.now()/1000) + 5 && (state.includes('hospital') || state.includes('jail'))) {
-      const label = state.includes('hospital') ? 'Hospital' : 'Jail';
-      await schedule(`✓ ${label} clear`, `Your ${label.toLowerCase()} status should now be clear.`, atUnix(until), `status-${label.toLowerCase()}`);
-    }
+  const travel = snapshot.travel;
+  if (travel?.active && Number(travel.arrival) > Math.floor(Date.now() / 1000)) {
+    const destination = travel.destination || 'your destination';
+    await schedule('✈ Landing soon', `You land in ${destination} in 5 minutes. Get ready to act.`, warningAt(travel.arrival, 5), 'travel-warning');
+    await schedule('✈ Flight landed', `You have arrived in ${destination}.`, atUnix(travel.arrival), 'travel-arrival');
   }
-}
-
-export function scheduleSnapshotAlerts(snapshot, settings) {
-  scheduling = scheduling.then(
-    () => scheduleSnapshotAlertsNow(snapshot, settings),
-    () => scheduleSnapshotAlertsNow(snapshot, settings)
-  );
-  return scheduling;
 }
