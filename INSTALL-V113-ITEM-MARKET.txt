@@ -14,11 +14,19 @@ FILES TO UPLOAD / REPLACE IN THE GITHUB REPOSITORY ROOT
 1. app.config.js
 2. app.json
 3. package.json
-4. patch-v113-item-market.cjs
+4. patch-v081.cjs
+5. patch-v082.cjs
+6. patch-v090.cjs
+7. patch-v100.cjs
+8. patch-v100-hud.cjs
+9. patch-v110-chat-hub.cjs
+10. patch-v112-native-chat-screen.cjs
+11. patch-v113-item-market.cjs
 
 IMPORTANT
 - Keep patch-v113-item-market.cjs after patch-v112-native-chat-screen.cjs in the build sequence.
 - If the workflow automatically runs patches in filename order, v113 will remove v112 Chat and install Item Market.
+- The included legacy patches now detect Item Market v1.0.1 and exit successfully instead of trying to downgrade or overwrite it.
 - The connected Torn API key must allow the public Torn items selection and market itemmarket selection.
 - Torn globally caches Item Market API results, so a manual refresh can occasionally return the same prices briefly.
 

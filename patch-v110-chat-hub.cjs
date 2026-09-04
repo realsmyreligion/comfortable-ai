@@ -2,6 +2,11 @@ const fs = require('fs');
 
 let src = fs.readFileSync('app.config.js', 'utf8');
 
+if (src.includes('TORNPULSE_ITEM_MARKET_V1')) {
+  console.log('✓ TornPulse Item Market replaces Chat Hub; v1.1.0 Chat patch skipped');
+  process.exit(0);
+}
+
 function getEmbedded(name) {
   const prefix = `const ${name} = `;
   const start = src.indexOf(prefix);

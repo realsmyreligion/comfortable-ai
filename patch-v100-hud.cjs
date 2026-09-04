@@ -3,6 +3,11 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const finishedSource = fs.readFileSync(path.join(__dirname, 'app.config.js'), 'utf8');
+if (finishedSource.includes('TORNPULSE_ITEM_MARKET_V1')) {
+  console.log('✓ TornPulse Item Market source detected; legacy HUD migration skipped');
+  process.exit(0);
+}
+
 if (finishedSource.includes("config.version = '1.0.0';") &&
     (finishedSource.includes('TORNPULSE_CHAT_HUB_V1') || finishedSource.includes('TORNPULSE_CHAT_SCREEN_V2')) &&
     finishedSource.includes('hudCollapsed = !hudCollapsed') &&
