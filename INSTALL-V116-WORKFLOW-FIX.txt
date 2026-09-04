@@ -1,0 +1,30 @@
+TORNPULSE v1.1.0 — GITHUB WORKFLOW FIX
+
+THE FAILURE
+The GitHub workflow still required this exact old text:
+  config.version = '1.0.0';
+
+The Travel Agency release is correctly version 1.1.0 with Android versionCode 25,
+so the outdated verification stopped the build even though all code patches passed.
+
+WHAT TO REPLACE
+Upload every file from this package to its matching repository location.
+
+IMPORTANT WORKFLOW PATH
+The workflow must replace this exact repository file:
+  .github/workflows/main.yml
+
+On GitHub mobile:
+1. Open the .github folder.
+2. Open the workflows folder.
+3. Replace main.yml with the included .github/workflows/main.yml.
+4. Replace the matching root project files from this package.
+5. Commit the changes.
+
+THE FIXED WORKFLOW NOW
+- Accepts app version 1.1.0.
+- Accepts Android versionCode 25.
+- Runs the Item Market and Travel Agency patches.
+- Verifies both Travel Agency and Item Market markers.
+- Verifies both flight notification types.
+- Names the artifact tornpulse-v1.1.0-travel-agency-apk.
