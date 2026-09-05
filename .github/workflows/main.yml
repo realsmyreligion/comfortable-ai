@@ -57,5 +57,20 @@ jobs:
           grep -q 'openBaldrList()' "$HUD"
           grep -q 'eventTickerText' "$HUD"
 
-      - name: Make Gradle executable
+        - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: APK checksum
+        run: sha256sum android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload TornPulse APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tornpulse-v2.0.0-shell-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
        
