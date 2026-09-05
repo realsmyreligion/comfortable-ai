@@ -1,4 +1,4 @@
-name: Build TornPulse APK
+name: Build TornPulse 2.0
 
 on:
   workflow_dispatch:
@@ -23,6 +23,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.13.1"
+          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -30,73 +31,31 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore source folders
-        run: |
-          mkdir -p src scripts
-          cp core.js demo.js notifications.js storage.js tornApi.js src/
-          cp self-test.cjs scripts/
-
       - name: Install dependencies
-        run: |
-          npm install --no-audit --no-fund
-          npx expo install --fix
+        run: npm ci --no-audit --no-fund
 
-      - name: Run TornPulse self-test
+      - name: Run TornPulse core self-test
         run: npm run selftest
 
-      - name: Apply v0.8.1 refinement
-        run: node patch-v081.cjs
+      - name: Verify TornPulse 2.0 foundation
+        run: npm run verify
 
-      - name: Apply v0.8.2 Health + Status HUD
-        run: node patch-v082.cjs
-
-      - name: Apply v0.9.0 release candidate
-        run: node patch-v090.cjs
-
-      - name: Apply v1.0.0 final release
-        run: node patch-v100.cjs
-
-      - name: Apply v1.0.0 final HUD polish
-        run: node patch-v100-hud.cjs
-
-      - name: Verify v1.0.0 patches
-        run: |
-          grep -q "config.version = '1.0.0';" app.config.js
-          grep -q "versionCode: 23," app.config.js
-          grep -q "TORNPULSE 1.0" app.config.js
-          grep -q "eventTickerText" app.config.js
-          grep -q "GlowSpan" app.config.js
-          grep -q "MUGGED BY" app.config.js
-          grep -q "RELEASED FROM HOSPITAL" app.config.js
+      - name: Validate JavaScript bundle
+        run: npx expo export --platform android --output-dir /tmp/tornpulse-bundle-check
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
 
-      - name: Verify native v1.0 HUD
+      - name: Verify native TornPulse HUD
         run: |
           HUD=android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
-          grep -q 'TornPulse/1.0.0' "$HUD"
+          grep -q 'TornPulse/' "$HUD"
           grep -q 'hud_preset' "$HUD"
+          grep -q 'currentMinWidthDp = 118' "$HUD"
+          grep -q 'currentCollapsedWidthDp = 44' "$HUD"
+          grep -q 'approved_right_rail_v1' "$HUD"
+          grep -q 'openBaldrList()' "$HUD"
           grep -q 'eventTickerText' "$HUD"
-          grep -q 'GlowSpan' "$HUD"
-          grep -q 'statusText' "$HUD"
-          grep -q 'ImageView' "$HUD"
-          grep -q 'import android.widget.ImageView' "$HUD"
-          grep -q 'MUGGED BY' "$HUD"
 
       - name: Make Gradle executable
-        run: chmod +x android/gradlew
-
-      - name: Build APK
-        working-directory: android
-        run: ./gradlew assembleRelease
-
-      - name: APK checksum
-        run: sha256sum android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Upload TornPulse APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: tornpulse-v1.0.0-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+       
