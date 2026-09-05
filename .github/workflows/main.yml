@@ -48,9 +48,13 @@ jobs:
           test -s App.js
           test -s app.config.js
           test -s src/core.js
+          test -s src/demo.js
+          test -s src/notifications.js
+          test -s src/storage.js
           test -s src/tornApi.js
-          grep -q 'version": "2.0.0"' package.json
-          grep -q 'HOME' App.js
+          test -s scripts/self-test.cjs
+          grep -q '"version": "2.0.0"' package.json
+          grep -q 'DASHBOARD' App.js
           grep -q 'TRAVEL' App.js
           grep -q 'MARKET' App.js
           grep -q 'ACTIVITY' App.js
