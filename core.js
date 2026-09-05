@@ -8,23 +8,26 @@ function projectBar(bar, nowMs = Date.now()) {
   const maximum = Number(bar.maximum || 0);
   const increment = Number(bar.increment || 0);
   const interval = Number(bar.interval || 0);
-  const fullTime = Number(bar.full_time || 0);
+  const tickTimeMs = Number(bar.tick_time || 0) * 1000;
+  const fullTimeMs = Number(bar.full_time || 0) * 1000;
+
   if (maximum <= 0) return {...bar, projected: current, percent: 0, capMs: null};
-  if (current >= maximum) return {...bar, projected: current, percent: 100, capMs: nowMs};
+  if (current >= maximum) return {...bar, projected: maximum, percent: 100, capMs: nowMs};
 
   let projected = current;
-  if (interval > 0 && increment > 0 && fullTime > 0) {
-    const remainingMs = Math.max(0, fullTime * 1000 - nowMs);
-    const remainingTicks = Math.ceil(remainingMs / (interval * 1000));
-    const expectedRemaining = remainingTicks * increment;
-    projected = clamp(maximum - expectedRemaining, current, maximum);
+  if (interval > 0 && increment > 0 && tickTimeMs > 0 && nowMs >= tickTimeMs) {
+    const ticks = 1 + Math.floor((nowMs - tickTimeMs) / (interval * 1000));
+    projected = clamp(current + ticks * increment, current, maximum);
+  } else if (interval > 0 && increment > 0 && tickTimeMs <= 0 && fullTimeMs > nowMs) {
+    const remainingTicks = Math.ceil((fullTimeMs - nowMs) / (interval * 1000));
+    projected = clamp(maximum - remainingTicks * increment, current, maximum);
   }
 
   return {
     ...bar,
     projected,
     percent: clamp((projected / maximum) * 100, 0, 100),
-    capMs: fullTime > 0 ? fullTime * 1000 : null,
+    capMs: fullTimeMs > 0 ? fullTimeMs : null,
   };
 }
 
@@ -47,13 +50,14 @@ function timeUntil(ms, nowMs = Date.now()) {
 function recommend(snapshot, nowMs = Date.now()) {
   const energy = projectBar(snapshot.energy, nowMs);
   const nerve = projectBar(snapshot.nerve, nowMs);
-  const drug = Number(snapshot.cooldowns?.drug || 0);
+  const elapsed = Math.max(0, Math.floor((nowMs - Number(snapshot.fetchedAt || nowMs)) / 1000));
+  const drug = Math.max(0, Number(snapshot.cooldowns?.drug || 0) - elapsed);
 
   if (nerve && nerve.percent >= 90) return {title: 'SPEND NERVE', detail: 'Your nerve is close to capping. Use it before natural regeneration is wasted.'};
   if (energy && energy.percent >= 90) return {title: 'SPEND ENERGY', detail: 'Your energy is close to capping. Train or use it before natural regeneration is wasted.'};
   if (drug === 0) return {title: 'DRUG READY', detail: 'Your drug cooldown is clear. Check whether using your planned drug fits your training strategy.'};
   if (energy && energy.percent >= 60) return {title: 'PLAN TRAINING', detail: 'You have a healthy energy bar. Consider your next gym session before it creeps toward cap.'};
-  return {title: 'REGENERATING', detail: 'Nothing urgent right now. Let your bars regenerate and Comfortable AI will keep watch.'};
+  return {title: 'REGENERATING', detail: 'Nothing urgent right now. Let your bars regenerate and TornPulse will keep watch.'};
 }
 
 module.exports = {clamp, projectBar, formatDuration, timeUntil, recommend};

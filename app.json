@@ -2,12 +2,12 @@
   "expo": {
     "name": "TornPulse",
     "slug": "tornpulse",
-    "version": "1.1.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "com.comfortableai.torncopilot",
-      "versionCode": 25,
+      "versionCode": 27,
       "permissions": [
         "POST_NOTIFICATIONS",
         "VIBRATE"

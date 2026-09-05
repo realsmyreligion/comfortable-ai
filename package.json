@@ -1,15 +1,16 @@
 {
   "name": "tornpulse",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "prebuild:android": "expo prebuild --platform android --clean",
     "apk:debug": "npm run prebuild:android && cd android && ./gradlew assembleDebug",
     "bundle:release": "npm run prebuild:android && cd android && ./gradlew bundleRelease",
-    "selftest": "node scripts/self-test.cjs"
+    "selftest": "node scripts/self-test.cjs",
+    "verify": "node scripts/verify-v2-foundation.cjs"
   },
   "dependencies": {
     "expo": "~57.0.0",

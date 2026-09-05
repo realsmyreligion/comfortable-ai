@@ -83,6 +83,6 @@ export async function scheduleSnapshotAlerts(snapshot, settings) {
   if (travel?.active && Number(travel.arrival) > Math.floor(Date.now() / 1000)) {
     const destination = travel.destination || 'your destination';
     await schedule('✈ Landing soon', `You land in ${destination} in 5 minutes. Get ready to act.`, warningAt(travel.arrival, 5), 'travel-warning');
-    await schedule('✈ Flight landed', `You have arrived in ${destination}.`, atUnix(travel.arrival), 'travel-arrival');
+    await schedule('✈ Expected arrival', `Your scheduled arrival time in ${destination} has been reached. Open Torn to confirm your status.`, atUnix(travel.arrival), 'travel-arrival');
   }
 }
