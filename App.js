@@ -88,7 +88,7 @@ function Cooldown({label, icon, seconds}) {
 }
 
 const BALDR_URL='https://oran.pw/baldrstargets/';
-async function openBaldrList(){try{const supported=await Linking.canOpenURL(BALDR_URL);if(!supported)throw Error('Unsupported link');await Linking.openURL(BALDR_URL)}catch(_){Alert.alert('Could not open Baldr’s List','Open https://oran.pw/baldrstargets/ in your browser.')}}
+async function openBaldrList(){try{await Linking.openURL(BALDR_URL)}catch(_){Alert.alert('Could not open Baldr’s List','Open https://oran.pw/baldrstargets/ in your browser.')}}
 // TORNPULSE_ITEM_MARKET_V1 — searchable, read-only live Item Market.
 const money=value=>'$'+Math.max(0,Number(value||0)).toLocaleString();
 function TPMarketHub({compact=false,onOpen}){return <Pressable accessibilityRole="button" accessibilityLabel="Open Item Market" onPress={onOpen} style={({pressed})=>[styles.nMarketHub,compact&&styles.nMarketHubCompact,pressed&&styles.nPressed]}>
@@ -212,13 +212,13 @@ export default function App() {
 
   async function openMarketPurchase(item){
     const url='https://www.torn.com/page.php?sid=ItemMarket#/market/view=search&itemID='+encodeURIComponent(item.id);
-    try{const supported=await Linking.canOpenURL(url);if(!supported)throw Error('Unsupported link');await Linking.openURL(url)}
+    try{await Linking.openURL(url)}
     catch(_){Alert.alert('Could not open Torn','Open the Item Market in Torn and search for '+item.name+'.')}
   }
 
   async function openOfficialTravelAgency(){
     const url='https://www.torn.com/travelagency.php';
-    try{const supported=await Linking.canOpenURL(url);if(!supported)throw Error('Unsupported link');await Linking.openURL(url)}
+    try{await Linking.openURL(url)}
     catch(_){Alert.alert('Could not open Torn','Open the Travel Agency from the Torn City menu.')}
   }
 
