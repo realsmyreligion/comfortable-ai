@@ -1,9 +1,10 @@
-name: Build TornPulse V17 Test APK
+name: Build TornPulse 2.0
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -17,57 +18,44 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22.13.1"
+          cache: npm
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - name: Restore source folders
-        run: |
-          mkdir -p src scripts
-          cp core.js demo.js notifications.js storage.js tornApi.js src/
-          cp self-test.cjs scripts/
+
       - name: Install dependencies
-        run: |
-          npm install --no-audit --no-fund
-          npx expo install --fix
-      - name: Run TornPulse self-test
+        run: npm ci --no-audit --no-fund
+
+      - name: Run TornPulse core self-test
         run: npm run selftest
-      - name: Verify final right-edge HUD and in-app Chat Hub
-        run: node patch-v110-chat-hub.cjs
-      - name: Verify V17 source
-        run: |
-          grep -q "config.version = '1.0.0';" app.config.js
-          grep -q "const PACKAGE_NAME = 'com.tornpulse.app';" app.config.js
-          grep -q "TORNPULSE_CHAT_HUB_V1" app.config.js
-          grep -q "FACTION CHAT" app.config.js
-          grep -q "GLOBAL CHAT" app.config.js
-          grep -q "hudCollapsed = !hudCollapsed" app.config.js
-          grep -q "currentMinWidthDp = 118" app.config.js
-          grep -q "railParams.width = dp(expectedWidthDp)" app.config.js
+
+      - name: Verify TornPulse 2.0 foundation
+        run: npm run verify
+
+      - name: Validate JavaScript bundle
+        run: npx expo export --platform android --output-dir /tmp/tornpulse-bundle-check
+
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
-      - name: Verify native HUD
+
+      - name: Verify native TornPulse HUD
         run: |
-          HUD=android/app/src/main/java/com/tornpulse/app/ComfortableOverlayService.kt
-          test -f "$HUD"
-          grep -q 'TornPulse/1.0.0' "$HUD"
-          grep -q 'Gravity.END' "$HUD"
-          grep -q 'openAttackBrowser' android/app/src/main/java/com/tornpulse/app/ComfortableOverlayModule.kt
+          HUD=android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
+          grep -q 'TornPulse/' "$HUD"
+          grep -q 'hud_preset' "$HUD"
+          grep -q 'currentMinWidthDp = 118' "$HUD"
+          grep -q 'currentCollapsedWidthDp = 44' "$HUD"
+          grep -q 'approved_right_rail_v1' "$HUD"
+          grep -q 'openBaldrList()' "$HUD"
+          grep -q 'eventTickerText' "$HUD"
+
       - name: Make Gradle executable
-        run: chmod +x android/gradlew
-      - name: Build test APK
-        working-directory: android
-        run: ./gradlew assembleRelease
-      - name: APK checksum
-        run: sha256sum android/app/build/outputs/apk/release/app-release.apk
-      - name: Upload TornPulse V17 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: tornpulse-v17-in-app-chat-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+       
