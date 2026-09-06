@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: true
+      NODE_ENV: production
 
     steps:
       - name: Checkout project
@@ -26,7 +27,7 @@ jobs:
           cache: npm
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -78,16 +79,23 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build release APK
+      - name: Build ARM64 release APK
         working-directory: android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
-      - name: APK checksum
-        run: sha256sum android/app/build/outputs/apk/release/app-release.apk
+      - name: Verify APK integrity and signature
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -n 20
+          sha256sum "$APK"
+          ls -lh "$APK"
 
-      - name: Upload TornPulse APK
+      - name: Upload TornPulse ARM64 APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v2.0.0-shell-apk
+          name: tornpulse-v2.0.0-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
