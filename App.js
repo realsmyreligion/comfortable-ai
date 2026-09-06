@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, AppState, Image, Linking, NativeModules, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
+import {ActivityIndicator, Alert, AppState, Image, Keyboard, Linking, NativeModules, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
 import {StatusBar} from 'expo-status-bar';
 import {fetchItemCatalog, fetchItemMarket, fetchSnapshot} from './src/tornApi';
 import {clearApiKey, DEFAULT_SETTINGS, getApiKey, loadSettings, saveApiKey, saveSettings} from './src/storage';
@@ -37,6 +37,18 @@ function relativeAge(unixSeconds, nowMs = Date.now()) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h AGO`;
   return `${Math.floor(hours / 24)}d AGO`;
+}
+
+function attackAgeSeconds(attack, nowMs = Date.now()) {
+  const stamp = Number(attack?.ended || attack?.started || 0) * 1000;
+  return stamp ? Math.max(0, Math.floor((nowMs - stamp) / 1000)) : Number.POSITIVE_INFINITY;
+}
+
+function attackTone(attack, nowMs = Date.now()) {
+  const seconds = attackAgeSeconds(attack, nowMs);
+  if (seconds < 120) return C.medical;
+  if (seconds < 3600) return C.cyan;
+  return C.muted;
 }
 
 function StatusTag({children, tone='muted'}) {
@@ -202,6 +214,7 @@ export default function App() {
   }
 
   async function loadMarketItem(item){
+    Keyboard.dismiss();
     setMarketItem(item);setMarketQuery(item.name);setMarketLoading(true);setMarketError('');setMarketListings([]);
     try{const key=await getApiKey();if(!key)throw Error('Connect your Torn API key first.');const result=await fetchItemMarket(item.id,key);setMarketListings(result.listings)}
     catch(e){setMarketError(e?.message||'Could not load live listings.')}
@@ -211,6 +224,7 @@ export default function App() {
   async function refreshMarket(){if(marketItem)await loadMarketItem(marketItem)}
 
   async function openMarketPurchase(item){
+    Keyboard.dismiss();
     const url='https://www.torn.com/page.php?sid=ItemMarket#/market/view=search&itemID='+encodeURIComponent(item.id);
     try{await Linking.openURL(url)}
     catch(_){Alert.alert('Could not open Torn','Open the Item Market in Torn and search for '+item.name+'.')}
@@ -389,12 +403,12 @@ export default function App() {
     return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
         <TPV2Header clock={clock} section="Travel" refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync().catch(()=>{})} onSettings={()=>setActivePage('SETTINGS')}/>
-        <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Travel</Text><Text style={styles.v2PageCopy}>Your flight status and arrival information at a glance.</Text></View>
+        <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Travel</Text><Text style={styles.v2PageCopy}>Live flight status, arrival time and landing alerts.</Text></View>
         {active?<>
           <TPV2Card highlight><Text style={styles.v2Kicker}>CURRENT FLIGHT</Text><View style={styles.v2FlightRoute}><Text style={styles.v2FlightPlace}>{travel.origin||'Torn City'}</Text><Text style={styles.v2FlightPlane}>✈</Text><Text style={[styles.v2FlightPlace,{textAlign:'right'}]}>{travel.destination||'Destination'}</Text></View><Text style={styles.v2FlightLabel}>Arriving in</Text><Text style={styles.v2FlightCountdown}>{formatDuration(remaining)}</Text>{flightTotal?<View style={styles.v2Track}><View style={[styles.v2Fill,{width:flightProgress+'%',backgroundColor:C.primary}]}/></View>:null}</TPV2Card>
           <View style={styles.v2MetricRow}><TPV2Card style={styles.v2MetricSmall}><Text style={styles.v2MetricLabel}>LOCAL ARRIVAL</Text><Text style={styles.v2MetricValue}>{arrivalDate.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</Text></TPV2Card><TPV2Card style={styles.v2MetricSmall}><Text style={styles.v2MetricLabel}>TORN ARRIVAL</Text><Text style={styles.v2MetricValue}>{arrivalDate.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'})}</Text></TPV2Card></View>
           <TPV2Card><TPActivityRowV2 icon="⌁" title="Landing alerts active" detail="TornPulse will remind you shortly before expected arrival." tone={C.cyan}/></TPV2Card>
-        </>:<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>✈</Text><Text style={styles.v2EmptyTitle}>Ready to travel</Text><Text style={styles.v2EmptyCopy}>Start your trip in Torn. TornPulse will automatically switch to a live arrival countdown when your API reports the flight.</Text></View></TPV2Card>}
+        </>:<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>✈</Text><Text style={styles.v2EmptyTitle}>Ready to travel</Text><Text style={styles.v2EmptyCopy}>Start your trip in Torn. As soon as the API reports your flight, TornPulse switches to a live countdown and arrival view.</Text></View></TPV2Card>}
         <Pressable accessibilityRole="link" onPress={openOfficialTravelAgency} style={({pressed})=>[styles.v2Primary,pressed&&styles.nPressed]}><Text style={styles.v2PrimaryText}>OPEN TORN TRAVEL AGENCY  ↗</Text></Pressable>
         <Text style={styles.v2FinePrint}>Read-only flight information. TornPulse never starts travel for you.</Text>
       </ScrollView>
@@ -406,12 +420,12 @@ export default function App() {
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="Market" refreshing={marketLoading} onRefresh={marketItem?refreshMarket:openMarketPage} onSettings={()=>setActivePage('SETTINGS')}/>
       <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Item Market</Text><Text style={styles.v2PageCopy}>Search. Compare recent API listings. Open Torn to purchase.</Text></View>
-      <View style={styles.v2SearchWrap}><Text style={styles.v2SearchIcon}>⌕</Text><TextInput value={marketQuery} onChangeText={value=>{setMarketQuery(value);if(value!==marketItem?.name){setMarketItem(null);setMarketListings([])}}} autoCapitalize="none" autoCorrect={false} placeholder="Search an item…" placeholderTextColor="#66717F" style={styles.v2SearchInput}/></View>
+      <View style={styles.v2SearchWrap}><Text style={styles.v2SearchIcon}>⌕</Text><TextInput value={marketQuery} onChangeText={value=>{setMarketQuery(value);if(value!==marketItem?.name){setMarketItem(null);setMarketListings([])}}} autoCapitalize="none" autoCorrect={false} returnKeyType="search" placeholder="Search an item…" placeholderTextColor="#66717F" style={styles.v2SearchInput}/>{marketQuery?<Pressable accessibilityRole="button" accessibilityLabel="Clear market search" hitSlop={8} onPress={()=>{Keyboard.dismiss();setMarketQuery('');setMarketItem(null);setMarketListings([]);setMarketError('')}} style={styles.v2SearchClear}><Text style={styles.v2SearchClearText}>×</Text></Pressable>:null}</View>
       {marketQuery.trim().length===1?<Text style={styles.v2Hint}>Type at least 2 characters</Text>:null}
       {!marketItem&&marketMatches.map(item=><Pressable key={item.id} onPress={()=>loadMarketItem(item)} style={({pressed})=>[styles.v2SearchResult,pressed&&styles.nPressed]}><View style={{flex:1}}><Text style={styles.v2SearchName}>{item.name}</Text><Text style={styles.v2SearchMeta}>#{item.id}{item.type?'  •  '+item.type:''}</Text></View><Text style={styles.v2MenuArrow}>›</Text></Pressable>)}
       {marketLoading?<TPV2Card><View style={styles.v2Loading}><ActivityIndicator color={C.primary}/><Text style={styles.v2LoadingText}>{marketItem?'Loading recent listings…':'Loading Torn items…'}</Text></View></TPV2Card>:null}
       {marketError?<TPV2Card><Text style={styles.v2ErrorTitle}>Market unavailable</Text><Text style={styles.v2ErrorCopy}>{marketError}</Text><Pressable onPress={marketItem?refreshMarket:openMarketPage} style={styles.v2Secondary}><Text style={styles.v2SecondaryText}>TRY AGAIN</Text></Pressable></TPV2Card>:null}
-      {marketItem&&!marketLoading&&!marketError?<TPV2Card highlight><Text style={styles.v2Kicker}>SELECTED ITEM</Text><Text style={styles.v2SelectedName}>{marketItem.name}</Text><Text style={styles.v2SelectedMeta}>{marketListings.length} recent listing{marketListings.length===1?'':'s'} • lowest price first</Text></TPV2Card>:null}
+      {marketItem&&!marketLoading&&!marketError?<TPV2Card highlight><Text style={styles.v2Kicker}>SELECTED ITEM</Text><Text style={styles.v2SelectedName}>{marketItem.name}</Text><View style={styles.v2SelectedSummary}><View><Text style={styles.v2SelectedMeta}>{marketListings.length} recent listing{marketListings.length===1?'':'s'}</Text><Text style={styles.v2SelectedSub}>LOWEST PRICE FIRST</Text></View>{marketListings[0]?<View style={styles.v2LowestBox}><Text style={styles.v2LowestLabel}>LOWEST</Text><Text style={styles.v2LowestPrice}>{money(marketListings[0].price)}</Text></View>:null}</View></TPV2Card>:null}
       {marketItem&&!marketLoading&&!marketError&&marketListings.length===0?<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyTitle}>No listings found</Text><Text style={styles.v2EmptyCopy}>No recent public Item Market listings were returned for this item.</Text></View></TPV2Card>:null}
       {marketItem&&marketListings.map((listing,index)=><View key={String(listing.id||index)} style={styles.v2Listing}><View><Text style={styles.v2ListingPrice}>{money(listing.price)}</Text><Text style={styles.v2ListingQty}>{Number(listing.amount||1).toLocaleString()} listed</Text></View><Pressable onPress={()=>openMarketPurchase(marketItem)} style={styles.v2ListingOpen}><Text style={styles.v2ListingOpenText}>OPEN IN TORN ↗</Text></Pressable></View>)}
     </ScrollView>
@@ -425,13 +439,13 @@ export default function App() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
         <TPV2Header clock={clock} section="Activity" refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync().catch(()=>{})} onSettings={()=>setActivePage('SETTINGS')}/>
         <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Activity</Text><Text style={styles.v2PageCopy}>Important account events without the noise.</Text></View>
-        <TPV2Card>
-          {attack?<TPActivityRowV2 icon="⚔" title="Latest incoming attack" detail={(attackerName||'Unknown attacker')+' • '+String(attack.result||'Result unavailable')} time={attackAge} tone={C.medical}/>:null}
-          <TPActivityRowV2 icon="●" title={statusState} detail={statusDescription} time={statusSeconds>0?formatDuration(statusSeconds):''} tone={statusTone(statusState)==='live'?C.green:statusTone(statusState)==='danger'?C.medical:C.amber}/>
+        {(attack||travelActive||cooldownReady.length>0||statusTone(statusState)!=='live')?<TPV2Card>
+          {attack?<TPActivityRowV2 icon="⚔" title="Latest incoming attack" detail={(attackerName||'Unknown attacker')+' • '+String(attack.result||'Result unavailable')} time={attackAge} tone={attackTone(attack,clock)}/>:null}
+          {statusTone(statusState)!=='live'?<TPActivityRowV2 icon={statusTone(statusState)==='danger'?'✚':'!'} title={statusState} detail={statusDescription} time={statusSeconds>0?formatDuration(statusSeconds):''} tone={statusTone(statusState)==='danger'?C.medical:C.amber}/>:null}
           {travelActive?<TPActivityRowV2 icon="✈" title={'Traveling to '+(snapshot.travel.destination||'destination')} detail="Expected arrival is being tracked." time={formatDuration(Math.max(0,Math.ceil((Number(snapshot.travel.arrival)*1000-clock)/1000)))} tone={C.cyan}/>:null}
           {cooldownReady.map(([label])=><TPActivityRowV2 key={label} icon="✓" title={label+' cooldown ready'} detail="Ready according to your latest Torn data." tone={C.green}/>)}
-        </TPV2Card>
-        {!attack&&!travelActive&&cooldownReady.length===0&&statusTone(statusState)==='live'?<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>✓</Text><Text style={styles.v2EmptyTitle}>Nothing urgent</Text><Text style={styles.v2EmptyCopy}>Your account has no important activity to surface right now.</Text></View></TPV2Card>:null}
+        </TPV2Card>:null}
+        {!attack&&!travelActive&&cooldownReady.length===0&&statusTone(statusState)==='live'?<TPV2Card highlight><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>✓</Text><Text style={styles.v2EmptyTitle}>All clear</Text><Text style={styles.v2EmptyCopy}>No urgent status, travel, attack or cooldown events need your attention.</Text></View></TPV2Card>:null}
       </ScrollView>
       <TPBottomNav active="ACTIVITY" onChange={setActivePage} onMarket={openMarketPage}/>
     </View></SafeAreaView>;
@@ -441,8 +455,9 @@ export default function App() {
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="More" onSettings={()=>setActivePage('SETTINGS')}/>
       <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>More</Text><Text style={styles.v2PageCopy}>Tools, account controls and advanced settings.</Text></View>
-      <TPV2Card><TPMenuRowV2 icon="◉" title="HUD Settings" detail={hudRunning?'Floating HUD is active':'Configure the right-edge HUD'} onPress={()=>setActivePage('SETTINGS')}/><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Independent external leveling-target resource" onPress={openBaldrList} external/><TPMenuRowV2 icon="⚙" title="Notifications & Account" detail="Alerts, permissions and API connection" onPress={()=>setActivePage('SETTINGS')}/></TPV2Card>
-      <TPV2Card><Text style={styles.v2Kicker}>TORN PULSE 2.0</Text><Text style={styles.v2AboutTitle}>Simple by design.</Text><Text style={styles.v2AboutCopy}>TornPulse informs, calculates, reminds and links. Gameplay actions stay under your control in Torn.</Text></TPV2Card>
+      <Text style={styles.v2SectionTitle}>Controls</Text><TPV2Card><TPMenuRowV2 icon="◉" title="Floating HUD" detail={hudRunning?'Active over other apps':'Configure size, position and alerts'} onPress={()=>setActivePage('SETTINGS')}/><TPMenuRowV2 icon="⚙" title="Notifications & Account" detail="Permissions, warnings and API connection" onPress={()=>setActivePage('SETTINGS')}/></TPV2Card>
+      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Independent external leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
+      <TPV2Card><Text style={styles.v2Kicker}>TORN PULSE 2.0</Text><Text style={styles.v2AboutTitle}>Built to assist, not automate.</Text><Text style={styles.v2AboutCopy}>TornPulse displays read-only Torn data, calculates timers, sends reminders and opens official or independent resources. Gameplay actions remain under your control in Torn.</Text></TPV2Card>
     </ScrollView>
     <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openMarketPage}/>
   </View></SafeAreaView>;
@@ -530,7 +545,7 @@ const styles=StyleSheet.create({
   alertLabel:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:1.2,marginTop:4,marginBottom:7},pills:{flexDirection:'row',gap:6,marginBottom:10},pill:{flex:1,backgroundColor:C.surface,borderWidth:1,borderColor:C.line2,paddingVertical:10,alignItems:'center',borderRadius:8},pillOn:{backgroundColor:'#0D2333',borderColor:C.primary},pillText:{color:C.text,fontSize:11,fontWeight:'900'},pillTextOn:{color:C.cyan},
   systemPanel:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line2,padding:14,borderRadius:13,marginBottom:10},systemTop:{flexDirection:'row',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8},systemTitle:{color:C.text,fontSize:18,fontWeight:'900',letterSpacing:.5,marginTop:3},diagnosticRow:{borderTopWidth:1,borderTopColor:C.line,paddingVertical:9,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},diagnosticLabel:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:1},diagnosticValue:{fontSize:9,fontWeight:'900',letterSpacing:.7},systemButton:{borderWidth:1,borderColor:C.line2,backgroundColor:C.surface2,borderRadius:8,padding:10,alignItems:'center',marginTop:7},systemButtonText:{color:C.text,fontSize:9,fontWeight:'900',letterSpacing:.9},
   footer:{borderTopWidth:1,borderTopColor:C.line,marginTop:14,paddingTop:15},syncText:{color:C.muted,fontSize:9,fontWeight:'900',letterSpacing:1.2,textAlign:'center'},footerButton:{borderWidth:1,borderColor:'#653033',backgroundColor:'#14090A',padding:13,alignItems:'center',marginTop:12,borderRadius:10},footerButtonText:{color:C.muted,fontWeight:'900',fontSize:10,letterSpacing:1.1},
- nPage:{paddingHorizontal:12,paddingTop:Platform.OS==='android'?24:6,paddingBottom:40},nHeader:{height:86,flexDirection:'row',alignItems:'center',borderBottomWidth:1,borderBottomColor:'#7B2025',marginBottom:12},nHeadBtn:{width:50,height:52,alignItems:'center',justifyContent:'center'},nHeadBtnText:{color:'#F2F3F5',fontSize:31,fontWeight:'500'},nLogoClip:{flex:1,height:82,alignItems:'center',justifyContent:'center',overflow:'hidden'},nLogo:{width:210,height:108},nPressed:{opacity:.68},nDisabled:{opacity:.5},nTopHud:{minHeight:82,flexDirection:'row',alignItems:'center',gap:12,borderWidth:1,borderColor:'#405147',borderRadius:14,backgroundColor:'#171D1A',padding:12,marginBottom:10},nTopHudCopy:{flex:1,minWidth:0},nTopHudTitle:{color:'#F3F5F4',fontSize:16,fontWeight:'900',marginTop:4},nTornTime:{color:'#B8BDC5',fontSize:9,fontWeight:'900',letterSpacing:.55,marginTop:7},nTopHudButton:{height:46,minWidth:116,paddingHorizontal:16,borderWidth:1,borderColor:'#5C8064',borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#26342A'},nTopHudButtonStop:{borderColor:'#805C5F',backgroundColor:'#341F21'},nTopHudButtonText:{color:'#74DF83',fontSize:10,fontWeight:'900'},nTopHudButtonTextStop:{color:'#F08D92'},
+ nPage:{paddingHorizontal:12,paddingTop:Platform.OS==='android'?24:6,paddingBottom:52},nHeader:{height:86,flexDirection:'row',alignItems:'center',borderBottomWidth:1,borderBottomColor:'#7B2025',marginBottom:12},nHeadBtn:{width:50,height:52,alignItems:'center',justifyContent:'center'},nHeadBtnText:{color:'#F2F3F5',fontSize:31,fontWeight:'500'},nLogoClip:{flex:1,height:82,alignItems:'center',justifyContent:'center',overflow:'hidden'},nLogo:{width:210,height:108},nPressed:{opacity:.68},nDisabled:{opacity:.5},nTopHud:{minHeight:82,flexDirection:'row',alignItems:'center',gap:12,borderWidth:1,borderColor:'#405147',borderRadius:14,backgroundColor:'#171D1A',padding:12,marginBottom:10},nTopHudCopy:{flex:1,minWidth:0},nTopHudTitle:{color:'#F3F5F4',fontSize:16,fontWeight:'900',marginTop:4},nTornTime:{color:'#B8BDC5',fontSize:9,fontWeight:'900',letterSpacing:.55,marginTop:7},nTopHudButton:{height:46,minWidth:116,paddingHorizontal:16,borderWidth:1,borderColor:'#5C8064',borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#26342A'},nTopHudButtonStop:{borderColor:'#805C5F',backgroundColor:'#341F21'},nTopHudButtonText:{color:'#74DF83',fontSize:10,fontWeight:'900'},nTopHudButtonTextStop:{color:'#F08D92'},
  nResourceStrip:{minHeight:116,flexDirection:'row',borderWidth:1,borderColor:'#2A3037',borderRadius:17,backgroundColor:'#090C10',overflow:'hidden',marginBottom:10},nResourceStripCompact:{minHeight:214,flexWrap:'wrap'},nResource:{flex:1,minWidth:0,paddingHorizontal:10,paddingVertical:11,borderRightWidth:1,borderRightColor:'#2A3037'},nResourceCompact:{flex:0,flexBasis:'50%',minHeight:106},nResourceTop:{borderBottomWidth:1,borderBottomColor:'#2A3037'},nResourceLast:{borderRightWidth:0},nResHead:{flexDirection:'row',alignItems:'center',gap:7,minWidth:0},nResIcon:{width:42,height:42,borderWidth:1.5,borderRadius:11,alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0},nResImage:{width:38,height:38},nResLabel:{color:'#AAB0B9',fontSize:8,fontWeight:'900',letterSpacing:.75,flexShrink:1},nResValue:{color:'#F3F5F7',fontSize:16,fontWeight:'900',marginTop:9},nTrack:{height:6,borderRadius:4,backgroundColor:'#252A31',overflow:'hidden',marginTop:11},nFill:{height:'100%',borderRadius:4},nResSub:{color:'#858E99',fontSize:9,fontWeight:'800',marginTop:9},
  nMiniStrip:{minHeight:86,flexDirection:'row',borderWidth:1,borderColor:'#2A3037',borderRadius:16,backgroundColor:'#0B0E12',overflow:'hidden',marginBottom:12},nMiniStripCompact:{minHeight:154,flexWrap:'wrap'},nMini:{flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:9,borderRightWidth:1,borderRightColor:'#2A3037'},nMiniCompact:{flex:0,flexBasis:'50%',minHeight:76},nMiniTop:{borderBottomWidth:1,borderBottomColor:'#2A3037'},nMiniLast:{borderRightWidth:0},nMiniIcon:{width:42,height:42,borderWidth:1.5,borderRadius:12,alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0},nMiniImage:{width:39,height:39},nMiniCopy:{flex:1,minWidth:0},nMiniLabel:{color:'#A3AAB4',fontSize:8,fontWeight:'900',letterSpacing:.8},nMiniValue:{fontSize:10,fontWeight:'900',marginTop:4},
  nBaldr:{minHeight:116,flexDirection:'row',alignItems:'center',gap:13,borderWidth:1,borderColor:'#63272B',borderRadius:17,backgroundColor:'#100A0C',padding:16,marginBottom:12},nBaldrCompact:{flexWrap:'wrap'},nBaldrMark:{width:58,height:58,borderWidth:2,borderColor:C.red,borderRadius:16,alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0},nBaldrImage:{width:54,height:54},nBaldrCopyWrap:{flex:1,minWidth:150},nEyebrow:{color:'#89929E',fontSize:8,fontWeight:'900',letterSpacing:1.2},nBaldrTitle:{color:'#F4F5F7',fontSize:22,fontWeight:'900',marginTop:3},nBaldrCopy:{color:'#A0A6AF',fontSize:9,lineHeight:14,marginTop:4},nBaldrBtn:{height:44,minWidth:78,borderWidth:1,borderColor:C.red,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:'#211012'},nBaldrBtnCompact:{width:'100%',marginTop:2},nBaldrBtnText:{color:'#F26065',fontSize:9,fontWeight:'900'},
@@ -629,7 +644,7 @@ const styles=StyleSheet.create({
 
 ,
   v2Shell:{flex:1,backgroundColor:C.bg},
-  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:28},
+  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:40},
   v2Header:{paddingTop:4,paddingBottom:14,marginBottom:4},
   v2HeaderTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   v2Brand:{flexDirection:'row',alignItems:'center',gap:10,flex:1,minWidth:0},
@@ -643,7 +658,7 @@ const styles=StyleSheet.create({
   v2HeaderIconText:{color:C.text,fontSize:18,fontWeight:'800'},
   v2Clock:{color:C.primary,fontSize:28,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:12,fontVariant:['tabular-nums']},
   v2ClockZone:{color:C.cyan,fontSize:13,fontWeight:'900'},
-  v2BottomNav:{height:68,backgroundColor:'#0A0E13',borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',paddingHorizontal:4},
+  v2BottomNav:{height:Platform.OS==='android'?78:70,backgroundColor:'#0A0E13',borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',paddingHorizontal:4,paddingTop:3,paddingBottom:Platform.OS==='android'?9:2},
   v2NavItem:{flex:1,alignItems:'center',justifyContent:'center',position:'relative'},
   v2NavIndicator:{position:'absolute',top:0,width:28,height:2,borderRadius:2,backgroundColor:C.primary},
   v2NavIcon:{color:'#647181',fontSize:20,fontWeight:'900',height:25},
@@ -700,8 +715,8 @@ const styles=StyleSheet.create({
   v2WarningTitle:{color:C.text,fontSize:11,fontWeight:'900'},
   v2WarningCopy:{color:C.muted,fontSize:9,marginTop:2},
   v2PageIntro:{marginTop:6,marginBottom:12},
-  v2PageTitle:{color:C.text,fontSize:28,fontWeight:'900'},
-  v2PageCopy:{color:C.muted,fontSize:11,lineHeight:17,marginTop:4},
+  v2PageTitle:{color:C.text,fontSize:26,fontWeight:'900'},
+  v2PageCopy:{color:C.muted,fontSize:11,lineHeight:17,marginTop:3},
   v2Kicker:{color:C.cyan,fontSize:9,fontWeight:'900',letterSpacing:1.2},
   v2FlightRoute:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:16},
   v2FlightPlace:{color:C.text,fontSize:17,fontWeight:'900',flex:1},
@@ -723,7 +738,9 @@ const styles=StyleSheet.create({
   v2EmptyCopy:{color:C.muted,fontSize:10,lineHeight:16,textAlign:'center',marginTop:5},
   v2SearchWrap:{height:50,borderRadius:14,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,flexDirection:'row',alignItems:'center',paddingHorizontal:13,marginBottom:10},
   v2SearchIcon:{color:C.muted,fontSize:20,marginRight:8},
-  v2SearchInput:{flex:1,color:C.text,fontSize:14},
+  v2SearchInput:{flex:1,color:C.text,fontSize:14,paddingVertical:0},
+  v2SearchClear:{width:34,height:34,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#111923',marginLeft:6},
+  v2SearchClearText:{color:'#95A4B3',fontSize:23,fontWeight:'500',lineHeight:26},
   v2Hint:{color:C.amber,fontSize:9,fontWeight:'800',marginBottom:8},
   v2SearchResult:{minHeight:58,borderBottomWidth:1,borderBottomColor:C.line,flexDirection:'row',alignItems:'center',paddingHorizontal:4},
   v2SearchName:{color:C.text,fontSize:14,fontWeight:'800'},
@@ -734,6 +751,11 @@ const styles=StyleSheet.create({
   v2ErrorCopy:{color:C.muted,fontSize:10,lineHeight:16,marginTop:5},
   v2SelectedName:{color:C.text,fontSize:21,fontWeight:'900',marginTop:5},
   v2SelectedMeta:{color:C.muted,fontSize:10,marginTop:4},
+  v2SelectedSummary:{flexDirection:'row',alignItems:'flex-end',justifyContent:'space-between',gap:12,marginTop:7},
+  v2SelectedSub:{color:'#6D7885',fontSize:8,fontWeight:'800',letterSpacing:.8,marginTop:3},
+  v2LowestBox:{alignItems:'flex-end'},
+  v2LowestLabel:{color:C.cyan,fontSize:7,fontWeight:'900',letterSpacing:1},
+  v2LowestPrice:{color:C.green,fontSize:16,fontWeight:'900',marginTop:2},
   v2Listing:{minHeight:66,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:13,padding:12,marginBottom:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
   v2ListingPrice:{color:C.text,fontSize:16,fontWeight:'900'},
   v2ListingQty:{color:C.muted,fontSize:9,marginTop:3},
