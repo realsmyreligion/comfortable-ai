@@ -99,6 +99,7 @@ function Cooldown({label, icon, seconds}) {
   </View>;
 }
 
+// TORNPULSE_V207_COMMUNITY_POLISH — curated external tools hub + Samsung home/nav spacing.
 // TORNPULSE_COMMUNITY_TOOLS_V1 — curated external Torn resources; TornPulse never forwards the user's stored API key.
 const COMMUNITY_TOOLS={
   baldr:{name:'Baldr’s List',url:'https://oran.pw/baldrstargets/'},
@@ -508,8 +509,10 @@ export default function App() {
   if(activePage==='TOOLS')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="Community Tools" onSettings={()=>setActivePage('SETTINGS')}/>
-      <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>External Tools</Text><Text style={styles.v2PageCopy}>Trusted community resources for targets, stats, wars, travel and trading.</Text></View>
-      <TPV2Card highlight><Text style={styles.v2Kicker}>PRIVACY FIRST</Text><Text style={styles.v2AboutTitle}>Your TornPulse key stays in TornPulse.</Text><Text style={styles.v2AboutCopy}>These buttons only open the selected website. TornPulse never forwards your saved API key, login or account data to a third-party site. If a tool needs access, you connect to that tool separately.</Text></TPV2Card>
+      <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Community Tools</Text><Text style={styles.v2PageCopy}>A curated launchpad for the Torn resources that are genuinely useful alongside TornPulse.</Text></View>
+      <View style={styles.v2ToolSummary}><View style={styles.v2ToolSummaryItem}><Text style={styles.v2ToolSummaryValue}>7</Text><Text style={styles.v2ToolSummaryLabel}>CURATED TOOLS</Text></View><View style={styles.v2ToolSummaryDivider}/><View style={styles.v2ToolSummaryItem}><Text style={styles.v2ToolSummaryValue}>5</Text><Text style={styles.v2ToolSummaryLabel}>CATEGORIES</Text></View><View style={styles.v2ToolSummaryDivider}/><View style={styles.v2ToolSummaryItem}><Text style={[styles.v2ToolSummaryValue,{color:C.green}]}>LOCAL</Text><Text style={styles.v2ToolSummaryLabel}>TORNPULSE KEY</Text></View></View>
+      <TPV2Card highlight><Text style={styles.v2Kicker}>PRIVACY FIRST</Text><Text style={styles.v2AboutTitle}>Your TornPulse key stays in TornPulse.</Text><Text style={styles.v2AboutCopy}>Every tool below opens independently. TornPulse never forwards your saved API key, password or account data. If a third-party service needs an API key, you connect to that service separately.</Text></TPV2Card>
+      <TPV2Card><Text style={styles.v2Kicker}>SMART SHORTCUTS</Text><Text style={styles.v2AboutTitle}>Tools appear where they make sense.</Text><Text style={styles.v2AboutCopy}>Travel links to YATA. Market links to Torn Exchange and torn.report. Baldr’s List stays one tap away from Home. This hub keeps the full collection together.</Text></TPV2Card>
 
       <Text style={styles.v2SectionTitle}>Targets & Combat</Text>
       <TPV2Card><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Established leveling-target resource" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.baldr)} external/><TPMenuRowV2 icon="⌖" title="FFScouter" detail="Target finder, fair-fight filters and battle-stat estimates" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.ffscouter)} external/></TPV2Card>
@@ -536,7 +539,7 @@ export default function App() {
       <TPV2Header clock={clock} section="More" onSettings={()=>setActivePage('SETTINGS')}/>
       <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>More</Text><Text style={styles.v2PageCopy}>Tools, account controls and advanced settings.</Text></View>
       <Text style={styles.v2SectionTitle}>Controls</Text><TPV2Card><TPMenuRowV2 icon="◉" title="Floating HUD" detail={hudRunning?'Active over other apps':'Configure size, position and alerts'} onPress={()=>setActivePage('SETTINGS')}/><TPMenuRowV2 icon="⚙" title="Notifications & Account" detail="Permissions, warnings and API connection" onPress={()=>setActivePage('SETTINGS')}/></TPV2Card>
-      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="⌘" title="Community Tools" detail="Targets, stats, wars, travel and trading resources" onPress={()=>setActivePage('TOOLS')}/><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Quick access to the established leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
+      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="⌘" title="Community Tools" detail="7 curated tools for targets, stats, wars, travel and trading" onPress={()=>setActivePage('TOOLS')}/><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Quick access to the established leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
       <TPV2Card><Text style={styles.v2Kicker}>TORN PULSE 2.0</Text><Text style={styles.v2AboutTitle}>Built to assist, not automate.</Text><Text style={styles.v2AboutCopy}>TornPulse displays read-only Torn data, calculates timers, sends reminders and opens official or independent resources. Gameplay actions remain under your control in Torn.</Text></TPV2Card>
     </ScrollView>
     <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openMarketPage}/>
@@ -563,7 +566,7 @@ export default function App() {
         : {icon:'◉',title:next?.title||'Everything looks good',detail:next?.detail||'No urgent action surfaced right now.',value:'',tone:C.primary};
 
   return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
-    <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.v2PageScroll}>
+    <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>
       <TPV2Header clock={clock} section="Your Torn companion" refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync().catch(()=>{})} onSettings={()=>setActivePage('SETTINGS')}/>
       {error?<View style={styles.v2Warning}><Text style={styles.v2WarningIcon}>!</Text><View style={{flex:1}}><Text style={styles.v2WarningTitle}>Unable to refresh Torn data</Text><Text style={styles.v2WarningCopy}>{error}</Text></View></View>:null}
       <TPV2Card style={styles.v2PlayerCard}><TPProfileAvatar profile={snapshot.profile}/><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={styles.v2PlayerName}>{snapshot.profile?.name||'Torn Player'}</Text><Text style={styles.v2PlayerMeta}>{snapshot.profile?.id?'ID '+snapshot.profile.id+' • ':''}{travelActive?('Traveling to '+(snapshot.travel.destination||'destination')):'Torn City'}</Text><View style={styles.v2PlayerStatus}><View style={[styles.v2StatusDot,{backgroundColor:statusTone(statusState)==='live'?C.green:statusTone(statusState)==='danger'?C.medical:C.amber}]}/><Text style={styles.v2PlayerStatusText}>{statusState}</Text></View></View><Text style={styles.v2Chevron}>›</Text></TPV2Card>
@@ -576,7 +579,7 @@ export default function App() {
 
       <TPV2Card highlight><View style={styles.v2Smart}><View style={[styles.v2SmartIcon,{borderColor:smart.tone}]}><Text style={[styles.v2SmartIconText,{color:smart.tone}]}>{smart.icon}</Text></View><View style={{flex:1,minWidth:0}}><Text style={styles.v2SmartTitle}>{smart.title}</Text><Text numberOfLines={2} style={styles.v2SmartDetail}>{smart.detail}</Text></View>{smart.value?<Text style={[styles.v2SmartValue,{color:smart.tone}]}>{smart.value}</Text>:<Text style={styles.v2Chevron}>›</Text>}</View></TPV2Card>
 
-      <View style={styles.v2QuickGrid}><TPQuickV2 icon="✈" label="Travel" onPress={()=>setActivePage('TRAVEL')}/><TPQuickV2 icon="▣" label="Market" onPress={openMarketPage}/><TPQuickV2 icon="◎" label="Baldr’s List" onPress={openBaldrList}/><TPQuickV2 icon="≡" label="Activity" onPress={()=>setActivePage('ACTIVITY')}/></View>
+      <View style={styles.v2QuickGrid}><TPQuickV2 icon="✈" label="Travel" onPress={()=>setActivePage('TRAVEL')}/><TPQuickV2 icon="▣" label="Market" onPress={openMarketPage}/><TPQuickV2 icon="◎" label="Baldr’s List" onPress={openBaldrList}/><TPQuickV2 icon="⌘" label="Tools" onPress={()=>setActivePage('TOOLS')}/></View>
 
       <Pressable accessibilityRole="button" onPress={hudRunning?stopHud:startHud} disabled={hudBusy} style={({pressed})=>[styles.v2HudButton,hudRunning&&styles.v2HudButtonActive,hudBusy&&styles.nDisabled,pressed&&styles.nPressed]}><View style={styles.v2HudButtonIcon}><Text style={styles.v2HudButtonIconText}>◉</Text></View><View style={{flex:1}}><Text style={styles.v2HudButtonTitle}>{hudBusy?'WORKING…':hudRunning?'HUD ACTIVE':'START HUD'}</Text><Text style={styles.v2HudButtonSub}>{hudRunning?'Tap to stop the floating HUD':'Get live Torn stats over other apps'}</Text></View><Text style={styles.v2HudButtonArrow}>›</Text></Pressable>
       <Text style={styles.v2Sync}>Last sync {relativeAge(Math.floor(Number(snapshot.fetchedAt||0)/1000),clock)} • v2.0.0</Text>
@@ -724,7 +727,8 @@ const styles=StyleSheet.create({
 
 ,
   v2Shell:{flex:1,backgroundColor:C.bg},
-  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:40},
+  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:48},
+  v2HomeScroll:{paddingBottom:64},
   v2Header:{paddingTop:4,paddingBottom:14,marginBottom:4},
   v2HeaderTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   v2Brand:{flexDirection:'row',alignItems:'center',gap:10,flex:1,minWidth:0},
@@ -738,7 +742,7 @@ const styles=StyleSheet.create({
   v2HeaderIconText:{color:C.text,fontSize:18,fontWeight:'800'},
   v2Clock:{color:C.primary,fontSize:28,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:12,fontVariant:['tabular-nums']},
   v2ClockZone:{color:C.cyan,fontSize:13,fontWeight:'900'},
-  v2BottomNav:{height:Platform.OS==='android'?78:70,backgroundColor:'#0A0E13',borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',paddingHorizontal:4,paddingTop:3,paddingBottom:Platform.OS==='android'?9:2},
+  v2BottomNav:{height:Platform.OS==='android'?82:70,backgroundColor:'#0A0E13',borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',paddingHorizontal:4,paddingTop:5,paddingBottom:Platform.OS==='android'?12:2},
   v2NavItem:{flex:1,alignItems:'center',justifyContent:'center',position:'relative'},
   v2NavIndicator:{position:'absolute',top:0,width:28,height:2,borderRadius:2,backgroundColor:C.primary},
   v2NavIcon:{color:'#647181',fontSize:20,fontWeight:'900',height:25},
@@ -779,18 +783,23 @@ const styles=StyleSheet.create({
   v2SmartTitle:{color:C.text,fontSize:16,fontWeight:'900'},
   v2SmartDetail:{color:C.muted,fontSize:11,lineHeight:16,marginTop:3},
   v2SmartValue:{fontSize:17,fontWeight:'900',fontVariant:['tabular-nums']},
-  v2QuickGrid:{flexDirection:'row',gap:8,marginBottom:12},
-  v2Quick:{flex:1,minHeight:78,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:14,alignItems:'center',justifyContent:'center',paddingHorizontal:4},
+  v2QuickGrid:{flexDirection:'row',gap:8,marginTop:2,marginBottom:14},
+  v2Quick:{flex:1,minHeight:74,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:14,alignItems:'center',justifyContent:'center',paddingHorizontal:4},
   v2QuickIcon:{color:C.primary,fontSize:23,fontWeight:'900'},
   v2QuickLabel:{color:C.text,fontSize:10,fontWeight:'800',marginTop:7,textAlign:'center'},
-  v2HudButton:{minHeight:76,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:12},
+  v2HudButton:{minHeight:74,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:14},
   v2HudButtonActive:{backgroundColor:'#126A9F'},
   v2HudButtonIcon:{width:44,height:44,borderRadius:22,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'},
   v2HudButtonIconText:{color:'#FFFFFF',fontSize:20,fontWeight:'900'},
   v2HudButtonTitle:{color:'#FFFFFF',fontSize:16,fontWeight:'900'},
   v2HudButtonSub:{color:'#E0F2FF',fontSize:10,marginTop:2},
   v2HudButtonArrow:{color:'#FFFFFF',fontSize:28},
-  v2Sync:{color:'#647181',fontSize:9,textAlign:'center',marginBottom:4},
+  v2Sync:{color:'#647181',fontSize:9,textAlign:'center',marginTop:1,marginBottom:12},
+  v2ToolSummary:{backgroundColor:'#0D151E',borderWidth:1,borderColor:'#22425B',borderRadius:14,flexDirection:'row',alignItems:'stretch',marginBottom:12,overflow:'hidden'},
+  v2ToolSummaryItem:{flex:1,minHeight:68,alignItems:'center',justifyContent:'center',paddingHorizontal:5},
+  v2ToolSummaryDivider:{width:1,backgroundColor:'#263746',marginVertical:12},
+  v2ToolSummaryValue:{color:C.cyan,fontSize:15,fontWeight:'900',letterSpacing:.3},
+  v2ToolSummaryLabel:{color:'#7F8C9A',fontSize:7,fontWeight:'900',letterSpacing:.8,textAlign:'center',marginTop:4},
   v2Warning:{backgroundColor:'#21191B',borderWidth:1,borderColor:'#6B343B',borderRadius:14,padding:12,flexDirection:'row',gap:10,alignItems:'center',marginBottom:12},
   v2WarningIcon:{color:C.medical,fontSize:18,fontWeight:'900'},
   v2WarningTitle:{color:C.text,fontSize:11,fontWeight:'900'},
