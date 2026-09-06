@@ -255,10 +255,14 @@ export default function App() {
     if (!key) return;
     if (spinner) setRefreshing(true);
     try {
-      const snap = await fetchSnapshot(key);
-      setSnapshot(snap); setError('');
-      await scheduleSnapshotAlerts(snap, settings);
-      return snap;
+      const [snap,profileImage]=await Promise.all([
+        fetchSnapshot(key),
+        fetchTornProfileImage(key),
+      ]);
+      const enriched=profileImage?{...snap,profile:{...(snap.profile||{}),image:profileImage}}:snap;
+      setSnapshot(enriched); setError('');
+      await scheduleSnapshotAlerts(enriched, settings);
+      return enriched;
     } catch (e) {
       setError(e?.message || 'Unable to connect to Torn.');
       throw e;
@@ -528,7 +532,7 @@ export default function App() {
     <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="Your Torn companion" refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync().catch(()=>{})} onSettings={()=>setActivePage('SETTINGS')}/>
       {error?<View style={styles.v2Warning}><Text style={styles.v2WarningIcon}>!</Text><View style={{flex:1}}><Text style={styles.v2WarningTitle}>Unable to refresh Torn data</Text><Text style={styles.v2WarningCopy}>{error}</Text></View></View>:null}
-      <TPV2Card style={styles.v2PlayerCard}><View style={styles.v2Avatar}><Text style={styles.v2AvatarText}>{String(snapshot.profile?.name||'T').slice(0,1).toUpperCase()}</Text></View><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={styles.v2PlayerName}>{snapshot.profile?.name||'Torn Player'}</Text><Text style={styles.v2PlayerMeta}>{snapshot.profile?.id?'ID '+snapshot.profile.id+' • ':''}{travelActive?('Traveling to '+(snapshot.travel.destination||'destination')):'Torn City'}</Text><View style={styles.v2PlayerStatus}><View style={[styles.v2StatusDot,{backgroundColor:statusTone(statusState)==='live'?C.green:statusTone(statusState)==='danger'?C.medical:C.amber}]}/><Text style={styles.v2PlayerStatusText}>{statusState}</Text></View></View><Text style={styles.v2Chevron}>›</Text></TPV2Card>
+      <TPV2Card style={styles.v2PlayerCard}><TPProfileAvatar profile={snapshot.profile}/><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={styles.v2PlayerName}>{snapshot.profile?.name||'Torn Player'}</Text><Text style={styles.v2PlayerMeta}>{snapshot.profile?.id?'ID '+snapshot.profile.id+' • ':''}{travelActive?('Traveling to '+(snapshot.travel.destination||'destination')):'Torn City'}</Text><View style={styles.v2PlayerStatus}><View style={[styles.v2StatusDot,{backgroundColor:statusTone(statusState)==='live'?C.green:statusTone(statusState)==='danger'?C.medical:C.amber}]}/><Text style={styles.v2PlayerStatusText}>{statusState}</Text></View></View><Text style={styles.v2Chevron}>›</Text></TPV2Card>
 
       <Text style={styles.v2SectionTitle}>Vitals</Text>
       <TPV2Card><View style={styles.v2VitalsGrid}>{snapshot.life?<TPVitalV2 label="HEALTH" image="health" bar={snapshot.life} accent={C.life}/>:null}<TPVitalV2 label="ENERGY" image="energy" bar={snapshot.energy} accent={C.energy}/><TPVitalV2 label="NERVE" image="nerve" bar={snapshot.nerve} accent={C.nerve}/><TPVitalV2 label="HAPPINESS" image="happiness" bar={snapshot.happy||snapshot.happiness} accent={C.happy} showFull={false}/></View></TPV2Card>
@@ -709,7 +713,8 @@ const styles=StyleSheet.create({
   v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:16,padding:14,marginBottom:12},
   v2CardHighlight:{borderColor:'#2878B0',shadowColor:C.primary,shadowOpacity:.12,shadowRadius:10,shadowOffset:{width:0,height:0},elevation:1},
   v2PlayerCard:{flexDirection:'row',alignItems:'center',gap:12,padding:14},
-  v2Avatar:{width:58,height:58,borderRadius:14,backgroundColor:'#172330',borderWidth:1,borderColor:'#35506A',alignItems:'center',justifyContent:'center'},
+  v2Avatar:{width:58,height:58,borderRadius:14,backgroundColor:'#172330',borderWidth:1,borderColor:'#35506A',alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  v2AvatarImage:{width:'100%',height:'100%'},
   v2AvatarText:{color:C.cyan,fontSize:24,fontWeight:'900'},
   v2PlayerName:{color:C.text,fontSize:20,fontWeight:'900'},
   v2PlayerMeta:{color:C.muted,fontSize:11,marginTop:3},
@@ -838,4 +843,5 @@ const styles=StyleSheet.create({
   v2BootTitle:{color:C.text,fontSize:27,fontWeight:'900',letterSpacing:1.5,marginTop:20},
   v2BootSub:{color:C.muted,fontSize:9,fontWeight:'800',letterSpacing:2.4,marginTop:7}
 
-});
+});// TORNPULSE_PROFILE_IMAGE_V205 — show the player's official Torn profile image with a safe initials fallback.
+
