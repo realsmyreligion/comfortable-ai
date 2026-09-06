@@ -99,6 +99,7 @@ function Cooldown({label, icon, seconds}) {
   </View>;
 }
 
+// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.
 // TORNPULSE_V207_COMMUNITY_POLISH — curated external tools hub + Samsung home/nav spacing.
 // TORNPULSE_COMMUNITY_TOOLS_V1 — curated external Torn resources; TornPulse never forwards the user's stored API key.
 const COMMUNITY_TOOLS={
@@ -139,9 +140,10 @@ function TPTravelHub({travel,onOpen,clock}){
   </Pressable>
 }
 const TP_CATEGORY_IMAGES={health:require('./tp-health.png'),energy:require('./tp-energy.png'),nerve:require('./tp-nerve.png'),happiness:require('./tp-happiness.png'),drug:require('./tp-drug.png'),booster:require('./tp-booster.png'),medical:require('./tp-medical.png'),baldr:require('./tp-baldr.png')};
+const TP_BRAND={header:require('./header-logo-wide-1200x360.png'),emblem:require('./hud-icon-256.png')};
 function tornClock(ms){return new Date(ms).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'})}
 function tornCountdown(ms){const d=new Date(ms);return formatDuration((59-d.getUTCMinutes())*60+(60-d.getUTCSeconds()))}
-function TPHeader({refreshing=false,onRefresh,onSettings,onBack}){const action=onBack||onRefresh;return <View style={styles.v2SubHeader}><Pressable accessibilityRole="button" accessibilityLabel={onBack?'Back':'Refresh Torn data'} disabled={!action||refreshing} onPress={action} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubBackText}>{onBack?'‹':refreshing?'…':'↻'}</Text></Pressable><View style={styles.v2SubBrand}><View style={styles.v2SubMark}><Text style={styles.v2SubMarkText}>TP</Text></View><Text style={styles.v2SubTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text></View>{onSettings?<Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={onSettings} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubGear}>⚙</Text></Pressable>:<View style={styles.v2SubBack}/>}</View>}
+function TPHeader({refreshing=false,onRefresh,onSettings,onBack}){const action=onBack||onRefresh;return <View style={styles.v2SubHeader}><Pressable accessibilityRole="button" accessibilityLabel={onBack?'Back':'Refresh Torn data'} disabled={!action||refreshing} onPress={action} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubBackText}>{onBack?'‹':refreshing?'…':'↻'}</Text></Pressable><View style={styles.v2SubBrand}><View style={styles.v2SubMark}><Image source={TP_BRAND.emblem} resizeMode="contain" style={styles.v2SubMarkImage}/></View><Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2SubLogo}/></View>{onSettings?<Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={onSettings} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubGear}>⚙</Text></Pressable>:<View style={styles.v2SubBack}/>}</View>}
 function TPResource({label,image,bar,value,sub,accent,index=0,compact=false}){const p=bar?projectBar(bar):null;const edge=compact?(index%2===1):index===3;return <View style={[styles.nResource,compact&&styles.nResourceCompact,edge&&styles.nResourceLast,compact&&index<2&&styles.nResourceTop]}><View style={styles.nResHead}><View style={[styles.nResIcon,{borderColor:accent}]}><Image source={TP_CATEGORY_IMAGES[image]} resizeMode="contain" style={styles.nResImage}/></View><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.nResLabel}>{label}</Text></View><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.nResValue}>{p?(Math.floor(p.projected)+' / '+p.maximum):value}</Text>{p?<View style={styles.nTrack}><View style={[styles.nFill,{width:p.percent+'%',backgroundColor:accent}]}/></View>:<Text style={styles.nResSub}>{sub}</Text>}</View>}
 function TPMini({label,image,value,accent,onPress,index=0,compact=false}){const edge=compact?(index%2===1):index===3;const base=[styles.nMini,compact&&styles.nMiniCompact,edge&&styles.nMiniLast,compact&&index<2&&styles.nMiniTop];const inside=<><View style={[styles.nMiniIcon,{borderColor:accent}]}><Image source={TP_CATEGORY_IMAGES[image]} resizeMode="contain" style={styles.nMiniImage}/></View><View style={styles.nMiniCopy}><Text style={styles.nMiniLabel}>{label}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.nMiniValue,{color:accent}]}>{value}</Text></View></>;return onPress?<Pressable accessibilityRole="link" accessibilityLabel="Open Baldr’s List" onPress={onPress} style={({pressed})=>[base,pressed&&styles.nPressed]}>{inside}</Pressable>:<View style={base}>{inside}</View>}
 function TPBaldrCard({compact=false}){return <Pressable accessibilityRole="link" accessibilityLabel="Open the independent Baldr’s List website" onPress={openBaldrList} style={({pressed})=>[styles.nBaldr,compact&&styles.nBaldrCompact,pressed&&styles.nPressed]}><View style={styles.nBaldrMark}><Image source={TP_CATEGORY_IMAGES.baldr} resizeMode="contain" style={styles.nBaldrImage}/></View><View style={styles.nBaldrCopyWrap}><Text style={styles.nEyebrow}>INDEPENDENT EXTERNAL RESOURCE</Text><Text style={styles.nBaldrTitle}>Baldr’s List</Text><Text style={styles.nBaldrCopy}>TornPulse only opens Baldr’s established target list in your browser.</Text></View><View style={[styles.nBaldrBtn,compact&&styles.nBaldrBtnCompact]}><Text style={styles.nBaldrBtnText}>OPEN  ›</Text></View></Pressable>}
@@ -150,7 +152,7 @@ function tornClockSeconds(ms){return new Date(ms).toLocaleTimeString([],{hour:'2
 function TPV2Header({clock,section='Home',refreshing=false,onRefresh,onSettings}){
   return <View style={styles.v2Header}>
     <View style={styles.v2HeaderTop}>
-      <View style={styles.v2Brand}><View style={styles.v2BrandMark}><Text style={styles.v2BrandMarkText}>TP</Text></View><View><Text style={styles.v2BrandTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text><Text style={styles.v2BrandSub}>{section}</Text></View></View>
+      <View style={styles.v2Brand}><Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2HeaderLogo}/><Text numberOfLines={1} style={styles.v2BrandSub}>{section}</Text></View>
       <View style={styles.v2HeaderActions}>{onRefresh?<Pressable accessibilityRole="button" accessibilityLabel="Refresh Torn data" disabled={refreshing} onPress={onRefresh} style={({pressed})=>[styles.v2HeaderIcon,pressed&&styles.nPressed]}><Text style={styles.v2HeaderIconText}>{refreshing?'…':'↻'}</Text></Pressable>:null}{onSettings?<Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={onSettings} style={({pressed})=>[styles.v2HeaderIcon,pressed&&styles.nPressed]}><Text style={styles.v2HeaderIconText}>⚙</Text></Pressable>:null}</View>
     </View>
     <Text style={styles.v2Clock}>{tornClockSeconds(clock)} <Text style={styles.v2ClockZone}>TCT</Text></Text>
@@ -419,12 +421,12 @@ export default function App() {
   async function setWarn(kind,value) { await setSetting(kind,value); }
 
   if (loading) return <SafeAreaView style={styles.center}><StatusBar style="light"/>
-    <View style={styles.v2BootMark}><Text style={styles.v2BootMarkText}>TP</Text></View>
-    <Text style={styles.v2BootTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text><Text style={styles.v2BootSub}>YOUR TORN COMPANION</Text><ActivityIndicator size="small" color={C.primary} style={{marginTop:20}}/>
+    <Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2BootLogo}/>
+    <Text style={styles.v2BootSub}>YOUR TORN COMPANION</Text><ActivityIndicator size="small" color={C.primary} style={{marginTop:20}}/>
   </SafeAreaView>;
 
   if (!snapshot) return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.setup} keyboardShouldPersistTaps="handled">
-    <View style={styles.v2SetupBrand}><View style={styles.v2BrandMarkLarge}><Text style={styles.v2BrandMarkLargeText}>TP</Text></View><View><Text style={styles.v2SetupTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text><Text style={styles.v2SetupSub}>Your Torn companion</Text></View><Text style={styles.versionChip}>2.0.0</Text></View>
+    <View style={styles.v2SetupBrand}><View style={styles.v2SetupLogoWrap}><Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2SetupLogo}/><Text style={styles.v2SetupSub}>Your Torn companion</Text></View><Text style={styles.versionChip}>2.0.0</Text></View>
     <View style={styles.v2BlueRule}/>
     <Text style={styles.setupTitle}>Your Torn account. One clean pulse.</Text><Text style={styles.setupCopy}>Connect with a restricted Torn API key to see your vitals, cooldowns, travel and activity. Your Torn password is never required.</Text>
     <View style={styles.setupPreview}><View style={styles.previewTop}><Text style={styles.previewLabel}>HUD SYSTEM</Text><StatusTag tone="live">READY</StatusTag></View><Text style={styles.previewBig}>FLOAT OVER TORN</Text><Text style={styles.previewCopy}>Read-only Torn data. A Limited key enables incoming attacker names; your Torn password is never needed.</Text></View>
@@ -731,12 +733,13 @@ const styles=StyleSheet.create({
   v2HomeScroll:{paddingBottom:64},
   v2Header:{paddingTop:4,paddingBottom:14,marginBottom:4},
   v2HeaderTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
-  v2Brand:{flexDirection:'row',alignItems:'center',gap:10,flex:1,minWidth:0},
+  v2Brand:{flexDirection:'column',alignItems:'flex-start',justifyContent:'center',flex:1,minWidth:0},
+  v2HeaderLogo:{width:176,height:48,marginLeft:-3},
   v2BrandMark:{width:42,height:42,borderRadius:12,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2BrandMarkText:{color:C.cyan,fontSize:18,fontWeight:'900',letterSpacing:-1},
   v2BrandTitle:{color:C.text,fontSize:17,fontWeight:'900',letterSpacing:.9},
   v2BrandAccent:{color:C.primary},
-  v2BrandSub:{color:C.muted,fontSize:10,marginTop:2},
+  v2BrandSub:{color:C.muted,fontSize:9,marginTop:-5,marginLeft:3,letterSpacing:.25},
   v2HeaderActions:{flexDirection:'row',gap:6},
   v2HeaderIcon:{width:40,height:40,borderRadius:12,alignItems:'center',justifyContent:'center',backgroundColor:C.surface,borderWidth:1,borderColor:C.line},
   v2HeaderIconText:{color:C.text,fontSize:18,fontWeight:'800'},
@@ -865,7 +868,9 @@ const styles=StyleSheet.create({
   v2MenuArrow:{color:C.cyan,fontSize:24},
   v2AboutTitle:{color:C.text,fontSize:20,fontWeight:'900',marginTop:5},
   v2AboutCopy:{color:C.muted,fontSize:10,lineHeight:16,marginTop:7},
-  v2SetupBrand:{flexDirection:'row',alignItems:'center',gap:12},
+  v2SetupBrand:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  v2SetupLogoWrap:{flex:1,minWidth:0},
+  v2SetupLogo:{width:226,height:68,marginLeft:-7},
   v2BrandMarkLarge:{width:56,height:56,borderRadius:15,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2BrandMarkLargeText:{color:C.cyan,fontSize:22,fontWeight:'900'},
   v2SetupTitle:{color:C.text,fontSize:22,fontWeight:'900'},
@@ -877,13 +882,16 @@ const styles=StyleSheet.create({
   v2SubBack:{width:44,height:44,borderRadius:12,alignItems:'center',justifyContent:'center'},
   v2SubBackText:{color:C.cyan,fontSize:31,fontWeight:'500'},
   v2SubGear:{color:C.text,fontSize:18},
-  v2SubBrand:{flexDirection:'row',alignItems:'center',gap:8},
-  v2SubMark:{width:31,height:31,borderRadius:9,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
+  v2SubBrand:{flexDirection:'row',alignItems:'center',gap:6},
+  v2SubMark:{width:31,height:31,borderRadius:9,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center',overflow:'hidden'},
+  v2SubMarkImage:{width:29,height:29},
+  v2SubLogo:{width:122,height:36},
   v2SubMarkText:{color:C.cyan,fontSize:13,fontWeight:'900'},
   v2SubTitle:{color:C.text,fontSize:14,fontWeight:'900',letterSpacing:.6},
   v2BootMark:{width:112,height:112,borderRadius:30,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2BootMarkText:{color:C.cyan,fontSize:42,fontWeight:'900',letterSpacing:-2},
   v2BootTitle:{color:C.text,fontSize:27,fontWeight:'900',letterSpacing:1.5,marginTop:20},
+  v2BootLogo:{width:290,height:96,marginBottom:4},
   v2BootSub:{color:C.muted,fontSize:9,fontWeight:'800',letterSpacing:2.4,marginTop:7}
 
 });// TORNPULSE_PROFILE_IMAGE_V205 — show the player's official Torn profile image with a safe initials fallback.
