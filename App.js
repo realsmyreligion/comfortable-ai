@@ -166,6 +166,36 @@ function TPQuickV2({icon,label,onPress}){return <Pressable accessibilityRole="bu
 function TPActivityRowV2({icon,title,detail,time,tone=C.primary}){return <View style={styles.v2ActivityRow}><View style={[styles.v2ActivityIcon,{borderColor:tone}]}><Text style={[styles.v2ActivityIconText,{color:tone}]}>{icon}</Text></View><View style={{flex:1,minWidth:0}}><Text style={styles.v2ActivityTitle}>{title}</Text>{detail?<Text style={styles.v2ActivityDetail}>{detail}</Text>:null}</View>{time?<Text style={styles.v2ActivityTime}>{time}</Text>:null}</View>}
 function TPMenuRowV2({icon,title,detail,onPress,external=false}){return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.v2MenuRow,pressed&&styles.nPressed]}><View style={styles.v2MenuIcon}><Text style={styles.v2MenuIconText}>{icon}</Text></View><View style={{flex:1,minWidth:0}}><Text style={styles.v2MenuTitle}>{title}</Text>{detail?<Text style={styles.v2MenuDetail}>{detail}</Text>:null}</View><Text style={styles.v2MenuArrow}>{external?'↗':'›'}</Text></Pressable>}
 
+async function fetchTornProfileImage(key){
+  if(!key) return null;
+  try{
+    const response=await fetch('https://api.torn.com/v2/user/profile?comment=TornPulse',{
+      headers:{Authorization:`ApiKey ${key}`,Accept:'application/json'},
+    });
+    if(!response.ok) return null;
+    const json=await response.json().catch(()=>null);
+    const raw=json?.profile?.image ?? json?.image ?? json?.profile_image ?? null;
+    const candidate=typeof raw==='string'
+      ? raw
+      : (raw?.url || raw?.large || raw?.medium || raw?.small || raw?.main || null);
+    return typeof candidate==='string' && /^https?:\/\//i.test(candidate) ? candidate : null;
+  }catch(_){
+    return null;
+  }
+}
+
+function TPProfileAvatar({profile}){
+  const imageUrl=typeof profile?.image==='string' ? profile.image : '';
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>setFailed(false),[imageUrl]);
+  const initial=String(profile?.name||'T').trim().charAt(0).toUpperCase()||'T';
+  return <View style={styles.v2Avatar}>
+    {imageUrl&&!failed
+      ? <Image source={{uri:imageUrl}} resizeMode="cover" style={styles.v2AvatarImage} onError={()=>setFailed(true)}/>
+      : <Text style={styles.v2AvatarText}>{initial}</Text>}
+  </View>;
+}
+
 export default function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
@@ -333,11 +363,15 @@ export default function App() {
     if (!key) return Alert.alert('API key needed','Enter your restricted Torn API key.');
     setRefreshing(true);
     try {
-      const snap=await fetchSnapshot(key);
-      await saveApiKey(key); setSnapshot(snap); setApiKeyInput(''); setError('');
+      const [snap,profileImage]=await Promise.all([
+        fetchSnapshot(key),
+        fetchTornProfileImage(key),
+      ]);
+      const enriched=profileImage?{...snap,profile:{...(snap.profile||{}),image:profileImage}}:snap;
+      await saveApiKey(key); setSnapshot(enriched); setApiKeyInput(''); setError('');
       await syncHudPrefs(settings);
-      await scheduleSnapshotAlerts(snap,settings);
-      if (!snap.attackAccess) Alert.alert('Connected', 'Core TornPulse data is live. Incoming attacker names and attack alerts need a Limited read-only Torn API key.');
+      await scheduleSnapshotAlerts(enriched,settings);
+      if (!enriched.attackAccess) Alert.alert('Connected', 'Core TornPulse data is live. Incoming attacker names and attack alerts need a Limited read-only Torn API key.');
     } catch(e) { Alert.alert('Could not connect',e?.message||'Check your API key and internet connection.'); }
     finally { setRefreshing(false); setLoading(false); }
   }
