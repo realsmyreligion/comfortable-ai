@@ -99,8 +99,22 @@ function Cooldown({label, icon, seconds}) {
   </View>;
 }
 
-const BALDR_URL='https://oran.pw/baldrstargets/';
-async function openBaldrList(){try{await Linking.openURL(BALDR_URL)}catch(_){Alert.alert('Could not open Baldr’s List','Open https://oran.pw/baldrstargets/ in your browser.')}}
+// TORNPULSE_COMMUNITY_TOOLS_V1 — curated external Torn resources; TornPulse never forwards the user's stored API key.
+const COMMUNITY_TOOLS={
+  baldr:{name:'Baldr’s List',url:'https://oran.pw/baldrstargets/'},
+  ffscouter:{name:'FFScouter',url:'https://ffscouter.com/target-finder'},
+  tornstats:{name:'TornStats',url:'https://www.tornstats.com/'},
+  yata:{name:'YATA',url:'https://yata.yt/'},
+  tornwars:{name:'TornWars',url:'https://tornwars.com/'},
+  tornreport:{name:'torn.report',url:'https://torn.report/'},
+  tornexchange:{name:'Torn Exchange',url:'https://www.tornexchange.com/'},
+};
+async function openCommunityTool(tool){
+  if(!tool?.url)return;
+  try{await Linking.openURL(tool.url)}
+  catch(_){Alert.alert('Could not open '+(tool?.name||'community tool'),'Open the site in your browser and try again.')}
+}
+async function openBaldrList(){return openCommunityTool(COMMUNITY_TOOLS.baldr)}
 // TORNPULSE_ITEM_MARKET_V1 — searchable, read-only live Item Market.
 const money=value=>'$'+Math.max(0,Number(value||0)).toLocaleString();
 function TPMarketHub({compact=false,onOpen}){return <Pressable accessibilityRole="button" accessibilityLabel="Open Item Market" onPress={onOpen} style={({pressed})=>[styles.nMarketHub,compact&&styles.nMarketHubCompact,pressed&&styles.nPressed]}>
@@ -410,6 +424,7 @@ export default function App() {
           <TPV2Card><TPActivityRowV2 icon="⌁" title="Landing alerts active" detail="TornPulse will remind you shortly before expected arrival." tone={C.cyan}/></TPV2Card>
         </>:<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>✈</Text><Text style={styles.v2EmptyTitle}>Ready to travel</Text><Text style={styles.v2EmptyCopy}>Start your trip in Torn. As soon as the API reports your flight, TornPulse switches to a live countdown and arrival view.</Text></View></TPV2Card>}
         <Pressable accessibilityRole="link" onPress={openOfficialTravelAgency} style={({pressed})=>[styles.v2Primary,pressed&&styles.nPressed]}><Text style={styles.v2PrimaryText}>OPEN TORN TRAVEL AGENCY  ↗</Text></Pressable>
+        <TPV2Card><TPMenuRowV2 icon="✈" title="Open YATA" detail="Community travel and utility tools" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.yata)} external/></TPV2Card>
         <Text style={styles.v2FinePrint}>Read-only flight information. TornPulse never starts travel for you.</Text>
       </ScrollView>
       <TPBottomNav active="TRAVEL" onChange={setActivePage} onMarket={openMarketPage}/>
@@ -428,6 +443,7 @@ export default function App() {
       {marketItem&&!marketLoading&&!marketError?<TPV2Card highlight><Text style={styles.v2Kicker}>SELECTED ITEM</Text><Text style={styles.v2SelectedName}>{marketItem.name}</Text><View style={styles.v2SelectedSummary}><View><Text style={styles.v2SelectedMeta}>{marketListings.length} recent listing{marketListings.length===1?'':'s'}</Text><Text style={styles.v2SelectedSub}>LOWEST PRICE FIRST</Text></View>{marketListings[0]?<View style={styles.v2LowestBox}><Text style={styles.v2LowestLabel}>LOWEST</Text><Text style={styles.v2LowestPrice}>{money(marketListings[0].price)}</Text></View>:null}</View></TPV2Card>:null}
       {marketItem&&!marketLoading&&!marketError&&marketListings.length===0?<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyTitle}>No listings found</Text><Text style={styles.v2EmptyCopy}>No recent public Item Market listings were returned for this item.</Text></View></TPV2Card>:null}
       {marketItem&&marketListings.map((listing,index)=><View key={String(listing.id||index)} style={styles.v2Listing}><View><Text style={styles.v2ListingPrice}>{money(listing.price)}</Text><Text style={styles.v2ListingQty}>{Number(listing.amount||1).toLocaleString()} listed</Text></View><Pressable onPress={()=>openMarketPurchase(marketItem)} style={styles.v2ListingOpen}><Text style={styles.v2ListingOpenText}>OPEN IN TORN ↗</Text></Pressable></View>)}
+      <Text style={styles.v2SectionTitle}>Community Trading</Text><TPV2Card><TPMenuRowV2 icon="$" title="Torn Exchange" detail="Trader discovery, price lists and trade analytics" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornexchange)} external/><TPMenuRowV2 icon="◫" title="torn.report" detail="Market and bazaar transaction analytics" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornreport)} external/></TPV2Card>
     </ScrollView>
     <TPBottomNav active="MARKET" onChange={setActivePage} onMarket={openMarketPage}/>
   </View></SafeAreaView>;
@@ -451,12 +467,38 @@ export default function App() {
     </View></SafeAreaView>;
   }
 
+  if(activePage==='TOOLS')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
+      <TPV2Header clock={clock} section="Community Tools" onSettings={()=>setActivePage('SETTINGS')}/>
+      <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>External Tools</Text><Text style={styles.v2PageCopy}>Trusted community resources for targets, stats, wars, travel and trading.</Text></View>
+      <TPV2Card highlight><Text style={styles.v2Kicker}>PRIVACY FIRST</Text><Text style={styles.v2AboutTitle}>Your TornPulse key stays in TornPulse.</Text><Text style={styles.v2AboutCopy}>These buttons only open the selected website. TornPulse never forwards your saved API key, login or account data to a third-party site. If a tool needs access, you connect to that tool separately.</Text></TPV2Card>
+
+      <Text style={styles.v2SectionTitle}>Targets & Combat</Text>
+      <TPV2Card><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Established leveling-target resource" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.baldr)} external/><TPMenuRowV2 icon="⌖" title="FFScouter" detail="Target finder, fair-fight filters and battle-stat estimates" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.ffscouter)} external/></TPV2Card>
+
+      <Text style={styles.v2SectionTitle}>Stats & Progress</Text>
+      <TPV2Card><TPMenuRowV2 icon="▥" title="TornStats" detail="Player graphs, merits, honors, ranked wars and references" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornstats)} external/><TPMenuRowV2 icon="◫" title="torn.report" detail="Crime, market and personal analytics" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornreport)} external/></TPV2Card>
+
+      <Text style={styles.v2SectionTitle}>Faction & War</Text>
+      <TPV2Card><TPMenuRowV2 icon="⚔" title="TornWars" detail="War room, faction reports, payouts and chain tools" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornwars)} external/></TPV2Card>
+
+      <Text style={styles.v2SectionTitle}>Utility & Travel</Text>
+      <TPV2Card><TPMenuRowV2 icon="✈" title="YATA" detail="Community utility hub with travel, targets and faction tools" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.yata)} external/></TPV2Card>
+
+      <Text style={styles.v2SectionTitle}>Trading</Text>
+      <TPV2Card><TPMenuRowV2 icon="$" title="Torn Exchange" detail="Trader discovery, price lists, services and trade analytics" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornexchange)} external/></TPV2Card>
+
+      <Text style={styles.v2FinePrint}>External sites are independent from TornPulse and Torn. Review each site's own API-key and privacy requirements before connecting.</Text>
+    </ScrollView>
+    <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openMarketPage}/>
+  </View></SafeAreaView>;
+
   if(activePage==='MORE')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="More" onSettings={()=>setActivePage('SETTINGS')}/>
       <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>More</Text><Text style={styles.v2PageCopy}>Tools, account controls and advanced settings.</Text></View>
       <Text style={styles.v2SectionTitle}>Controls</Text><TPV2Card><TPMenuRowV2 icon="◉" title="Floating HUD" detail={hudRunning?'Active over other apps':'Configure size, position and alerts'} onPress={()=>setActivePage('SETTINGS')}/><TPMenuRowV2 icon="⚙" title="Notifications & Account" detail="Permissions, warnings and API connection" onPress={()=>setActivePage('SETTINGS')}/></TPV2Card>
-      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Independent external leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
+      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="⌘" title="Community Tools" detail="Targets, stats, wars, travel and trading resources" onPress={()=>setActivePage('TOOLS')}/><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Quick access to the established leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
       <TPV2Card><Text style={styles.v2Kicker}>TORN PULSE 2.0</Text><Text style={styles.v2AboutTitle}>Built to assist, not automate.</Text><Text style={styles.v2AboutCopy}>TornPulse displays read-only Torn data, calculates timers, sends reminders and opens official or independent resources. Gameplay actions remain under your control in Torn.</Text></TPV2Card>
     </ScrollView>
     <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openMarketPage}/>
