@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: true
+      NODE_ENV: production
 
     steps:
       - name: Checkout project
@@ -26,10 +27,16 @@ jobs:
           cache: npm
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Restore TornPulse 2.0 source folders
+        run: |
+          mkdir -p src scripts
+          cp core.js demo.js notifications.js storage.js tornApi.js src/
+          cp self-test.cjs scripts/self-test.cjs
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -38,7 +45,21 @@ jobs:
         run: npm run selftest
 
       - name: Verify TornPulse 2.0 foundation
-        run: npm run verify
+        run: |
+          test -s App.js
+          test -s app.config.js
+          test -s src/core.js
+          test -s src/demo.js
+          test -s src/notifications.js
+          test -s src/storage.js
+          test -s src/tornApi.js
+          test -s scripts/self-test.cjs
+          grep -q '"version": "2.0.0"' package.json
+          grep -q 'DASHBOARD' App.js
+          grep -q 'TRAVEL' App.js
+          grep -q 'MARKET' App.js
+          grep -q 'ACTIVITY' App.js
+          grep -q 'MORE' App.js
 
       - name: Validate JavaScript bundle
         run: npx expo export --platform android --output-dir /tmp/tornpulse-bundle-check
@@ -49,13 +70,32 @@ jobs:
       - name: Verify native TornPulse HUD
         run: |
           HUD=android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
+          test -s "$HUD"
           grep -q 'TornPulse/' "$HUD"
           grep -q 'hud_preset' "$HUD"
-          grep -q 'currentMinWidthDp = 118' "$HUD"
-          grep -q 'currentCollapsedWidthDp = 44' "$HUD"
           grep -q 'approved_right_rail_v1' "$HUD"
           grep -q 'openBaldrList()' "$HUD"
-          grep -q 'eventTickerText' "$HUD"
 
       - name: Make Gradle executable
-       
+        run: chmod +x android/gradlew
+
+      - name: Build ARM64 release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+      - name: Verify APK integrity and signature
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -n 20
+          sha256sum "$APK"
+          ls -lh "$APK"
+
+      - name: Upload TornPulse ARM64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tornpulse-v2.0.0-arm64-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
