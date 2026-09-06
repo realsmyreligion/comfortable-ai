@@ -1,0 +1,7 @@
+Suggested asset mapping (for app config or source references):
+- app icon -> ./branding/app-icon-1024.png
+- adaptive icon foreground -> ./branding/adaptive-icon-foreground-432.png
+- adaptive icon background -> ./branding/adaptive-icon-background-432.png
+- splash image -> ./branding/splash-icon-2048.png
+- header logo -> ./branding/header-logo-wide-1600x500.png
+- hud icon -> ./branding/hud-icon-512.png
