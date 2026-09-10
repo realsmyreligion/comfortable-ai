@@ -50,19 +50,16 @@ jobs:
 
           function insertOnce(text, anchor, insertion, label) {
             if (text.includes(insertion.trim())) return text;
-
             if (!text.includes(anchor)) {
               console.log(`- ${label}: anchor not found`);
               return text;
             }
-
             console.log(`✓ ${label}`);
             return text.replace(anchor, insertion + anchor);
           }
 
           function polishApp(input) {
             let app = input;
-
             if (app.includes(MARKER)) return app;
 
             app = app.replace(
@@ -88,20 +85,12 @@ jobs:
                 '<ScrollView key="DASHBOARD" showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>'
               );
 
-            const hudRe =
-              /\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?<\/Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)/;
-
+            const hudRe = /\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?<\/Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)/;
             const hudMatch = app.match(hudRe);
 
             if (hudMatch) {
-              const hudButton =
-                hudMatch[0].replace(/^\n/, '');
-
-              app = app.replace(
-                hudRe,
-                '\n'
-              );
-
+              const hudButton = hudMatch[0].replace(/^\n/, '');
+              app = app.replace(hudRe, '\n');
               app = insertOnce(
                 app,
                 '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
@@ -109,9 +98,7 @@ jobs:
                 'Start HUD moved above Vitals'
               );
             } else {
-              console.log(
-                '- Start HUD move skipped'
-              );
+              console.log('- Start HUD move skipped');
             }
 
             const marketAnchor =
@@ -119,11 +106,7 @@ jobs:
 
             const marketEmpty = `      {!marketQuery.trim()&&!marketItem&&!marketLoading&&!marketError?<TPV2Card highlight><Text style={styles.v2Kicker}>MARKET READY</Text><Text style={styles.v2MarketWelcomeTitle}>Find an item in seconds.</Text><Text style={styles.v2MarketWelcomeCopy}>Search an item above. TornPulse compares recent public listings, surfaces the lowest price, then opens Torn when you are ready to buy.</Text><View style={styles.v2MarketFlow}><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>SEARCH</Text></View><Text style={styles.v2MarketFlowArrow}>›</Text><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>COMPARE</Text></View><Text style={styles.v2MarketFlowArrow}>›</Text><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>OPEN TORN</Text></View></View></TPV2Card>:null}\n`;
 
-            if (
-              !app.includes(
-                'v2MarketWelcomeTitle'
-              )
-            ) {
+            if (!app.includes('v2MarketWelcomeTitle')) {
               app = insertOnce(
                 app,
                 marketAnchor,
@@ -201,93 +184,44 @@ jobs:
 
             let styleChanges = 0;
 
-            for (
-              const [oldText,newText]
-              of stylePairs
-            ) {
-              if (
-                app.includes(oldText)
-              ) {
-                app =
-                  app.replace(
-                    oldText,
-                    newText
-                  );
-
+            for (const [oldText,newText] of stylePairs) {
+              if (app.includes(oldText)) {
+                app = app.replace(oldText,newText);
                 styleChanges++;
               }
             }
 
-            console.log(
-              `✓ app spacing polish (${styleChanges} style updates)`
-            );
+            console.log(`✓ app spacing polish (${styleChanges} style updates)`);
 
-            if (
-              !app.includes(
-                'v2MarketWelcomeTitle:{'
-              )
-            ) {
-              const styleEnd =
-                app.lastIndexOf(
-                  '\n});'
-                );
+            if (!app.includes('v2MarketWelcomeTitle:{')) {
+              const styleEnd = app.lastIndexOf('\n});');
 
               if (styleEnd > 0) {
                 const extra = `,\n  v2MarketWelcomeTitle:{color:C.text,fontSize:17,fontWeight:'900',marginTop:5},\n  v2MarketWelcomeCopy:{color:C.muted,fontSize:10,lineHeight:16,marginTop:6},\n  v2MarketFlow:{flexDirection:'row',alignItems:'center',marginTop:12,gap:5},\n  v2MarketStep:{flex:1,minHeight:34,borderRadius:9,borderWidth:1,borderColor:'#285E87',backgroundColor:'#0D2030',alignItems:'center',justifyContent:'center',paddingHorizontal:4},\n  v2MarketStepText:{color:C.cyan,fontSize:7.5,fontWeight:'900',letterSpacing:.7,textAlign:'center'},\n  v2MarketFlowArrow:{color:C.primary,fontSize:18,fontWeight:'900'}\n`;
 
-                app =
-                  app.slice(
-                    0,
-                    styleEnd
-                  ) +
-                  extra +
-                  app.slice(
-                    styleEnd
-                  );
+                app = app.slice(0,styleEnd) + extra + app.slice(styleEnd);
 
-                console.log(
-                  '✓ Market default-state styles added'
-                );
+                console.log('✓ Market default-state styles added');
               }
             }
 
             return app;
           }
 
-          function extractEmbedded(
-            src,
-            name
-          ) {
-            const prefix =
-              `const ${name} = `;
+          function extractEmbedded(src, name) {
+            const prefix = `const ${name} = `;
+            const start = src.indexOf(prefix);
 
-            const start =
-              src.indexOf(prefix);
+            if (start < 0) return null;
 
-            if (start < 0) {
-              return null;
-            }
+            const valueStart = start + prefix.length;
 
-            const valueStart =
-              start +
-              prefix.length;
+            if (src[valueStart] !== '"') return null;
 
-            if (
-              src[valueStart] !== '"'
-            ) {
-              return null;
-            }
-
-            let i =
-              valueStart + 1;
-
+            let i = valueStart + 1;
             let escaped = false;
 
-            for (
-              ;
-              i < src.length;
-              i++
-            ) {
+            for (; i < src.length; i++) {
               const ch = src[i];
 
               if (escaped) {
@@ -300,69 +234,34 @@ jobs:
                 continue;
               }
 
-              if (ch === '"') {
-                break;
-              }
+              if (ch === '"') break;
             }
 
-            if (
-              i >= src.length
-            ) {
-              return null;
-            }
+            if (i >= src.length) return null;
 
             return {
               start:valueStart,
               end:i+1,
-              value:JSON.parse(
-                src.slice(
-                  valueStart,
-                  i+1
-                )
-              )
+              value:JSON.parse(src.slice(valueStart,i+1))
             };
           }
 
-          function setEmbedded(
-            src,
-            name,
-            value
-          ) {
-            const found =
-              extractEmbedded(
-                src,
-                name
-              );
+          function setEmbedded(src, name, value) {
+            const found = extractEmbedded(src,name);
 
-            if (!found) {
-              return src;
-            }
+            if (!found) return src;
 
             return (
-              src.slice(
-                0,
-                found.start
-              ) +
-              JSON.stringify(
-                value
-              ) +
-              src.slice(
-                found.end
-              )
+              src.slice(0,found.start) +
+              JSON.stringify(value) +
+              src.slice(found.end)
             );
           }
 
-          function replaceWhenBlock(
-            kt,
-            name,
-            compact,
-            large,
-            standard
-          ) {
-            const re =
-              new RegExp(
-                `(val\\s+${name}\\s*=\\s*when\\s*\\{\\s*compact\\s*->\\s*)[^\\n]+(\\s*large\\s*->\\s*)[^\\n]+(\\s*else\\s*->\\s*)[^\\n]+(\\s*\\})`
-              );
+          function replaceWhenBlock(kt, name, compact, large, standard) {
+            const re = new RegExp(
+              `(val\\s+${name}\\s*=\\s*when\\s*\\{\\s*compact\\s*->\\s*)[^\\n]+(\\s*large\\s*->\\s*)[^\\n]+(\\s*else\\s*->\\s*)[^\\n]+(\\s*\\})`
+            );
 
             if (!re.test(kt)) {
               return {
@@ -372,27 +271,18 @@ jobs:
             }
 
             return {
-              text:
-                kt.replace(
-                  re,
-                  `$1${compact}$2${large}$3${standard}$4`
-                ),
+              text:kt.replace(
+                re,
+                `$1${compact}$2${large}$3${standard}$4`
+              ),
               changed:true
             };
           }
 
-          function polishNative(
-            input
-          ) {
+          function polishNative(input) {
             let kt = input;
 
-            if (
-              kt.includes(
-                '// TORNPULSE_V209_NATIVE_POLISH'
-              )
-            ) {
-              return kt;
-            }
+            if (kt.includes('// TORNPULSE_V209_NATIVE_POLISH')) return kt;
 
             kt = kt.replace(
               'class ComfortableOverlayService',
@@ -401,57 +291,24 @@ jobs:
 
             let changed = 0;
 
-            for (
-              const spec of [
-                [
-                  'minWidthDp',
-                  '112',
-                  '154',
-                  '132'
-                ],
-                [
-                  'collapsedWidthDp',
-                  '36',
-                  '44',
-                  '40'
-                ],
-                [
-                  'logoSize',
-                  '8',
-                  '10',
-                  '9'
-                ],
-                [
-                  'verticalPadding',
-                  '1',
-                  '2',
-                  '1'
-                ]
-              ]
-            ) {
-              const out =
-                replaceWhenBlock(
-                  kt,
-                  ...spec
-                );
+            for (const spec of [
+              ['minWidthDp','112','154','132'],
+              ['collapsedWidthDp','36','44','40'],
+              ['logoSize','8','10','9'],
+              ['verticalPadding','1','2','1']
+            ]) {
+              const out = replaceWhenBlock(kt,...spec);
 
               kt = out.text;
 
-              if (
-                out.changed
-              ) {
-                changed++;
-              }
+              if (out.changed) changed++;
             }
 
             kt = kt.replace(
               /private var currentMinWidthDp = \d+/,
               () => {
                 changed++;
-
-                return (
-                  'private var currentMinWidthDp = 132'
-                );
+                return 'private var currentMinWidthDp = 132';
               }
             );
 
@@ -459,10 +316,7 @@ jobs:
               /private var currentCollapsedWidthDp = \d+/,
               () => {
                 changed++;
-
-                return (
-                  'private var currentCollapsedWidthDp = 40'
-                );
+                return 'private var currentCollapsedWidthDp = 40';
               }
             );
 
@@ -477,37 +331,17 @@ jobs:
               ]
             ];
 
-            for (
-              const [oldText,newText]
-              of edgePairs
-            ) {
-              if (
-                kt.includes(oldText)
-              ) {
-                kt =
-                  kt.split(
-                    oldText
-                  ).join(
-                    newText
-                  );
-
+            for (const [oldText,newText] of edgePairs) {
+              if (kt.includes(oldText)) {
+                kt = kt.split(oldText).join(newText);
                 changed++;
               }
             }
 
             const nativePairs = [
-              [
-                'minimumHeight = dp(66)',
-                'minimumHeight = dp(58)'
-              ],
-              [
-                'minimumHeight = dp(46)',
-                'minimumHeight = dp(42)'
-              ],
-              [
-                'minimumHeight = dp(52)',
-                'minimumHeight = dp(46)'
-              ],
+              ['minimumHeight = dp(66)', 'minimumHeight = dp(58)'],
+              ['minimumHeight = dp(46)', 'minimumHeight = dp(42)'],
+              ['minimumHeight = dp(52)', 'minimumHeight = dp(46)'],
               [
                 'LinearLayout.LayoutParams(dp(20), dp(20))',
                 'LinearLayout.LayoutParams(dp(18), dp(18))'
@@ -530,82 +364,31 @@ jobs:
               ]
             ];
 
-            for (
-              const [oldText,newText]
-              of nativePairs
-            ) {
-              if (
-                kt.includes(
-                  oldText
-                )
-              ) {
-                kt =
-                  kt.split(
-                    oldText
-                  ).join(
-                    newText
-                  );
-
+            for (const [oldText,newText] of nativePairs) {
+              if (kt.includes(oldText)) {
+                kt = kt.split(oldText).join(newText);
                 changed++;
               }
             }
 
             kt = kt.replace(
               /setPadding\(dp\((\d+)\), dp\((\d+)\), dp\((\d+)\), dp\((\d+)\)\)/g,
-              (
-                whole,
-                l,
-                t,
-                r,
-                b
-              ) => {
-                const left =
-                  Number(l);
+              (whole,l,t,r,b) => {
+                const left = Number(l);
+                const right = Number(r);
+                const top = Number(t);
+                const bottom = Number(b);
 
-                const right =
-                  Number(r);
+                if (left < 3 && right < 3) return whole;
 
-                const top =
-                  Number(t);
+                const nl = Math.max(1,Math.round(left*0.75));
+                const nr = Math.max(1,Math.round(right*0.75));
 
-                const bottom =
-                  Number(b);
-
-                if (
-                  left < 3 &&
-                  right < 3
-                ) {
-                  return whole;
-                }
-
-                const nl =
-                  Math.max(
-                    1,
-                    Math.round(
-                      left * 0.75
-                    )
-                  );
-
-                const nr =
-                  Math.max(
-                    1,
-                    Math.round(
-                      right * 0.75
-                    )
-                  );
-
-                if (
-                  nl === left &&
-                  nr === right
-                ) {
-                  return whole;
-                }
+                if (nl===left && nr===right) return whole;
 
                 changed++;
 
-                return (
-                  `setPadding(dp(${nl}), dp(${top}), dp(${nr}), dp(${bottom}))`
-                );
+                return `setPadding(dp(${nl}), dp(${top}), dp(${nr}), dp(${bottom}))`;
               }
             );
 
@@ -616,88 +399,43 @@ jobs:
             return kt;
           }
 
-          if (
-            fs.existsSync(
-              APP_FILE
-            )
-          ) {
-            const before =
-              fs.readFileSync(
-                APP_FILE,
-                'utf8'
-              );
+          if (fs.existsSync(APP_FILE)) {
+            const before = fs.readFileSync(APP_FILE,'utf8');
+            const after = polishApp(before);
 
-            const after =
-              polishApp(
-                before
-              );
-
-            if (
-              after !== before
-            ) {
-              fs.writeFileSync(
-                APP_FILE,
-                after,
-                'utf8'
-              );
+            if (after !== before) {
+              fs.writeFileSync(APP_FILE,after,'utf8');
             }
           }
 
-          if (
-            fs.existsSync(
-              CONFIG_FILE
-            )
-          ) {
-            let config =
-              fs.readFileSync(
-                CONFIG_FILE,
-                'utf8'
-              );
+          if (fs.existsSync(CONFIG_FILE)) {
+            let config = fs.readFileSync(CONFIG_FILE,'utf8');
 
-            const embeddedApp =
-              extractEmbedded(
-                config,
-                'APP_JS'
-              );
+            const embeddedApp = extractEmbedded(config,'APP_JS');
 
             if (embeddedApp) {
-              config =
-                setEmbedded(
-                  config,
-                  'APP_JS',
-                  polishApp(
-                    embeddedApp.value
-                  )
-                );
+              config = setEmbedded(
+                config,
+                'APP_JS',
+                polishApp(embeddedApp.value)
+              );
             }
 
             const embeddedKt =
-              extractEmbedded(
-                config,
-                'OVERLAY_SERVICE_KT'
-              );
+              extractEmbedded(config,'OVERLAY_SERVICE_KT');
 
             if (embeddedKt) {
-              config =
-                setEmbedded(
-                  config,
-                  'OVERLAY_SERVICE_KT',
-                  polishNative(
-                    embeddedKt.value
-                  )
-                );
+              config = setEmbedded(
+                config,
+                'OVERLAY_SERVICE_KT',
+                polishNative(embeddedKt.value)
+              );
             }
 
-            fs.writeFileSync(
-              CONFIG_FILE,
-              config,
-              'utf8'
-            );
+            fs.writeFileSync(CONFIG_FILE,config,'utf8');
           }
 
-          console.log(
-            '✅ TornPulse v2.0 polish patch ready'
-          );
+          console.log('✅ TornPulse v2.0 polish patch ready');
           TORNPULSE_PATCH
 
           node /tmp/tornpulse-polish-v209.cjs
@@ -705,6 +443,240 @@ jobs:
           grep -q 'TORNPULSE_V209_POLISH' App.js
           grep -q 'Find an item in seconds' App.js
           grep -q 'key={activePage}' App.js
+
+      - name: Install clean transparent Torn item icons
+        shell: bash
+        run: |
+          echo "Installing transparent Torn item artwork..."
+
+          curl -fL --retry 3 \
+            -A "Mozilla/5.0" \
+            "https://www.torn.com/images/items/206/large.png" \
+            -o tp-drug.png
+
+          curl -fL --retry 3 \
+            -A "Mozilla/5.0" \
+            "https://www.torn.com/images/items/367/large.png" \
+            -o tp-booster.png
+
+          curl -fL --retry 3 \
+            -A "Mozilla/5.0" \
+            "https://www.torn.com/images/items/738/large.png" \
+            -o tp-medical.png
+
+          python3 <<'PY'
+          from pathlib import Path
+          import struct
+
+          for name in (
+              "tp-drug.png",
+              "tp-booster.png",
+              "tp-medical.png",
+          ):
+              data = Path(name).read_bytes()
+
+              if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+                  raise SystemExit(
+                      f"ERROR: {name} is not a valid PNG"
+                  )
+
+              if data[12:16] != b"IHDR":
+                  raise SystemExit(
+                      f"ERROR: {name} is missing PNG IHDR"
+                  )
+
+              width, height, bit_depth, color_type, _, _, _ = struct.unpack(
+                  ">IIBBBBB",
+                  data[16:29]
+              )
+
+              has_transparency = (
+                  color_type in (4, 6)
+                  or b"tRNS" in data
+              )
+
+              if not has_transparency:
+                  raise SystemExit(
+                      f"ERROR: {name} has no transparency"
+                  )
+
+              print(
+                  f"✓ {name}: {width}x{height} transparent PNG"
+              )
+          PY
+
+          cat > /tmp/tornpulse-item-icons.cjs <<'TORNPULSE_ICONS'
+          const fs = require('fs');
+
+          const APP_FILE = 'App.js';
+          const CONFIG_FILE = 'app.config.js';
+
+          function extractEmbedded(src, name) {
+            const prefix = `const ${name} = `;
+            const start = src.indexOf(prefix);
+
+            if (start < 0) {
+              throw new Error(`Missing embedded ${name}`);
+            }
+
+            const valueStart = start + prefix.length;
+
+            if (src[valueStart] !== '"') {
+              throw new Error(`${name} is not a JSON string`);
+            }
+
+            let i = valueStart + 1;
+            let escaped = false;
+
+            for (; i < src.length; i++) {
+              const ch = src[i];
+
+              if (escaped) {
+                escaped = false;
+                continue;
+              }
+
+              if (ch === '\\') {
+                escaped = true;
+                continue;
+              }
+
+              if (ch === '"') break;
+            }
+
+            if (i >= src.length) {
+              throw new Error(`Could not parse ${name}`);
+            }
+
+            return {
+              start: valueStart,
+              end: i + 1,
+              value: JSON.parse(
+                src.slice(valueStart, i + 1)
+              )
+            };
+          }
+
+          function setEmbedded(src, name, value) {
+            const found = extractEmbedded(src, name);
+
+            return (
+              src.slice(0, found.start) +
+              JSON.stringify(value) +
+              src.slice(found.end)
+            );
+          }
+
+          let app = fs.readFileSync(
+            APP_FILE,
+            'utf8'
+          );
+
+          const iconStyle =
+            /v2CooldownIcon:\{width:\d+,height:\d+\}/;
+
+          if (!iconStyle.test(app)) {
+            throw new Error(
+              'Could not locate v2CooldownIcon style'
+            );
+          }
+
+          app = app.replace(
+            iconStyle,
+            'v2CooldownIcon:{width:48,height:48}'
+          );
+
+          fs.writeFileSync(
+            APP_FILE,
+            app,
+            'utf8'
+          );
+
+          console.log(
+            '✓ Dashboard Torn item icons set to 48x48'
+          );
+
+          let config = fs.readFileSync(
+            CONFIG_FILE,
+            'utf8'
+          );
+
+          const embeddedKt = extractEmbedded(
+            config,
+            'OVERLAY_SERVICE_KT'
+          );
+
+          let kt = embeddedKt.value;
+
+          const icons = [
+            ['TP_DRUG_ICON', 'tp-drug.png'],
+            ['TP_BOOSTER_ICON', 'tp-booster.png'],
+            ['TP_MEDICAL_ICON', 'tp-medical.png']
+          ];
+
+          for (const [constant, file] of icons) {
+            const encoded = fs
+              .readFileSync(file)
+              .toString('base64');
+
+            const re = new RegExp(
+              `((?:private\\s+)?val\\s+${constant}\\s*=\\s*")[^"]*(")`
+            );
+
+            if (!re.test(kt)) {
+              throw new Error(
+                `Could not locate ${constant}`
+              );
+            }
+
+            kt = kt.replace(
+              re,
+              `$1${encoded}$2`
+            );
+
+            console.log(
+              `✓ ${constant} refreshed`
+            );
+          }
+
+          kt = kt.replaceAll(
+            'makeHudGlyph(label, labelColor, 11)',
+            'makeHudGlyph(label, labelColor, 18)'
+          );
+
+          kt = kt.replaceAll(
+            'makeHudGlyph(label, labelColor, 12)',
+            'makeHudGlyph(label, labelColor, 18)'
+          );
+
+          config = setEmbedded(
+            config,
+            'OVERLAY_SERVICE_KT',
+            kt
+          );
+
+          fs.writeFileSync(
+            CONFIG_FILE,
+            config,
+            'utf8'
+          );
+
+          console.log(
+            '✅ Transparent Torn item icon upgrade complete'
+          );
+          TORNPULSE_ICONS
+
+          node /tmp/tornpulse-item-icons.cjs
+
+          grep -q \
+            "v2CooldownIcon:{width:48,height:48}" \
+            App.js
+
+          grep -q "TP_DRUG_ICON" app.config.js
+          grep -q "TP_BOOSTER_ICON" app.config.js
+          grep -q "TP_MEDICAL_ICON" app.config.js
+
+          echo "✓ Transparent item icon verification passed"
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -732,16 +704,10 @@ jobs:
           grep -q 'TORNPULSE_V209_POLISH' App.js
 
       - name: Validate JavaScript bundle
-        run: |
-          npx expo export \
-            --platform android \
-            --output-dir /tmp/tornpulse-bundle-check
+        run: npx expo export --platform android --output-dir /tmp/tornpulse-bundle-check
 
       - name: Generate Android project
-        run: |
-          npx expo prebuild \
-            --platform android \
-            --clean
+        run: npx expo prebuild --platform android --clean
 
       - name: Hide Android bottom navigation
         shell: bash
@@ -755,14 +721,10 @@ jobs:
 
           src = path.read_text()
 
-          marker = (
-              "TORNPULSE_IMMERSIVE_NAV_RC2"
-          )
+          marker = "TORNPULSE_IMMERSIVE_NAV_RC2"
 
           if marker in src:
-              print(
-                  "✓ Immersive navigation already installed"
-              )
+              print("✓ Immersive navigation already installed")
               raise SystemExit(0)
 
           imports = """
@@ -771,37 +733,21 @@ jobs:
           import androidx.core.view.WindowInsetsControllerCompat
           """
 
-          package_end = src.find(
-              "\n",
-              src.find(
-                  "package "
-              )
-          )
+          package_end = src.find("\n", src.find("package "))
 
           if package_end == -1:
-              raise SystemExit(
-                  "MainActivity package declaration not found"
-              )
+              raise SystemExit("MainActivity package declaration not found")
 
           src = (
-              src[
-                :package_end + 1
-              ]
+              src[:package_end + 1]
               + imports
-              + src[
-                package_end + 1:
-              ]
+              + src[package_end + 1:]
           )
 
-          class_end =
-              src.rfind(
-                  "\n}"
-              )
+          class_end = src.rfind("\n}")
 
           if class_end == -1:
-              raise SystemExit(
-                  "MainActivity class ending not found"
-              )
+              raise SystemExit("MainActivity class ending not found")
 
           immersive = r'''
 
@@ -810,10 +756,7 @@ jobs:
             // The top status bar stays visible.
             private fun applyTornPulseImmersiveNavigation() {
               val controller =
-                WindowCompat.getInsetsController(
-                  window,
-                  window.decorView
-                )
+                WindowCompat.getInsetsController(window, window.decorView)
 
               controller.hide(
                 WindowInsetsCompat.Type.navigationBars()
@@ -823,12 +766,8 @@ jobs:
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
 
-            override fun onWindowFocusChanged(
-              hasFocus: Boolean
-            ) {
-              super.onWindowFocusChanged(
-                hasFocus
-              )
+            override fun onWindowFocusChanged(hasFocus: Boolean) {
+              super.onWindowFocusChanged(hasFocus)
 
               if (hasFocus) {
                 applyTornPulseImmersiveNavigation()
@@ -836,19 +775,11 @@ jobs:
             }
           '''
 
-          src = (
-              src[:class_end]
-              + immersive
-              + src[class_end:]
-          )
+          src = src[:class_end] + immersive + src[class_end:]
 
-          on_create_anchor =
-              "super.onCreate(null)"
+          on_create_anchor = "super.onCreate(null)"
 
-          if (
-            on_create_anchor
-            in src
-          ) {
+          if on_create_anchor in src:
               src = src.replace(
                   on_create_anchor,
                   on_create_anchor
@@ -860,32 +791,19 @@ jobs:
                   1
               )
           else:
-              print(
-                  "• onCreate anchor not found; focus listener will still apply immersive mode"
-              )
+              print("• onCreate anchor not found; focus listener will still apply immersive mode")
 
           path.write_text(src)
 
-          print(
-              "✓ Samsung/Android bottom navigation hidden"
-          )
+          print("✓ Samsung/Android bottom navigation hidden")
           PY
 
           MAIN=android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt
 
           test -s "$MAIN"
-
-          grep -q \
-            'TORNPULSE_IMMERSIVE_NAV_RC2' \
-            "$MAIN"
-
-          grep -q \
-            'WindowInsetsCompat.Type.navigationBars()' \
-            "$MAIN"
-
-          grep -q \
-            'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE' \
-            "$MAIN"
+          grep -q 'TORNPULSE_IMMERSIVE_NAV_RC2' "$MAIN"
+          grep -q 'WindowInsetsCompat.Type.navigationBars()' "$MAIN"
+          grep -q 'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE' "$MAIN"
 
           echo "✓ TornPulse RC2 immersive navigation verification passed"
 
@@ -901,21 +819,17 @@ jobs:
           grep -q 'TORNPULSE_V209_NATIVE_POLISH' "$HUD"
 
       - name: Make Gradle executable
-        run: |
-          chmod +x android/gradlew
+        run: chmod +x android/gradlew
 
       - name: Build ARM64 release APK
         working-directory: android
-        run: |
-          ./gradlew assembleRelease \
-            -PreactNativeArchitectures=arm64-v8a
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
       - name: Verify APK integrity and signature
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
 
           test -s "$APK"
-
           unzip -t "$APK" >/dev/null
 
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify \
