@@ -1,0 +1,937 @@
+name: Build TornPulse 2.0 RC2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      NODE_ENV: production
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Restore TornPulse 2.0 source folders
+        run: |
+          mkdir -p src scripts
+          cp core.js demo.js notifications.js storage.js tornApi.js src/
+          cp self-test.cjs scripts/self-test.cjs
+
+      - name: Apply TornPulse RC1 polish
+        shell: bash
+        run: |
+          cat > /tmp/tornpulse-polish-v209.cjs <<'TORNPULSE_PATCH'
+          const fs = require('fs');
+
+          const APP_FILE = 'App.js';
+          const CONFIG_FILE = 'app.config.js';
+          const MARKER = 'TORNPULSE_V209_POLISH';
+
+          function insertOnce(text, anchor, insertion, label) {
+            if (text.includes(insertion.trim())) return text;
+
+            if (!text.includes(anchor)) {
+              console.log(`- ${label}: anchor not found`);
+              return text;
+            }
+
+            console.log(`✓ ${label}`);
+            return text.replace(anchor, insertion + anchor);
+          }
+
+          function polishApp(input) {
+            let app = input;
+
+            if (app.includes(MARKER)) return app;
+
+            app = app.replace(
+              '// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.',
+              '// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.\n// TORNPULSE_V209_POLISH — release-candidate spacing, page reset, market empty state and HUD-first dashboard.'
+            );
+
+            app = app
+              .replaceAll(
+                '<ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>',
+                '<ScrollView key={activePage} showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>'
+              )
+              .replaceAll(
+                '<ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>',
+                '<ScrollView key={activePage} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>'
+              )
+              .replaceAll(
+                '<ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>',
+                '<ScrollView key={activePage} showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>'
+              )
+              .replaceAll(
+                '<ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>',
+                '<ScrollView key="DASHBOARD" showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>'
+              );
+
+            const hudRe =
+              /\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?<\/Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)/;
+
+            const hudMatch = app.match(hudRe);
+
+            if (hudMatch) {
+              const hudButton =
+                hudMatch[0].replace(/^\n/, '');
+
+              app = app.replace(
+                hudRe,
+                '\n'
+              );
+
+              app = insertOnce(
+                app,
+                '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
+                hudButton + '\n',
+                'Start HUD moved above Vitals'
+              );
+            } else {
+              console.log(
+                '- Start HUD move skipped'
+              );
+            }
+
+            const marketAnchor =
+              '      <Text style={styles.v2SectionTitle}>Community Trading</Text>';
+
+            const marketEmpty = `      {!marketQuery.trim()&&!marketItem&&!marketLoading&&!marketError?<TPV2Card highlight><Text style={styles.v2Kicker}>MARKET READY</Text><Text style={styles.v2MarketWelcomeTitle}>Find an item in seconds.</Text><Text style={styles.v2MarketWelcomeCopy}>Search an item above. TornPulse compares recent public listings, surfaces the lowest price, then opens Torn when you are ready to buy.</Text><View style={styles.v2MarketFlow}><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>SEARCH</Text></View><Text style={styles.v2MarketFlowArrow}>›</Text><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>COMPARE</Text></View><Text style={styles.v2MarketFlowArrow}>›</Text><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>OPEN TORN</Text></View></View></TPV2Card>:null}\n`;
+
+            if (
+              !app.includes(
+                'v2MarketWelcomeTitle'
+              )
+            ) {
+              app = insertOnce(
+                app,
+                marketAnchor,
+                marketEmpty,
+                'Market default state added'
+              );
+            }
+
+            const stylePairs = [
+              [
+                "  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:48},",
+                "  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?12:4,paddingBottom:42},"
+              ],
+              [
+                "  v2HomeScroll:{paddingBottom:64},",
+                "  v2HomeScroll:{paddingBottom:54},"
+              ],
+              [
+                "  v2Header:{paddingTop:4,paddingBottom:14,marginBottom:4},",
+                "  v2Header:{paddingTop:2,paddingBottom:10,marginBottom:2},"
+              ],
+              [
+                "  v2Clock:{color:C.primary,fontSize:28,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:12,fontVariant:['tabular-nums']},",
+                "  v2Clock:{color:C.primary,fontSize:27,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:9,fontVariant:['tabular-nums']},"
+              ],
+              [
+                "  v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:16,padding:14,marginBottom:12},",
+                "  v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:15,padding:12,marginBottom:10},"
+              ],
+              [
+                "  v2PlayerCard:{flexDirection:'row',alignItems:'center',gap:12,padding:14},",
+                "  v2PlayerCard:{flexDirection:'row',alignItems:'center',gap:11,padding:12},"
+              ],
+              [
+                "  v2SectionTitle:{color:'#C8D0D9',fontSize:13,fontWeight:'900',letterSpacing:.8,marginTop:2,marginBottom:8,paddingHorizontal:2},",
+                "  v2SectionTitle:{color:'#C8D0D9',fontSize:13,fontWeight:'900',letterSpacing:.8,marginTop:1,marginBottom:6,paddingHorizontal:2},"
+              ],
+              [
+                "  v2Vital:{width:'50%',padding:10},",
+                "  v2Vital:{width:'50%',padding:8},"
+              ],
+              [
+                "  v2VitalIcon:{width:34,height:34},",
+                "  v2VitalIcon:{width:32,height:32},"
+              ],
+              [
+                "  v2Track:{height:6,borderRadius:6,backgroundColor:'#253140',overflow:'hidden',marginTop:10},",
+                "  v2Track:{height:6,borderRadius:6,backgroundColor:'#253140',overflow:'hidden',marginTop:8},"
+              ],
+              [
+                "  v2CooldownIcon:{width:36,height:36},",
+                "  v2CooldownIcon:{width:32,height:32},"
+              ],
+              [
+                "  v2QuickGrid:{flexDirection:'row',gap:8,marginTop:2,marginBottom:14},",
+                "  v2QuickGrid:{flexDirection:'row',gap:7,marginTop:1,marginBottom:10},"
+              ],
+              [
+                "  v2Quick:{flex:1,minHeight:74,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:14,alignItems:'center',justifyContent:'center',paddingHorizontal:4},",
+                "  v2Quick:{flex:1,minHeight:66,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:13,alignItems:'center',justifyContent:'center',paddingHorizontal:4},"
+              ],
+              [
+                "  v2HudButton:{minHeight:74,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:14},",
+                "  v2HudButton:{minHeight:64,borderRadius:15,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:14,gap:11,marginBottom:10},"
+              ],
+              [
+                "  v2HudButtonIcon:{width:44,height:44,borderRadius:22,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'},",
+                "  v2HudButtonIcon:{width:38,height:38,borderRadius:19,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'},"
+              ],
+              [
+                "  v2PageIntro:{marginTop:6,marginBottom:12},",
+                "  v2PageIntro:{marginTop:3,marginBottom:10},"
+              ]
+            ];
+
+            let styleChanges = 0;
+
+            for (
+              const [oldText,newText]
+              of stylePairs
+            ) {
+              if (
+                app.includes(oldText)
+              ) {
+                app =
+                  app.replace(
+                    oldText,
+                    newText
+                  );
+
+                styleChanges++;
+              }
+            }
+
+            console.log(
+              `✓ app spacing polish (${styleChanges} style updates)`
+            );
+
+            if (
+              !app.includes(
+                'v2MarketWelcomeTitle:{'
+              )
+            ) {
+              const styleEnd =
+                app.lastIndexOf(
+                  '\n});'
+                );
+
+              if (styleEnd > 0) {
+                const extra = `,\n  v2MarketWelcomeTitle:{color:C.text,fontSize:17,fontWeight:'900',marginTop:5},\n  v2MarketWelcomeCopy:{color:C.muted,fontSize:10,lineHeight:16,marginTop:6},\n  v2MarketFlow:{flexDirection:'row',alignItems:'center',marginTop:12,gap:5},\n  v2MarketStep:{flex:1,minHeight:34,borderRadius:9,borderWidth:1,borderColor:'#285E87',backgroundColor:'#0D2030',alignItems:'center',justifyContent:'center',paddingHorizontal:4},\n  v2MarketStepText:{color:C.cyan,fontSize:7.5,fontWeight:'900',letterSpacing:.7,textAlign:'center'},\n  v2MarketFlowArrow:{color:C.primary,fontSize:18,fontWeight:'900'}\n`;
+
+                app =
+                  app.slice(
+                    0,
+                    styleEnd
+                  ) +
+                  extra +
+                  app.slice(
+                    styleEnd
+                  );
+
+                console.log(
+                  '✓ Market default-state styles added'
+                );
+              }
+            }
+
+            return app;
+          }
+
+          function extractEmbedded(
+            src,
+            name
+          ) {
+            const prefix =
+              `const ${name} = `;
+
+            const start =
+              src.indexOf(prefix);
+
+            if (start < 0) {
+              return null;
+            }
+
+            const valueStart =
+              start +
+              prefix.length;
+
+            if (
+              src[valueStart] !== '"'
+            ) {
+              return null;
+            }
+
+            let i =
+              valueStart + 1;
+
+            let escaped = false;
+
+            for (
+              ;
+              i < src.length;
+              i++
+            ) {
+              const ch = src[i];
+
+              if (escaped) {
+                escaped = false;
+                continue;
+              }
+
+              if (ch === '\\') {
+                escaped = true;
+                continue;
+              }
+
+              if (ch === '"') {
+                break;
+              }
+            }
+
+            if (
+              i >= src.length
+            ) {
+              return null;
+            }
+
+            return {
+              start:valueStart,
+              end:i+1,
+              value:JSON.parse(
+                src.slice(
+                  valueStart,
+                  i+1
+                )
+              )
+            };
+          }
+
+          function setEmbedded(
+            src,
+            name,
+            value
+          ) {
+            const found =
+              extractEmbedded(
+                src,
+                name
+              );
+
+            if (!found) {
+              return src;
+            }
+
+            return (
+              src.slice(
+                0,
+                found.start
+              ) +
+              JSON.stringify(
+                value
+              ) +
+              src.slice(
+                found.end
+              )
+            );
+          }
+
+          function replaceWhenBlock(
+            kt,
+            name,
+            compact,
+            large,
+            standard
+          ) {
+            const re =
+              new RegExp(
+                `(val\\s+${name}\\s*=\\s*when\\s*\\{\\s*compact\\s*->\\s*)[^\\n]+(\\s*large\\s*->\\s*)[^\\n]+(\\s*else\\s*->\\s*)[^\\n]+(\\s*\\})`
+              );
+
+            if (!re.test(kt)) {
+              return {
+                text:kt,
+                changed:false
+              };
+            }
+
+            return {
+              text:
+                kt.replace(
+                  re,
+                  `$1${compact}$2${large}$3${standard}$4`
+                ),
+              changed:true
+            };
+          }
+
+          function polishNative(
+            input
+          ) {
+            let kt = input;
+
+            if (
+              kt.includes(
+                '// TORNPULSE_V209_NATIVE_POLISH'
+              )
+            ) {
+              return kt;
+            }
+
+            kt = kt.replace(
+              'class ComfortableOverlayService',
+              '// TORNPULSE_V209_NATIVE_POLISH\nclass ComfortableOverlayService'
+            );
+
+            let changed = 0;
+
+            for (
+              const spec of [
+                [
+                  'minWidthDp',
+                  '112',
+                  '154',
+                  '132'
+                ],
+                [
+                  'collapsedWidthDp',
+                  '36',
+                  '44',
+                  '40'
+                ],
+                [
+                  'logoSize',
+                  '8',
+                  '10',
+                  '9'
+                ],
+                [
+                  'verticalPadding',
+                  '1',
+                  '2',
+                  '1'
+                ]
+              ]
+            ) {
+              const out =
+                replaceWhenBlock(
+                  kt,
+                  ...spec
+                );
+
+              kt = out.text;
+
+              if (
+                out.changed
+              ) {
+                changed++;
+              }
+            }
+
+            kt = kt.replace(
+              /private var currentMinWidthDp = \d+/,
+              () => {
+                changed++;
+
+                return (
+                  'private var currentMinWidthDp = 132'
+                );
+              }
+            );
+
+            kt = kt.replace(
+              /private var currentCollapsedWidthDp = \d+/,
+              () => {
+                changed++;
+
+                return (
+                  'private var currentCollapsedWidthDp = 40'
+                );
+              }
+            );
+
+            const edgePairs = [
+              [
+                'screen.widthPixels - renderedWidth - dp(8)',
+                'screen.widthPixels - renderedWidth - dp(2)'
+              ],
+              [
+                'display.widthPixels - dp(initialDockWidthDp) - dp(8)',
+                'display.widthPixels - dp(initialDockWidthDp) - dp(2)'
+              ]
+            ];
+
+            for (
+              const [oldText,newText]
+              of edgePairs
+            ) {
+              if (
+                kt.includes(oldText)
+              ) {
+                kt =
+                  kt.split(
+                    oldText
+                  ).join(
+                    newText
+                  );
+
+                changed++;
+              }
+            }
+
+            const nativePairs = [
+              [
+                'minimumHeight = dp(66)',
+                'minimumHeight = dp(58)'
+              ],
+              [
+                'minimumHeight = dp(46)',
+                'minimumHeight = dp(42)'
+              ],
+              [
+                'minimumHeight = dp(52)',
+                'minimumHeight = dp(46)'
+              ],
+              [
+                'LinearLayout.LayoutParams(dp(20), dp(20))',
+                'LinearLayout.LayoutParams(dp(18), dp(18))'
+              ],
+              [
+                'LinearLayout.LayoutParams(dp(22), dp(22))',
+                'LinearLayout.LayoutParams(dp(20), dp(20))'
+              ],
+              [
+                'makeHudGlyph(label, color, 13)',
+                'makeHudGlyph(label, color, 12)'
+              ],
+              [
+                'LinearLayout.LayoutParams(dp(13), dp(13))',
+                'LinearLayout.LayoutParams(dp(12), dp(12))'
+              ],
+              [
+                'makeHudGlyph(label, labelColor, 12)',
+                'makeHudGlyph(label, labelColor, 11)'
+              ]
+            ];
+
+            for (
+              const [oldText,newText]
+              of nativePairs
+            ) {
+              if (
+                kt.includes(
+                  oldText
+                )
+              ) {
+                kt =
+                  kt.split(
+                    oldText
+                  ).join(
+                    newText
+                  );
+
+                changed++;
+              }
+            }
+
+            kt = kt.replace(
+              /setPadding\(dp\((\d+)\), dp\((\d+)\), dp\((\d+)\), dp\((\d+)\)\)/g,
+              (
+                whole,
+                l,
+                t,
+                r,
+                b
+              ) => {
+                const left =
+                  Number(l);
+
+                const right =
+                  Number(r);
+
+                const top =
+                  Number(t);
+
+                const bottom =
+                  Number(b);
+
+                if (
+                  left < 3 &&
+                  right < 3
+                ) {
+                  return whole;
+                }
+
+                const nl =
+                  Math.max(
+                    1,
+                    Math.round(
+                      left * 0.75
+                    )
+                  );
+
+                const nr =
+                  Math.max(
+                    1,
+                    Math.round(
+                      right * 0.75
+                    )
+                  );
+
+                if (
+                  nl === left &&
+                  nr === right
+                ) {
+                  return whole;
+                }
+
+                changed++;
+
+                return (
+                  `setPadding(dp(${nl}), dp(${top}), dp(${nr}), dp(${bottom}))`
+                );
+              }
+            );
+
+            console.log(
+              `✓ native HUD polish (${changed} sizing/layout updates)`
+            );
+
+            return kt;
+          }
+
+          if (
+            fs.existsSync(
+              APP_FILE
+            )
+          ) {
+            const before =
+              fs.readFileSync(
+                APP_FILE,
+                'utf8'
+              );
+
+            const after =
+              polishApp(
+                before
+              );
+
+            if (
+              after !== before
+            ) {
+              fs.writeFileSync(
+                APP_FILE,
+                after,
+                'utf8'
+              );
+            }
+          }
+
+          if (
+            fs.existsSync(
+              CONFIG_FILE
+            )
+          ) {
+            let config =
+              fs.readFileSync(
+                CONFIG_FILE,
+                'utf8'
+              );
+
+            const embeddedApp =
+              extractEmbedded(
+                config,
+                'APP_JS'
+              );
+
+            if (embeddedApp) {
+              config =
+                setEmbedded(
+                  config,
+                  'APP_JS',
+                  polishApp(
+                    embeddedApp.value
+                  )
+                );
+            }
+
+            const embeddedKt =
+              extractEmbedded(
+                config,
+                'OVERLAY_SERVICE_KT'
+              );
+
+            if (embeddedKt) {
+              config =
+                setEmbedded(
+                  config,
+                  'OVERLAY_SERVICE_KT',
+                  polishNative(
+                    embeddedKt.value
+                  )
+                );
+            }
+
+            fs.writeFileSync(
+              CONFIG_FILE,
+              config,
+              'utf8'
+            );
+          }
+
+          console.log(
+            '✅ TornPulse v2.0 polish patch ready'
+          );
+          TORNPULSE_PATCH
+
+          node /tmp/tornpulse-polish-v209.cjs
+
+          grep -q 'TORNPULSE_V209_POLISH' App.js
+          grep -q 'Find an item in seconds' App.js
+          grep -q 'key={activePage}' App.js
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run TornPulse core self-test
+        run: npm run selftest
+
+      - name: Verify TornPulse 2.0 foundation
+        run: |
+          test -s App.js
+          test -s app.config.js
+          test -s src/core.js
+          test -s src/demo.js
+          test -s src/notifications.js
+          test -s src/storage.js
+          test -s src/tornApi.js
+          test -s scripts/self-test.cjs
+
+          grep -q '"version": "2.0.0"' package.json
+          grep -q 'DASHBOARD' App.js
+          grep -q 'TRAVEL' App.js
+          grep -q 'MARKET' App.js
+          grep -q 'ACTIVITY' App.js
+          grep -q 'MORE' App.js
+          grep -q 'TORNPULSE_V209_POLISH' App.js
+
+      - name: Validate JavaScript bundle
+        run: |
+          npx expo export \
+            --platform android \
+            --output-dir /tmp/tornpulse-bundle-check
+
+      - name: Generate Android project
+        run: |
+          npx expo prebuild \
+            --platform android \
+            --clean
+
+      - name: Hide Android bottom navigation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt"
+          )
+
+          src = path.read_text()
+
+          marker = (
+              "TORNPULSE_IMMERSIVE_NAV_RC2"
+          )
+
+          if marker in src:
+              print(
+                  "✓ Immersive navigation already installed"
+              )
+              raise SystemExit(0)
+
+          imports = """
+          import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          """
+
+          package_end = src.find(
+              "\n",
+              src.find(
+                  "package "
+              )
+          )
+
+          if package_end == -1:
+              raise SystemExit(
+                  "MainActivity package declaration not found"
+              )
+
+          src = (
+              src[
+                :package_end + 1
+              ]
+              + imports
+              + src[
+                package_end + 1:
+              ]
+          )
+
+          class_end =
+              src.rfind(
+                  "\n}"
+              )
+
+          if class_end == -1:
+              raise SystemExit(
+                  "MainActivity class ending not found"
+              )
+
+          immersive = r'''
+
+            // TORNPULSE_IMMERSIVE_NAV_RC2
+            // Hide Samsung/Android bottom navigation while TornPulse is active.
+            // The top status bar stays visible.
+            private fun applyTornPulseImmersiveNavigation() {
+              val controller =
+                WindowCompat.getInsetsController(
+                  window,
+                  window.decorView
+                )
+
+              controller.hide(
+                WindowInsetsCompat.Type.navigationBars()
+              )
+
+              controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+
+            override fun onWindowFocusChanged(
+              hasFocus: Boolean
+            ) {
+              super.onWindowFocusChanged(
+                hasFocus
+              )
+
+              if (hasFocus) {
+                applyTornPulseImmersiveNavigation()
+              }
+            }
+          '''
+
+          src = (
+              src[:class_end]
+              + immersive
+              + src[class_end:]
+          )
+
+          on_create_anchor =
+              "super.onCreate(null)"
+
+          if (
+            on_create_anchor
+            in src
+          ) {
+              src = src.replace(
+                  on_create_anchor,
+                  on_create_anchor
+                  + """
+              window.decorView.post {
+                applyTornPulseImmersiveNavigation()
+              }
+              """,
+                  1
+              )
+          else:
+              print(
+                  "• onCreate anchor not found; focus listener will still apply immersive mode"
+              )
+
+          path.write_text(src)
+
+          print(
+              "✓ Samsung/Android bottom navigation hidden"
+          )
+          PY
+
+          MAIN=android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt
+
+          test -s "$MAIN"
+
+          grep -q \
+            'TORNPULSE_IMMERSIVE_NAV_RC2' \
+            "$MAIN"
+
+          grep -q \
+            'WindowInsetsCompat.Type.navigationBars()' \
+            "$MAIN"
+
+          grep -q \
+            'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE' \
+            "$MAIN"
+
+          echo "✓ TornPulse RC2 immersive navigation verification passed"
+
+      - name: Verify native TornPulse HUD polish
+        run: |
+          HUD=android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
+
+          test -s "$HUD"
+          grep -q 'TornPulse/' "$HUD"
+          grep -q 'hud_preset' "$HUD"
+          grep -q 'approved_right_rail_v1' "$HUD"
+          grep -q 'openBaldrList()' "$HUD"
+          grep -q 'TORNPULSE_V209_NATIVE_POLISH' "$HUD"
+
+      - name: Make Gradle executable
+        run: |
+          chmod +x android/gradlew
+
+      - name: Build ARM64 release APK
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a
+
+      - name: Verify APK integrity and signature
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+
+          test -s "$APK"
+
+          unzip -t "$APK" >/dev/null
+
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify \
+            --verbose \
+            --print-certs \
+            "$APK"
+
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" \
+            | head -n 20
+
+          sha256sum "$APK"
+          ls -lh "$APK"
+
+      - name: Upload TornPulse RC2 ARM64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tornpulse-v2.0.0-rc2-arm64-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
