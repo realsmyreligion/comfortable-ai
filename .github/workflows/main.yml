@@ -1,219 +1,103 @@
-      - name: Install clean Torn item icons
+name: Build TornPulse 2.0 RC2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      NODE_ENV: production
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Restore TornPulse 2.0 source folders
+        run: |
+          mkdir -p src scripts
+          cp core.js demo.js notifications.js storage.js tornApi.js src/
+          cp self-test.cjs scripts/self-test.cjs
+
+      - name: Apply TornPulse RC1 polish
         shell: bash
         run: |
-          echo "Installing Torn item artwork..."
-
-          # Xanax
-          curl -fL --retry 3 \
-            -A "Mozilla/5.0" \
-            "https://www.torn.com/images/items/206/large.png" \
-            -o tp-drug.png
-
-          # Feathery Hotel Coupon
-          curl -fL --retry 3 \
-            -A "Mozilla/5.0" \
-            "https://www.torn.com/images/items/367/large.png" \
-            -o tp-booster.png
-
-          # O+ Blood Bag
-          curl -fL --retry 3 \
-            -A "Mozilla/5.0" \
-            "https://www.torn.com/images/items/738/large.png" \
-            -o tp-medical.png
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          for name in [
-              "tp-drug.png",
-              "tp-booster.png",
-              "tp-medical.png",
-          ]:
-              data = Path(name).read_bytes()
-
-              if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-                  raise SystemExit(
-                      f"ERROR: {name} is not a valid PNG"
-                  )
-
-              print(f"✓ {name}: {len(data):,} bytes")
-          PY
-
-          cat > /tmp/tornpulse-item-icons.cjs <<'TORNPULSE_ICONS'
+          cat > /tmp/tornpulse-polish-v209.cjs <<'TORNPULSE_PATCH'
           const fs = require('fs');
 
           const APP_FILE = 'App.js';
           const CONFIG_FILE = 'app.config.js';
+          const MARKER = 'TORNPULSE_V209_POLISH';
 
-          function extractEmbedded(src, name) {
-            const prefix = `const ${name} = `;
-            const start = src.indexOf(prefix);
-
-            if (start < 0) {
-              throw new Error(`Missing embedded ${name}`);
+          function insertOnce(text, anchor, insertion, label) {
+            if (text.includes(insertion.trim())) return text;
+            if (!text.includes(anchor)) {
+              console.log(`- ${label}: anchor not found`);
+              return text;
             }
+            console.log(`✓ ${label}`);
+            return text.replace(anchor, insertion + anchor);
+          }
 
-            const valueStart = start + prefix.length;
+          function polishApp(input) {
+            let app = input;
+            if (app.includes(MARKER)) return app;
 
-            if (src[valueStart] !== '"') {
-              throw new Error(`${name} is not a JSON string`);
-            }
+            app = app.replace(
+              '// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.',
+              '// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.\n// TORNPULSE_V209_POLISH — release-candidate spacing, page reset, market empty state and HUD-first dashboard.'
+            );
 
-            let i = valueStart + 1;
-            let escaped = false;
-
-            for (; i < src.length; i++) {
-              const ch = src[i];
-
-              if (escaped) {
-                escaped = false;
-                continue;
-              }
-
-              if (ch === '\\') {
-                escaped = true;
-                continue;
-              }
-
-              if (ch === '"') break;
-            }
-
-            if (i >= src.length) {
-              throw new Error(`Could not parse ${name}`);
-            }
-
-            return {
-              start: valueStart,
-              end: i + 1,
-              value: JSON.parse(
-                src.slice(valueStart, i + 1)
+            app = app
+              .replaceAll(
+                '<ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>',
+                '<ScrollView key={activePage} showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>'
               )
-            };
-          }
-
-          function setEmbedded(src, name, value) {
-            const found = extractEmbedded(src, name);
-
-            return (
-              src.slice(0, found.start) +
-              JSON.stringify(value) +
-              src.slice(found.end)
-            );
-          }
-
-          // ----------------------------------------
-          // Main TornPulse dashboard
-          // ----------------------------------------
-
-          let app = fs.readFileSync(APP_FILE, 'utf8');
-
-          const iconStyle =
-            /v2CooldownIcon:\{width:\d+,height:\d+\}/;
-
-          if (!iconStyle.test(app)) {
-            throw new Error(
-              'Could not locate v2CooldownIcon style'
-            );
-          }
-
-          app = app.replace(
-            iconStyle,
-            'v2CooldownIcon:{width:48,height:48}'
-          );
-
-          fs.writeFileSync(
-            APP_FILE,
-            app,
-            'utf8'
-          );
-
-          console.log(
-            '✓ Dashboard item icons set to 48x48'
-          );
-
-          // ----------------------------------------
-          // Native Android floating HUD
-          // ----------------------------------------
-
-          let config =
-            fs.readFileSync(CONFIG_FILE, 'utf8');
-
-          const embeddedKt =
-            extractEmbedded(
-              config,
-              'OVERLAY_SERVICE_KT'
-            );
-
-          let kt = embeddedKt.value;
-
-          const icons = [
-            ['TP_DRUG_ICON', 'tp-drug.png'],
-            ['TP_BOOSTER_ICON', 'tp-booster.png'],
-            ['TP_MEDICAL_ICON', 'tp-medical.png']
-          ];
-
-          for (const [constant, file] of icons) {
-            const encoded =
-              fs.readFileSync(file)
-                .toString('base64');
-
-            const re = new RegExp(
-              `((?:private\\s+)?val\\s+${constant}\\s*=\\s*")[^"]*(")`
-            );
-
-            if (!re.test(kt)) {
-              throw new Error(
-                `Could not locate ${constant}`
+              .replaceAll(
+                '<ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>',
+                '<ScrollView key={activePage} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>'
+              )
+              .replaceAll(
+                '<ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>',
+                '<ScrollView key={activePage} showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>'
+              )
+              .replaceAll(
+                '<ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>',
+                '<ScrollView key="DASHBOARD" showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>'
               );
+
+            const hudRe = /\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?<\/Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)/;
+            const hudMatch = app.match(hudRe);
+
+            if (hudMatch) {
+              const hudButton = hudMatch[0].replace(/^\n/, '');
+              app = app.replace(hudRe, '\n');
+              app = insertOnce(
+                app,
+                '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
+                hudButton + '\n',
+                'Start HUD moved above Vitals'
+              );
+            } else {
+              console.log('- Start HUD move skipped');
             }
 
-            kt = kt.replace(
-              re,
-              `$1${encoded}$2`
-            );
-
-            console.log(
-              `✓ ${constant} refreshed`
-            );
-          }
-
-          // Make Drug / Booster / Medical
-          // easier to see in the floating HUD.
-          kt = kt.replaceAll(
-            'makeHudGlyph(label, labelColor, 11)',
-            'makeHudGlyph(label, labelColor, 18)'
-          );
-
-          kt = kt.replaceAll(
-            'makeHudGlyph(label, labelColor, 12)',
-            'makeHudGlyph(label, labelColor, 18)'
-          );
-
-          config = setEmbedded(
-            config,
-            'OVERLAY_SERVICE_KT',
-            kt
-          );
-
-          fs.writeFileSync(
-            CONFIG_FILE,
-            config,
-            'utf8'
-          );
-
-          console.log(
-            '✓ Native HUD Torn item icons refreshed'
-          );
-
-          console.log(
-            '✅ TornPulse clean item icon upgrade complete'
-          );
-          TORNPULSE_ICONS
-
-          node /tmp/tornpulse-item-icons.cjs
-
-          grep -q \
-            "v2CooldownIcon:{width:48,height:48}" \
-            App.js
-
-          echo "✓ TornPulse item icon verification passed"
