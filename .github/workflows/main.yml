@@ -1,211 +1,22 @@
-name: Build TornPulse 2.0 RC2
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-jobs:
-  android:
-    runs-on: ubuntu-latest
-    env:
-      CI: true
-      NODE_ENV: production
-
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.13.1"
-          cache: npm
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Restore TornPulse 2.0 source folders
-        run: |
-          mkdir -p src scripts
-          cp core.js demo.js notifications.js storage.js tornApi.js src/
-          cp self-test.cjs scripts/self-test.cjs
-
-      - name: Apply TornPulse RC1 polish
+      - name: Harden TornPulse alert synchronization
         shell: bash
         run: |
-          cat > /tmp/tornpulse-polish-v209.cjs <<'TORNPULSE_PATCH'
+          cat > /tmp/tornpulse-alert-sync-rc4.cjs <<'TORNPULSE_ALERT_SYNC'
           const fs = require('fs');
 
           const APP_FILE = 'App.js';
           const CONFIG_FILE = 'app.config.js';
-          const MARKER = 'TORNPULSE_V209_POLISH';
+          const NOTIFY_FILE = 'notifications.js';
+          const SRC_NOTIFY_FILE = 'src/notifications.js';
+          const MARKER = 'TORNPULSE_RC4_ALERT_SYNC';
 
-          function insertOnce(text, anchor, insertion, label) {
-            if (text.includes(insertion.trim())) return text;
-            if (!text.includes(anchor)) {
-              console.log(`- ${label}: anchor not found`);
-              return text;
+          function mustReplace(text, oldText, newText, label) {
+            if (text.includes(newText)) return text;
+            if (!text.includes(oldText)) {
+              throw new Error(`RC4: ${label} anchor not found`);
             }
             console.log(`✓ ${label}`);
-            return text.replace(anchor, insertion + anchor);
-          }
-
-          function polishApp(input) {
-            let app = input;
-            if (app.includes(MARKER)) return app;
-
-            app = app.replace(
-              '// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.',
-              '// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.\n// TORNPULSE_V209_POLISH — release-candidate spacing, page reset, market empty state and HUD-first dashboard.'
-            );
-
-            app = app
-              .replaceAll(
-                '<ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>',
-                '<ScrollView key={activePage} showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>'
-              )
-              .replaceAll(
-                '<ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>',
-                '<ScrollView key={activePage} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>'
-              )
-              .replaceAll(
-                '<ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>',
-                '<ScrollView key={activePage} showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>'
-              )
-              .replaceAll(
-                '<ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>',
-                '<ScrollView key="DASHBOARD" showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>'
-              );
-
-            const hudRe = /\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?<\/Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)/;
-            const hudMatch = app.match(hudRe);
-
-            if (hudMatch) {
-              const hudButton = hudMatch[0].replace(/^\n/, '');
-              app = app.replace(hudRe, '\n');
-              app = insertOnce(
-                app,
-                '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
-                hudButton + '\n',
-                'Start HUD moved above Vitals'
-              );
-            } else {
-              console.log('- Start HUD move skipped');
-            }
-
-            const marketAnchor =
-              '      <Text style={styles.v2SectionTitle}>Community Trading</Text>';
-
-            const marketEmpty = `      {!marketQuery.trim()&&!marketItem&&!marketLoading&&!marketError?<TPV2Card highlight><Text style={styles.v2Kicker}>MARKET READY</Text><Text style={styles.v2MarketWelcomeTitle}>Find an item in seconds.</Text><Text style={styles.v2MarketWelcomeCopy}>Search an item above. TornPulse compares recent public listings, surfaces the lowest price, then opens Torn when you are ready to buy.</Text><View style={styles.v2MarketFlow}><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>SEARCH</Text></View><Text style={styles.v2MarketFlowArrow}>›</Text><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>COMPARE</Text></View><Text style={styles.v2MarketFlowArrow}>›</Text><View style={styles.v2MarketStep}><Text style={styles.v2MarketStepText}>OPEN TORN</Text></View></View></TPV2Card>:null}\n`;
-
-            if (!app.includes('v2MarketWelcomeTitle')) {
-              app = insertOnce(
-                app,
-                marketAnchor,
-                marketEmpty,
-                'Market default state added'
-              );
-            }
-
-            const stylePairs = [
-              [
-                "  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:48},",
-                "  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?12:4,paddingBottom:42},"
-              ],
-              [
-                "  v2HomeScroll:{paddingBottom:64},",
-                "  v2HomeScroll:{paddingBottom:54},"
-              ],
-              [
-                "  v2Header:{paddingTop:4,paddingBottom:14,marginBottom:4},",
-                "  v2Header:{paddingTop:2,paddingBottom:10,marginBottom:2},"
-              ],
-              [
-                "  v2Clock:{color:C.primary,fontSize:28,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:12,fontVariant:['tabular-nums']},",
-                "  v2Clock:{color:C.primary,fontSize:27,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:9,fontVariant:['tabular-nums']},"
-              ],
-              [
-                "  v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:16,padding:14,marginBottom:12},",
-                "  v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:15,padding:12,marginBottom:10},"
-              ],
-              [
-                "  v2PlayerCard:{flexDirection:'row',alignItems:'center',gap:12,padding:14},",
-                "  v2PlayerCard:{flexDirection:'row',alignItems:'center',gap:11,padding:12},"
-              ],
-              [
-                "  v2SectionTitle:{color:'#C8D0D9',fontSize:13,fontWeight:'900',letterSpacing:.8,marginTop:2,marginBottom:8,paddingHorizontal:2},",
-                "  v2SectionTitle:{color:'#C8D0D9',fontSize:13,fontWeight:'900',letterSpacing:.8,marginTop:1,marginBottom:6,paddingHorizontal:2},"
-              ],
-              [
-                "  v2Vital:{width:'50%',padding:10},",
-                "  v2Vital:{width:'50%',padding:8},"
-              ],
-              [
-                "  v2VitalIcon:{width:34,height:34},",
-                "  v2VitalIcon:{width:32,height:32},"
-              ],
-              [
-                "  v2Track:{height:6,borderRadius:6,backgroundColor:'#253140',overflow:'hidden',marginTop:10},",
-                "  v2Track:{height:6,borderRadius:6,backgroundColor:'#253140',overflow:'hidden',marginTop:8},"
-              ],
-              [
-                "  v2CooldownIcon:{width:36,height:36},",
-                "  v2CooldownIcon:{width:32,height:32},"
-              ],
-              [
-                "  v2QuickGrid:{flexDirection:'row',gap:8,marginTop:2,marginBottom:14},",
-                "  v2QuickGrid:{flexDirection:'row',gap:7,marginTop:1,marginBottom:10},"
-              ],
-              [
-                "  v2Quick:{flex:1,minHeight:74,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:14,alignItems:'center',justifyContent:'center',paddingHorizontal:4},",
-                "  v2Quick:{flex:1,minHeight:66,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:13,alignItems:'center',justifyContent:'center',paddingHorizontal:4},"
-              ],
-              [
-                "  v2HudButton:{minHeight:74,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:14},",
-                "  v2HudButton:{minHeight:64,borderRadius:15,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:14,gap:11,marginBottom:10},"
-              ],
-              [
-                "  v2HudButtonIcon:{width:44,height:44,borderRadius:22,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'},",
-                "  v2HudButtonIcon:{width:38,height:38,borderRadius:19,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'},"
-              ],
-              [
-                "  v2PageIntro:{marginTop:6,marginBottom:12},",
-                "  v2PageIntro:{marginTop:3,marginBottom:10},"
-              ]
-            ];
-
-            let styleChanges = 0;
-
-            for (const [oldText,newText] of stylePairs) {
-              if (app.includes(oldText)) {
-                app = app.replace(oldText,newText);
-                styleChanges++;
-              }
-            }
-
-            console.log(`✓ app spacing polish (${styleChanges} style updates)`);
-
-            if (!app.includes('v2MarketWelcomeTitle:{')) {
-              const styleEnd = app.lastIndexOf('\n});');
-
-              if (styleEnd > 0) {
-                const extra = `,\n  v2MarketWelcomeTitle:{color:C.text,fontSize:17,fontWeight:'900',marginTop:5},\n  v2MarketWelcomeCopy:{color:C.muted,fontSize:10,lineHeight:16,marginTop:6},\n  v2MarketFlow:{flexDirection:'row',alignItems:'center',marginTop:12,gap:5},\n  v2MarketStep:{flex:1,minHeight:34,borderRadius:9,borderWidth:1,borderColor:'#285E87',backgroundColor:'#0D2030',alignItems:'center',justifyContent:'center',paddingHorizontal:4},\n  v2MarketStepText:{color:C.cyan,fontSize:7.5,fontWeight:'900',letterSpacing:.7,textAlign:'center'},\n  v2MarketFlowArrow:{color:C.primary,fontSize:18,fontWeight:'900'}\n`;
-
-                app = app.slice(0,styleEnd) + extra + app.slice(styleEnd);
-
-                console.log('✓ Market default-state styles added');
-              }
-            }
-
-            return app;
+            return text.replace(oldText, newText);
           }
 
           function extractEmbedded(src, name) {
@@ -240,722 +51,730 @@ jobs:
             if (i >= src.length) return null;
 
             return {
-              start:valueStart,
-              end:i+1,
-              value:JSON.parse(src.slice(valueStart,i+1))
+              start: valueStart,
+              end: i + 1,
+              value: JSON.parse(src.slice(valueStart, i + 1)),
             };
           }
 
           function setEmbedded(src, name, value) {
-            const found = extractEmbedded(src,name);
+            const found = extractEmbedded(src, name);
 
-            if (!found) return src;
+            if (!found) {
+              throw new Error(`RC4: embedded ${name} not found`);
+            }
 
             return (
-              src.slice(0,found.start) +
+              src.slice(0, found.start) +
               JSON.stringify(value) +
               src.slice(found.end)
             );
           }
 
-          function replaceWhenBlock(kt, name, compact, large, standard) {
-            const re = new RegExp(
-              `(val\\s+${name}\\s*=\\s*when\\s*\\{\\s*compact\\s*->\\s*)[^\\n]+(\\s*large\\s*->\\s*)[^\\n]+(\\s*else\\s*->\\s*)[^\\n]+(\\s*\\})`
-            );
+          const notifications = `import {Platform} from 'react-native';
+          import * as Notifications from 'expo-notifications';
 
-            if (!re.test(kt)) {
-              return {
-                text:kt,
-                changed:false
-              };
+          // ${MARKER}
+          // One reconciler owns every scheduled TornPulse reminder.
+          const CHANNEL = 'torn-alerts';
+          const SOURCE = 'tornpulse';
+          const OUR_SOURCES = new Set(['tornpulse', 'comfortable-ai']);
+          const MIN_SCHEDULE_LEAD_MS = 6000;
+
+          Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+              shouldShowBanner: true,
+              shouldShowList: true,
+            }),
+          });
+
+          export async function prepareNotifications() {
+            if (Platform.OS === 'android') {
+              await Notifications.setNotificationChannelAsync(CHANNEL, {
+                name: 'Torn Alerts',
+                importance: Notifications.AndroidImportance.MAX,
+                sound: 'default',
+                vibrationPattern: [0, 300, 150, 300],
+              });
             }
 
-            return {
-              text:kt.replace(
-                re,
-                `$1${compact}$2${large}$3${standard}$4`
-              ),
-              changed:true
-            };
+            const current =
+              await Notifications.getPermissionsAsync();
+
+            if (current.granted) return true;
+
+            const requested =
+              await Notifications.requestPermissionsAsync();
+
+            return requested.granted;
           }
 
-          function polishNative(input) {
-            let kt = input;
+          export async function getNotificationPermission() {
+            const current =
+              await Notifications.getPermissionsAsync();
 
-            if (kt.includes('// TORNPULSE_V209_NATIVE_POLISH')) return kt;
+            return Boolean(current.granted);
+          }
 
-            kt = kt.replace(
-              'class ComfortableOverlayService',
-              '// TORNPULSE_V209_NATIVE_POLISH\nclass ComfortableOverlayService'
+          export async function clearTornPulseAlerts() {
+            const scheduled =
+              await Notifications.getAllScheduledNotificationsAsync();
+
+            await Promise.all(
+              scheduled
+                .filter(x =>
+                  OUR_SOURCES.has(x.content.data?.source)
+                )
+                .map(x =>
+                  Notifications.cancelScheduledNotificationAsync(
+                    x.identifier
+                  )
+                )
             );
+          }
 
-            let changed = 0;
+          function unixDate(unixSeconds) {
+            const value = Number(unixSeconds || 0);
 
-            for (const spec of [
-              ['minWidthDp','112','154','132'],
-              ['collapsedWidthDp','36','44','40'],
-              ['logoSize','8','10','9'],
-              ['verticalPadding','1','2','1']
-            ]) {
-              const out = replaceWhenBlock(kt,...spec);
+            return value > 0
+              ? new Date(value * 1000)
+              : null;
+          }
 
-              kt = out.text;
+          function futureDateFromSnapshot(snapshot, seconds) {
+            const base =
+              Number(snapshot?.fetchedAt || Date.now());
 
-              if (out.changed) changed++;
+            return new Date(
+              base +
+              Math.max(0, Number(seconds || 0)) * 1000
+            );
+          }
+
+          function validFuture(date) {
+            return (
+              date instanceof Date &&
+              Number.isFinite(date.getTime()) &&
+              date.getTime() >
+                Date.now() + MIN_SCHEDULE_LEAD_MS
+            );
+          }
+
+          function clampWarningDate(
+            targetDate,
+            warningMinutes
+          ) {
+            if (!(targetDate instanceof Date)) {
+              return null;
             }
 
-            kt = kt.replace(
-              /private var currentMinWidthDp = \d+/,
-              () => {
-                changed++;
-                return 'private var currentMinWidthDp = 132';
-              }
+            const normal = new Date(
+              targetDate.getTime() -
+              Math.max(
+                0,
+                Number(warningMinutes || 0)
+              ) *
+                60_000
             );
 
-            kt = kt.replace(
-              /private var currentCollapsedWidthDp = \d+/,
-              () => {
-                changed++;
-                return 'private var currentCollapsedWidthDp = 40';
-              }
+            if (validFuture(normal)) {
+              return normal;
+            }
+
+            if (
+              targetDate.getTime() >
+              Date.now() + 15_000
+            ) {
+              return new Date(Date.now() + 7000);
+            }
+
+            return null;
+          }
+
+          async function schedule(
+            title,
+            body,
+            date,
+            kind,
+            snapshot,
+            eventKey = ''
+          ) {
+            if (!validFuture(date)) return null;
+
+            const profileId =
+              snapshot?.profile?.id == null
+                ? ''
+                : String(snapshot.profile.id);
+
+            return Notifications.scheduleNotificationAsync({
+              content: {
+                title,
+                body,
+                sound: 'default',
+                data: {
+                  source: SOURCE,
+                  kind,
+                  profileId,
+                  eventKey: String(eventKey || ''),
+                },
+              },
+
+              trigger: {
+                type:
+                  Notifications
+                    .SchedulableTriggerInputTypes.DATE,
+                date,
+                channelId: CHANNEL,
+              },
+            });
+          }
+
+          function travelArrival(snapshot) {
+            const travel = snapshot?.travel;
+
+            if (!travel) return 0;
+
+            const direct = Number(
+              travel.arrival ||
+              travel.arrival_at ||
+              0
             );
 
-            const edgePairs = [
-              [
-                'screen.widthPixels - renderedWidth - dp(8)',
-                'screen.widthPixels - renderedWidth - dp(2)'
-              ],
-              [
-                'display.widthPixels - dp(initialDockWidthDp) - dp(8)',
-                'display.widthPixels - dp(initialDockWidthDp) - dp(2)'
-              ]
-            ];
+            if (direct > 0) return direct;
 
-            for (const [oldText,newText] of edgePairs) {
-              if (kt.includes(oldText)) {
-                kt = kt.split(oldText).join(newText);
-                changed++;
+            const left = Number(
+              travel.time_left || 0
+            );
+
+            return left > 0
+              ? Math.floor(
+                  Number(
+                    snapshot?.fetchedAt ||
+                    Date.now()
+                  ) / 1000
+                ) + left
+              : 0;
+          }
+
+          function travelActive(
+            snapshot,
+            arrivalUnix
+          ) {
+            const travel = snapshot?.travel;
+
+            if (
+              !travel ||
+              arrivalUnix <=
+                Math.floor(Date.now() / 1000)
+            ) {
+              return false;
+            }
+
+            if (
+              typeof travel.active === 'boolean'
+            ) {
+              return travel.active;
+            }
+
+            return (
+              Number(travel.time_left || 0) > 0
+            );
+          }
+
+          export async function scheduleSnapshotAlerts(
+            snapshot,
+            settings = {}
+          ) {
+            // Any new Torn snapshot invalidates old alarms.
+            await clearTornPulseAlerts();
+
+            if (!snapshot || snapshot.demo) return;
+
+            const energyMax = Number(
+              snapshot.energy?.maximum || 0
+            );
+
+            const energyCurrent = Number(
+              snapshot.energy?.current || 0
+            );
+
+            const energyFull = unixDate(
+              snapshot.energy?.full_time
+            );
+
+            if (
+              energyFull &&
+              energyCurrent < energyMax
+            ) {
+              const warning =
+                clampWarningDate(
+                  energyFull,
+                  settings.energyWarningMinutes ??
+                    15
+                );
+
+              if (warning) {
+                await schedule(
+                  'ϟ Energy warning',
+                  'Energy reaches cap in ' +
+                    (settings.energyWarningMinutes ??
+                      15) +
+                    ' minutes.',
+                  warning,
+                  'energy-warning',
+                  snapshot,
+                  snapshot.energy.full_time
+                );
+              }
+
+              await schedule(
+                'ϟ Energy full',
+                'Your Energy is full.',
+                energyFull,
+                'energy-full',
+                snapshot,
+                snapshot.energy.full_time
+              );
+            }
+
+            const nerveMax = Number(
+              snapshot.nerve?.maximum || 0
+            );
+
+            const nerveCurrent = Number(
+              snapshot.nerve?.current || 0
+            );
+
+            const nerveFull = unixDate(
+              snapshot.nerve?.full_time
+            );
+
+            if (
+              nerveFull &&
+              nerveCurrent < nerveMax
+            ) {
+              const warning =
+                clampWarningDate(
+                  nerveFull,
+                  settings.nerveWarningMinutes ??
+                    15
+                );
+
+              if (warning) {
+                await schedule(
+                  '✺ Nerve warning',
+                  'Nerve reaches cap in ' +
+                    (settings.nerveWarningMinutes ??
+                      15) +
+                    ' minutes.',
+                  warning,
+                  'nerve-warning',
+                  snapshot,
+                  snapshot.nerve.full_time
+                );
+              }
+
+              await schedule(
+                '✺ Nerve full',
+                'Your Nerve is full.',
+                nerveFull,
+                'nerve-full',
+                snapshot,
+                snapshot.nerve.full_time
+              );
+            }
+
+            if (
+              settings.cooldownAlerts !== false
+            ) {
+              for (
+                const [kind, title, body] of [
+                  [
+                    'drug',
+                    '💊 Drug ready',
+                    'Your drug cooldown is clear.',
+                  ],
+                  [
+                    'booster',
+                    '🥤 Booster ready',
+                    'Your booster cooldown is clear.',
+                  ],
+                  [
+                    'medical',
+                    '✚ Medical ready',
+                    'Your medical cooldown is clear.',
+                  ],
+                ]
+              ) {
+                const seconds = Number(
+                  snapshot.cooldowns?.[kind] ||
+                    0
+                );
+
+                if (seconds > 5) {
+                  await schedule(
+                    title,
+                    body,
+                    futureDateFromSnapshot(
+                      snapshot,
+                      seconds
+                    ),
+                    kind,
+                    snapshot,
+                    String(
+                      snapshot.fetchedAt || 0
+                    ) +
+                      ':' +
+                      String(seconds)
+                  );
+                }
               }
             }
 
-            const nativePairs = [
-              ['minimumHeight = dp(66)', 'minimumHeight = dp(58)'],
-              ['minimumHeight = dp(46)', 'minimumHeight = dp(42)'],
-              ['minimumHeight = dp(52)', 'minimumHeight = dp(46)'],
-              [
-                'LinearLayout.LayoutParams(dp(20), dp(20))',
-                'LinearLayout.LayoutParams(dp(18), dp(18))'
-              ],
-              [
-                'LinearLayout.LayoutParams(dp(22), dp(22))',
-                'LinearLayout.LayoutParams(dp(20), dp(20))'
-              ],
-              [
-                'makeHudGlyph(label, color, 13)',
-                'makeHudGlyph(label, color, 12)'
-              ],
-              [
-                'LinearLayout.LayoutParams(dp(13), dp(13))',
-                'LinearLayout.LayoutParams(dp(12), dp(12))'
-              ],
-              [
-                'makeHudGlyph(label, labelColor, 12)',
-                'makeHudGlyph(label, labelColor, 11)'
-              ]
-            ];
+            if (
+              settings.statusAlerts !== false
+            ) {
+              const state = String(
+                snapshot.status?.state || ''
+              ).toLowerCase();
 
-            for (const [oldText,newText] of nativePairs) {
-              if (kt.includes(oldText)) {
-                kt = kt.split(oldText).join(newText);
-                changed++;
+              const until = Number(
+                snapshot.status?.until || 0
+              );
+
+              if (
+                (
+                  state.includes('hospital') ||
+                  state.includes('jail')
+                ) &&
+                until > 0
+              ) {
+                const label =
+                  state.includes('hospital')
+                    ? 'Hospital'
+                    : 'Jail';
+
+                await schedule(
+                  '✓ ' + label + ' release',
+                  'Your ' +
+                    label.toLowerCase() +
+                    ' timer has ended.',
+                  unixDate(until),
+                  'status-release',
+                  snapshot,
+                  label + ':' + String(until)
+                );
               }
             }
 
-            kt = kt.replace(
-              /setPadding\(dp\((\d+)\), dp\((\d+)\), dp\((\d+)\), dp\((\d+)\)\)/g,
-              (whole,l,t,r,b) => {
-                const left = Number(l);
-                const right = Number(r);
-                const top = Number(t);
-                const bottom = Number(b);
+            const arrival =
+              travelArrival(snapshot);
 
-                if (left < 3 && right < 3) return whole;
+            if (
+              travelActive(snapshot, arrival)
+            ) {
+              const destination = String(
+                snapshot.travel?.destination ||
+                'your destination'
+              );
 
-                const nl = Math.max(1,Math.round(left*0.75));
-                const nr = Math.max(1,Math.round(right*0.75));
+              const departed = Number(
+                snapshot.travel?.departed ||
+                snapshot.travel?.departed_at ||
+                0
+              );
 
-                if (nl===left && nr===right) return whole;
+              const flightKey =
+                String(departed) +
+                ':' +
+                String(arrival) +
+                ':' +
+                destination;
 
-                changed++;
+              const arrivalDate =
+                unixDate(arrival);
 
-                return `setPadding(dp(${nl}), dp(${top}), dp(${nr}), dp(${bottom}))`;
+              const warning =
+                clampWarningDate(
+                  arrivalDate,
+                  5
+                );
+
+              if (warning) {
+                await schedule(
+                  '✈ Landing soon',
+                  'You are expected to land in ' +
+                    destination +
+                    ' in about 5 minutes.',
+                  warning,
+                  'travel-5m',
+                  snapshot,
+                  flightKey
+                );
               }
+            }
+          }
+          `;
+
+          fs.writeFileSync(
+            NOTIFY_FILE,
+            notifications,
+            'utf8'
+          );
+
+          fs.mkdirSync('src', {
+            recursive: true,
+          });
+
+          fs.writeFileSync(
+            SRC_NOTIFY_FILE,
+            notifications,
+            'utf8'
+          );
+
+          console.log(
+            '✓ unified notification reconciler installed'
+          );
+
+          let app =
+            fs.readFileSync(
+              APP_FILE,
+              'utf8'
             );
+
+          if (!app.includes(MARKER)) {
+            app = mustReplace(
+              app,
+              "import {getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';",
+              "import {clearTornPulseAlerts, getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';\n// " +
+                MARKER,
+              'notification cleanup import'
+            );
+
+            app = mustReplace(
+              app,
+              "  const [notificationReady, setNotificationReady] = useState(false);",
+              "  const [notificationReady, setNotificationReady] = useState(false);\n  const [precisionAlarmReady, setPrecisionAlarmReady] = useState(Platform.OS !== 'android');",
+              'precision alarm state'
+            );
+
+            app = mustReplace(
+              app,
+              "    const notifications=await getNotificationPermission().catch(()=>false);\n    setNotificationReady(Boolean(notifications));",
+              "    const notifications=await getNotificationPermission().catch(()=>false);\n    setNotificationReady(Boolean(notifications));\n    if (Platform.OS==='android' && ComfortableOverlay?.canScheduleExactAlarms) {\n      const exact=await ComfortableOverlay.canScheduleExactAlarms().catch(()=>false);\n      setPrecisionAlarmReady(Boolean(exact));\n    }",
+              'system exact-alarm check'
+            );
+
+            app = mustReplace(
+              app,
+              "      const notifications=await prepareNotifications().catch(()=>false);\n      if (live) setNotificationReady(Boolean(notifications));",
+              "      const notifications=await prepareNotifications().catch(()=>false);\n      if (live) setNotificationReady(Boolean(notifications));\n      if (Platform.OS==='android' && ComfortableOverlay?.canScheduleExactAlarms) {\n        const exact=await ComfortableOverlay.canScheduleExactAlarms().catch(()=>false);\n        if (live) setPrecisionAlarmReady(Boolean(exact));\n      }",
+              'startup exact-alarm check'
+            );
+
+            app = mustReplace(
+              app,
+              "    const id=setInterval(()=>sync(null,false).catch(()=>{}),120000);",
+              "    const id=setInterval(()=>sync(null,false).catch(()=>{}),60000);",
+              'main Torn sync 120s → 60s'
+            );
+
+            app = mustReplace(
+              app,
+              "  async function disconnect() { await stopHud().catch(()=>{}); await clearApiKey(); setActivePage('DASHBOARD'); setSnapshot(null); setError(''); }",
+              "  async function disconnect() { await stopHud().catch(()=>{}); await clearTornPulseAlerts().catch(()=>{}); await clearApiKey(); setActivePage('DASHBOARD'); setSnapshot(null); setError(''); }",
+              'cancel alerts on disconnect/account change'
+            );
+
+            const resetAnchor =
+              "  async function resetHudPosition() {\n    if (!ComfortableOverlay?.resetHudPosition) return;\n    await ComfortableOverlay.resetHudPosition().catch(()=>{});\n  }";
+
+            const precisionFn =
+              `${resetAnchor}
+
+  async function requestPrecisionAlarms() {
+    if (
+      Platform.OS!=='android' ||
+      !ComfortableOverlay?.requestExactAlarmPermission
+    ) return;
+
+    await ComfortableOverlay
+      .requestExactAlarmPermission()
+      .catch(()=>{});
+  }`;
+
+            app = mustReplace(
+              app,
+              resetAnchor,
+              precisionFn,
+              'precision alarm settings action'
+            );
+
+            const diagOld =
+              '<DiagnosticRow label="NOTIFICATIONS" value={notificationReady?\'PERMISSION GRANTED\':\'PERMISSION NEEDED\'} tone={notificationReady?\'live\':\'warn\'}/><Pressable onPress={()=>refreshSystemState().catch(()=>{})} style={styles.nOutline}><Text style={styles.nOutlineText}>REFRESH SYSTEM CHECK</Text></Pressable>';
+
+            const diagNew =
+              '<DiagnosticRow label="NOTIFICATIONS" value={notificationReady?\'PERMISSION GRANTED\':\'PERMISSION NEEDED\'} tone={notificationReady?\'live\':\'warn\'}/>{Platform.OS===\'android\'?<DiagnosticRow label="PRECISION ALARMS" value={precisionAlarmReady?\'ENABLED\':\'ENABLE FOR ON-TIME ALERTS\'} tone={precisionAlarmReady?\'live\':\'warn\'}/>:null}{Platform.OS===\'android\'&&!precisionAlarmReady?<Pressable onPress={requestPrecisionAlarms} style={styles.nOutline}><Text style={styles.nOutlineText}>ENABLE PRECISE ALERTS</Text></Pressable>:null}<Pressable onPress={()=>refreshSystemState().catch(()=>{})} style={styles.nOutline}><Text style={styles.nOutlineText}>REFRESH SYSTEM CHECK</Text></Pressable>';
+
+            app = mustReplace(
+              app,
+              diagOld,
+              diagNew,
+              'precision alarm diagnostic'
+            );
+          }
+
+          fs.writeFileSync(
+            APP_FILE,
+            app,
+            'utf8'
+          );
+
+          console.log(
+            '✓ App.js alert sync hardening installed'
+          );
+
+          let config =
+            fs.readFileSync(
+              CONFIG_FILE,
+              'utf8'
+            );
+
+          config = mustReplace(
+            config,
+            "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');",
+            "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');\n    ensurePermission(manifest, 'android.permission.SCHEDULE_EXACT_ALARM');",
+            'Android exact-alarm manifest permission'
+          );
+
+          let moduleKt =
+            extractEmbedded(
+              config,
+              'OVERLAY_MODULE_KT'
+            )?.value;
+
+          if (!moduleKt) {
+            throw new Error(
+              'RC4: OVERLAY_MODULE_KT not found'
+            );
+          }
+
+          if (
+            !moduleKt.includes(
+              'fun canScheduleExactAlarms'
+            )
+          ) {
+            const anchor =
+              `  @ReactMethod
+  fun startHud(apiKey: String, promise: Promise) {`;
+
+            const methods =
+              `  @ReactMethod
+  fun canScheduleExactAlarms(promise: Promise) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+      promise.resolve(true)
+      return
+    }
+
+    try {
+      val alarmManager =
+        appContext.getSystemService(
+          Context.ALARM_SERVICE
+        ) as android.app.AlarmManager
+
+      promise.resolve(
+        alarmManager.canScheduleExactAlarms()
+      )
+    } catch (_: Exception) {
+      promise.resolve(false)
+    }
+  }
+
+  @ReactMethod
+  fun requestExactAlarmPermission(promise: Promise) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+      promise.resolve(true)
+      return
+    }
+
+    try {
+      val alarmManager =
+        appContext.getSystemService(
+          Context.ALARM_SERVICE
+        ) as android.app.AlarmManager
+
+      if (
+        alarmManager.canScheduleExactAlarms()
+      ) {
+        promise.resolve(true)
+        return
+      }
+
+      val intent = Intent(
+        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+        Uri.parse(
+          "package:\${appContext.packageName}"
+        )
+      ).apply {
+        addFlags(
+          Intent.FLAG_ACTIVITY_NEW_TASK
+        )
+      }
+
+      appContext.startActivity(intent)
+      promise.resolve(false)
+    } catch (e: Exception) {
+      promise.reject(
+        "EXACT_ALARM_SETTINGS",
+        "Unable to open precise alarm settings.",
+        e
+      )
+    }
+  }
+
+${anchor}`;
+
+            if (!moduleKt.includes(anchor)) {
+              throw new Error(
+                'RC4: startHud anchor not found in native module'
+              );
+            }
+
+            moduleKt =
+              moduleKt.replace(
+                anchor,
+                methods
+              );
+
+            config =
+              setEmbedded(
+                config,
+                'OVERLAY_MODULE_KT',
+                moduleKt
+              );
 
             console.log(
-              `✓ native HUD polish (${changed} sizing/layout updates)`
+              '✓ native exact-alarm permission bridge installed'
             );
-
-            return kt;
           }
 
-          if (fs.existsSync(APP_FILE)) {
-            const before = fs.readFileSync(APP_FILE,'utf8');
-            const after = polishApp(before);
-
-            if (after !== before) {
-              fs.writeFileSync(APP_FILE,after,'utf8');
-            }
-          }
-
-          if (fs.existsSync(CONFIG_FILE)) {
-            let config = fs.readFileSync(CONFIG_FILE,'utf8');
-
-            const embeddedApp = extractEmbedded(config,'APP_JS');
-
-            if (embeddedApp) {
-              config = setEmbedded(
-                config,
-                'APP_JS',
-                polishApp(embeddedApp.value)
-              );
-            }
-
-            const embeddedKt =
-              extractEmbedded(config,'OVERLAY_SERVICE_KT');
-
-            if (embeddedKt) {
-              config = setEmbedded(
-                config,
-                'OVERLAY_SERVICE_KT',
-                polishNative(embeddedKt.value)
-              );
-            }
-
-            fs.writeFileSync(CONFIG_FILE,config,'utf8');
-          }
-
-          console.log('✅ TornPulse v2.0 polish patch ready');
-          TORNPULSE_PATCH
-
-          node /tmp/tornpulse-polish-v209.cjs
-
-          grep -q 'TORNPULSE_V209_POLISH' App.js
-          grep -q 'Find an item in seconds' App.js
-          grep -q 'key={activePage}' App.js
-
-      - name: Remove black boxes from vital icons
-        shell: bash
-        run: |
-          python3 -m pip install --quiet pillow
-
-          python3 <<'PY'
-          from pathlib import Path
-          import base64
-          import io
-          import json
-          import re
-          from PIL import Image
-
-          # Nerve is already correct.
-          # Clean Health, Energy, and Happiness only.
-          ASSET_FILES = [
-              Path("tp-health.png"),
-              Path("tp-energy.png"),
-              Path("tp-happiness.png"),
-          ]
-
-          NATIVE_CONSTANTS = [
-              "TP_HEALTH_ICON",
-              "TP_ENERGY_ICON",
-              "TP_HAPPINESS_ICON",
-          ]
-
-          def corners_are_transparent(im):
-              points = [
-                  (0, 0),
-                  (im.width - 1, 0),
-                  (0, im.height - 1),
-                  (im.width - 1, im.height - 1),
-              ]
-
-              return all(
-                  im.getpixel(point)[3] <= 10
-                  for point in points
-              )
-
-          def clean_black_background(raw):
-              im = Image.open(
-                  io.BytesIO(raw)
-              ).convert("RGBA")
-
-              if corners_are_transparent(im):
-                  return raw, False
-
-              px = im.load()
-              changed = False
-
-              # Near-black pixels become transparent.
-              # The middle range fades out smoothly to prevent
-              # a dark square/halo around the colored icon.
-              low = 28
-              high = 88
-
-              for y in range(im.height):
-                  for x in range(im.width):
-                      r, g, b, a = px[x, y]
-
-                      strongest = max(r, g, b)
-
-                      if strongest <= low:
-                          new_alpha = 0
-                      elif strongest < high:
-                          new_alpha = round(
-                              a
-                              * (strongest - low)
-                              / (high - low)
-                          )
-                      else:
-                          new_alpha = a
-
-                      if new_alpha != a:
-                          px[x, y] = (
-                              r,
-                              g,
-                              b,
-                              new_alpha
-                          )
-                          changed = True
-
-              output = io.BytesIO()
-
-              im.save(
-                  output,
-                  "PNG",
-                  optimize=True
-              )
-
-              return output.getvalue(), changed
-
-          # --------------------------------------------------
-          # MAIN TORN PULSE DASHBOARD ICONS
-          # --------------------------------------------------
-
-          fixed_assets = 0
-
-          for path in ASSET_FILES:
-              if not path.exists():
-                  print(
-                      f"• {path}: not found, skipping"
-                  )
-                  continue
-
-              cleaned, changed = clean_black_background(
-                  path.read_bytes()
-              )
-
-              if changed:
-                  path.write_bytes(cleaned)
-                  fixed_assets += 1
-
-                  print(
-                      f"✓ {path}: black background removed"
-                  )
-              else:
-                  print(
-                      f"✓ {path}: already transparent"
-                  )
-
-          # --------------------------------------------------
-          # NATIVE ANDROID FLOATING HUD ICONS
-          # --------------------------------------------------
-
-          config_path = Path("app.config.js")
-          fixed_native = 0
-
-          if config_path.exists():
-              config = config_path.read_text()
-
-              embedded = re.search(
-                  r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");',
-                  config,
-              )
-
-              if embedded:
-                  service = json.loads(
-                      embedded.group(1)
-                  )
-
-                  for const_name in NATIVE_CONSTANTS:
-                      icon_re = re.compile(
-                          rf'(private val {re.escape(const_name)} = ")([A-Za-z0-9+/=]+)(")'
-                      )
-
-                      match = icon_re.search(
-                          service
-                      )
-
-                      if not match:
-                          print(
-                              f"• {const_name}: native constant not found"
-                          )
-                          continue
-
-                      try:
-                          raw = base64.b64decode(
-                              match.group(2)
-                          )
-
-                          cleaned, changed = (
-                              clean_black_background(raw)
-                          )
-
-                      except Exception as exc:
-                          print(
-                              f"• {const_name}: could not process ({exc})"
-                          )
-                          continue
-
-                      if not changed:
-                          print(
-                              f"✓ {const_name}: already transparent"
-                          )
-                          continue
-
-                      encoded = base64.b64encode(
-                          cleaned
-                      ).decode("ascii")
-
-                      service = (
-                          service[:match.start(2)]
-                          + encoded
-                          + service[match.end(2):]
-                      )
-
-                      fixed_native += 1
-
-                      print(
-                          f"✓ {const_name}: native HUD background removed"
-                      )
-
-                  config = (
-                      config[:embedded.start(1)]
-                      + json.dumps(service)
-                      + config[embedded.end(1):]
-                  )
-
-                  config_path.write_text(config)
-
-              else:
-                  print(
-                      "• OVERLAY_SERVICE_KT not found; native icon cleanup skipped"
-                  )
-
-          else:
-              print(
-                  "• app.config.js not found; native icon cleanup skipped"
-              )
-
-          print(
-              f"✅ Vital icon cleanup complete "
-              f"({fixed_assets} dashboard asset(s), "
-              f"{fixed_native} native HUD icon(s) repaired)"
-          )
-          PY
-
-          # Confirm all three images still exist.
-          test -s tp-health.png
-          test -s tp-energy.png
-          test -s tp-happiness.png
-      - name: Restore corrected cooldown icons
-        shell: bash
-        run: |
-          # DRUG = Xanax
-          cat <<'B64' | base64 -d > tp-drug.png
-          iVBORw0KGgoAAAANSUhEUgAAAF4AAAA2CAMAAAB5q95rAAAAwFBMVEUSGSPZ1tHOysXJw7rj4dy5ta7DvLPh3dnl5OGtqqaKiYmXlpUTFhwzNTkoKy9HSEsRFh12dndWVlhoaGoZHSQVFxqppJw5PEKinJccISceIiggISOanKFbXWI8QUceHyIhIymFgX0bHSTe4NwcICQiJStdYWdiYV59gYSBfXy8vMAMDxQREhYfJjB5fIGeo6m/wcDf4eAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVj1JlAAAAQHRSTlMA//////////////8u//r/F////y1I////bIiJ////Ya//R/9Vy///////onHL/////wAAAAAAAAAAAAAAAAAAqnN5SAAABDNJREFUeNrtl+l24jgUhJFkSba8ryRAIGvvs73/y82tK8nQwExCD/Oj+0QnMRIHfy7VLcn2YvHe3tvbW/PTKb6tyuWy/I16xXXFDy/Vsu4+tG7zh2u7bXU98qpc1nd96/JN9kVKQU1qV69/QH5x0H++va/KLYGdyzOtpQQ6SaxNkzQVul0XF2GHw1QM1bYmwRvPJcGWmODiwB+6uyA7j97ggWpX1l3ffoJgzU4Ij2Q8Wppaa+nrvLwgw+REVcLinMB/suKnv56E15tE4Qm4uAYddXf7lkhw2qA4z6PDYKTpk0c+JTYJjTyiugp0RCo+vRKfR3ABhsd7bhKUxsaik9RCOsjEx+/+zZ0XzgSFLZuLJyI2kuGC5X9LyJQvTiVOgg7gz4Zntex+z/eh4LNS3yxUUvh8ARMhJY1SKPb1pF9aoWTEn2vLnnMsQpWSaEQa/nAJmAs88zCSwoooJag6i69qx/B0dnhvMwmneTBe8grysnmhirnZMHJn8NUHhzJyNGbRcMP7HLCED3ZE1fKA7/GyrU5DeLfJMokc2APJTEQpGUtHz591fi9fCmlopO9W36+doVh1DnS4br1i+jXX0sbSSYlO0H+Il3NHSkXVzbbDkfhi6zabL3G+Hs8qrZiTcQScD1L5DrFpZKTMj70pqp5Wpj+dBIgYhpnMH2rGg4N/CTRGkpWjZ5RqV8c3xJqWkZ8kR5pXnxD7yAVqnIQiKREqyW8ZfDFkvM7rk9R0wIvg/bG5wVdfN++DVh5vtCaoYuWGhNOXuj/Z0Mre5fNKJUPMUaA9nibOHsEQAw9VsJu4zFZGK92WJ7t9iU1R7fl81ikekxccDsFe+D1AejQuQXcCV55uN0tHeLPns8IjOphYduCyLypQIdqgETxryzNPCoS/IbyKEcYalYerhsVKyTP0sqnPlvA1NFo25Q9ddYZeLJ0j/KF8Hz4hRcwcFNIhlJCCo0FnyUTOshv30Nfl4zic7sVjTfiMTwvPE1RA4/EhdH4VmSiZlOBDe3ju2o91Wa2L8ew2X5SfGc/yvVigfAaDHzwNpY1kzdHqDOie0cU/Pp4NVU94HeQHmmKjZcgEW0wjxuvoSN53ZVWtX7tr399FfETOfKbHS2AZGRQRZSQ0qR7e8Kz0jE1Be41erwLeYBDZXnQG+I2D6nEkQ972GErratKBH/Is4DRnGmnRwZCbvAX6fjfu0a9PYNUDr0PRgn5pOB3mICB9V1fjt2FRXPiAWj+Q+TM+bCIHhhC6o4A8I3vD5a8juw738eCPNzqsmBm9LpriRx/Vi/vO6XgBHVUT2aNX/+k9YKQJD3VLSZ6yOdTZ9Lmvq5fV7hrvcs3XHe36E0En7CCINaneNc2iucqr3rAYx/Kjy6dpcm1drinWo1/oV3sXoyfjuoPq22HR/A+vp02BtmjG5viF6v2t/b39Ou1vSPU7IBGP/fwAAAAASUVORK5CYII=
-          B64
-
-          # BOOSTER = Feathery Hotels Group
-          cat <<'B64' | base64 -d > tp-booster.png
-          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
-          B64
-
-          # MEDICAL = red / white medical item
-          cat <<'B64' | base64 -d > tp-medical.png
-          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
-          B64
-
-          python3 <<'PY'
-          from pathlib import Path
-          import base64
-          import json
-          import re
-
-          # Update the exact same icons inside the native floating HUD.
-          replacements = {
-              "TP_DRUG_ICON": base64.b64encode(
-                  Path("tp-drug.png").read_bytes()
-              ).decode("ascii"),
-
-              "TP_BOOSTER_ICON": base64.b64encode(
-                  Path("tp-booster.png").read_bytes()
-              ).decode("ascii"),
-
-              "TP_MEDICAL_ICON": base64.b64encode(
-                  Path("tp-medical.png").read_bytes()
-              ).decode("ascii"),
-          }
-
-          config_path = Path("app.config.js")
-          config = config_path.read_text()
-
-          embedded = re.search(
-              r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");',
-              config,
-          )
-
-          if not embedded:
-              raise SystemExit(
-                  "OVERLAY_SERVICE_KT not found in app.config.js"
-              )
-
-          service = json.loads(
-              embedded.group(1)
-          )
-
-          for name, encoded in replacements.items():
-
-              pattern = re.compile(
-                  rf'(private val {re.escape(name)} = ")([A-Za-z0-9+/=]+)(")'
-              )
-
-              if not pattern.search(service):
-                  raise SystemExit(
-                      f"{name} not found in native HUD service"
-                  )
-
-              service = pattern.sub(
-                  lambda m:
-                      m.group(1)
-                      + encoded
-                      + m.group(3),
-                  service,
-                  count=1,
-              )
-
-              print(
-                  f"✓ {name} restored"
-              )
-
-          config = (
-              config[:embedded.start(1)]
-              + json.dumps(service)
-              + config[embedded.end(1):]
-          )
-
-          config_path.write_text(
-              config
-          )
-
-          print(
-              "✅ Correct Drug / Booster / Medical icons restored"
-          )
-          PY
-
-          test -s tp-drug.png
-          test -s tp-booster.png
-          test -s tp-medical.png
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Run TornPulse core self-test
-        run: npm run selftest
-
-      - name: Verify TornPulse 2.0 foundation
-        run: |
-          test -s App.js
-          test -s app.config.js
-          test -s src/core.js
-          test -s src/demo.js
-          test -s src/notifications.js
-          test -s src/storage.js
-          test -s src/tornApi.js
-          test -s scripts/self-test.cjs
-
-          grep -q '"version": "2.0.0"' package.json
-          grep -q 'DASHBOARD' App.js
-          grep -q 'TRAVEL' App.js
-          grep -q 'MARKET' App.js
-          grep -q 'ACTIVITY' App.js
-          grep -q 'MORE' App.js
-          grep -q 'TORNPULSE_V209_POLISH' App.js
-
-      - name: Validate JavaScript bundle
-        run: npx expo export --platform android --output-dir /tmp/tornpulse-bundle-check
-
-      - name: Generate Android project
-        run: npx expo prebuild --platform android --clean
-
-      - name: Hide Android bottom navigation
-        shell: bash
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path(
-              "android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt"
-          )
-
-          src = path.read_text()
-
-          marker = "TORNPULSE_IMMERSIVE_NAV_RC2"
-
-          if marker in src:
-              print("✓ Immersive navigation already installed")
-              raise SystemExit(0)
-
-          imports = """
-          import androidx.core.view.WindowCompat
-          import androidx.core.view.WindowInsetsCompat
-          import androidx.core.view.WindowInsetsControllerCompat
-          """
-
-          package_end = src.find(
-              "\n",
-              src.find("package ")
-          )
-
-          if package_end == -1:
-              raise SystemExit(
-                  "MainActivity package declaration not found"
-              )
-
-          src = (
-              src[:package_end + 1]
-              + imports
-              + src[package_end + 1:]
-          )
-
-          class_end = src.rfind("\n}")
-
-          if class_end == -1:
-              raise SystemExit(
-                  "MainActivity class ending not found"
-              )
-
-          immersive = r'''
-
-            // TORNPULSE_IMMERSIVE_NAV_RC2
-            // Hide Samsung/Android bottom navigation while TornPulse is active.
-            // The top status bar stays visible.
-            private fun applyTornPulseImmersiveNavigation() {
-              val controller =
-                WindowCompat.getInsetsController(
-                  window,
-                  window.decorView
-                )
-
-              controller.hide(
-                WindowInsetsCompat.Type.navigationBars()
-              )
-
-              controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-
-            override fun onWindowFocusChanged(
-              hasFocus: Boolean
-            ) {
-              super.onWindowFocusChanged(
-                hasFocus
-              )
-
-              if (hasFocus) {
-                applyTornPulseImmersiveNavigation()
-              }
-            }
-          '''
-
-          src = (
-              src[:class_end]
-              + immersive
-              + src[class_end:]
-          )
-
-          on_create_anchor = "super.onCreate(null)"
-
-          if on_create_anchor in src:
-              src = src.replace(
-                  on_create_anchor,
-                  on_create_anchor
-                  + """
-              window.decorView.post {
-                applyTornPulseImmersiveNavigation()
-              }
-              """,
-                  1
-              )
-
-          else:
-              print(
-                  "• onCreate anchor not found; focus listener will still apply immersive mode"
-              )
-
-          path.write_text(src)
-
-          print(
-              "✓ Samsung/Android bottom navigation hidden"
-          )
-          PY
-
-          MAIN=android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt
-
-          test -s "$MAIN"
-          grep -q 'TORNPULSE_IMMERSIVE_NAV_RC2' "$MAIN"
-          grep -q 'WindowInsetsCompat.Type.navigationBars()' "$MAIN"
-          grep -q 'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE' "$MAIN"
-
-          echo "✓ TornPulse RC2 immersive navigation verification passed"
-
-      - name: Verify native TornPulse HUD polish
-        run: |
-          HUD=android/app/src/main/java/com/comfortableai/torncopilot/ComfortableOverlayService.kt
-
-          test -s "$HUD"
-          grep -q 'TornPulse/' "$HUD"
-          grep -q 'hud_preset' "$HUD"
-          grep -q 'approved_right_rail_v1' "$HUD"
-          grep -q 'openBaldrList()' "$HUD"
-          grep -q 'TORNPULSE_V209_NATIVE_POLISH' "$HUD"
-
-      - name: Make Gradle executable
-        run: chmod +x android/gradlew
-
-      - name: Build ARM64 release APK
-        working-directory: android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
-
-      - name: Verify APK integrity and signature
-        run: |
-          APK=android/app/build/outputs/apk/release/app-release.apk
-
-          test -s "$APK"
-          unzip -t "$APK" >/dev/null
-
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify \
-            --verbose \
-            --print-certs \
-            "$APK"
-
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" \
-            | head -n 20
-
-          sha256sum "$APK"
-          ls -lh "$APK"
-
-      - name: Upload TornPulse RC2 ARM64 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: tornpulse-v2.0.0-rc2-arm64-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+          fs.writeFileSync(
+            CONFIG_FILE,
+            config,
+            'utf8'
+          );
+
+          console.log(
+            '✅ TornPulse RC4 alert sync hardening ready'
+          );
+          TORNPULSE_ALERT_SYNC
+
+          node /tmp/tornpulse-alert-sync-rc4.cjs
+
+          grep -q 'TORNPULSE_RC4_ALERT_SYNC' App.js
+          grep -q 'SCHEDULE_EXACT_ALARM' app.config.js
+          grep -q 'travel-5m' notifications.js
+          grep -q 'status-release' notifications.js
+          grep -q '60000' App.js
