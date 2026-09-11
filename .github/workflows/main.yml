@@ -444,239 +444,229 @@ jobs:
           grep -q 'Find an item in seconds' App.js
           grep -q 'key={activePage}' App.js
 
-      - name: Install clean transparent Torn item icons
+      - name: Remove black boxes from vital icons
         shell: bash
         run: |
-          echo "Installing transparent Torn item artwork..."
-
-          curl -fL --retry 3 \
-            -A "Mozilla/5.0" \
-            "https://www.torn.com/images/items/206/large.png" \
-            -o tp-drug.png
-
-          curl -fL --retry 3 \
-            -A "Mozilla/5.0" \
-            "https://www.torn.com/images/items/367/large.png" \
-            -o tp-booster.png
-
-          curl -fL --retry 3 \
-            -A "Mozilla/5.0" \
-            "https://www.torn.com/images/items/738/large.png" \
-            -o tp-medical.png
+          python3 -m pip install --quiet pillow
 
           python3 <<'PY'
           from pathlib import Path
-          import struct
+          import base64
+          import io
+          import json
+          import re
+          from PIL import Image
 
-          for name in (
-              "tp-drug.png",
-              "tp-booster.png",
-              "tp-medical.png",
-          ):
-              data = Path(name).read_bytes()
+          # Nerve is already correct.
+          # Clean Health, Energy, and Happiness only.
+          ASSET_FILES = [
+              Path("tp-health.png"),
+              Path("tp-energy.png"),
+              Path("tp-happiness.png"),
+          ]
 
-              if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-                  raise SystemExit(
-                      f"ERROR: {name} is not a valid PNG"
-                  )
+          NATIVE_CONSTANTS = [
+              "TP_HEALTH_ICON",
+              "TP_ENERGY_ICON",
+              "TP_HAPPINESS_ICON",
+          ]
 
-              if data[12:16] != b"IHDR":
-                  raise SystemExit(
-                      f"ERROR: {name} is missing PNG IHDR"
-                  )
+          def corners_are_transparent(im):
+              points = [
+                  (0, 0),
+                  (im.width - 1, 0),
+                  (0, im.height - 1),
+                  (im.width - 1, im.height - 1),
+              ]
 
-              width, height, bit_depth, color_type, _, _, _ = struct.unpack(
-                  ">IIBBBBB",
-                  data[16:29]
+              return all(
+                  im.getpixel(point)[3] <= 10
+                  for point in points
               )
 
-              has_transparency = (
-                  color_type in (4, 6)
-                  or b"tRNS" in data
+          def clean_black_background(raw):
+              im = Image.open(
+                  io.BytesIO(raw)
+              ).convert("RGBA")
+
+              if corners_are_transparent(im):
+                  return raw, False
+
+              px = im.load()
+              changed = False
+
+              # Near-black pixels become transparent.
+              # The middle range fades out smoothly to prevent
+              # a dark square/halo around the colored icon.
+              low = 28
+              high = 88
+
+              for y in range(im.height):
+                  for x in range(im.width):
+                      r, g, b, a = px[x, y]
+
+                      strongest = max(r, g, b)
+
+                      if strongest <= low:
+                          new_alpha = 0
+                      elif strongest < high:
+                          new_alpha = round(
+                              a
+                              * (strongest - low)
+                              / (high - low)
+                          )
+                      else:
+                          new_alpha = a
+
+                      if new_alpha != a:
+                          px[x, y] = (
+                              r,
+                              g,
+                              b,
+                              new_alpha
+                          )
+                          changed = True
+
+              output = io.BytesIO()
+
+              im.save(
+                  output,
+                  "PNG",
+                  optimize=True
               )
 
-              if not has_transparency:
-                  raise SystemExit(
-                      f"ERROR: {name} has no transparency"
+              return output.getvalue(), changed
+
+          # --------------------------------------------------
+          # MAIN TORN PULSE DASHBOARD ICONS
+          # --------------------------------------------------
+
+          fixed_assets = 0
+
+          for path in ASSET_FILES:
+              if not path.exists():
+                  print(
+                      f"• {path}: not found, skipping"
+                  )
+                  continue
+
+              cleaned, changed = clean_black_background(
+                  path.read_bytes()
+              )
+
+              if changed:
+                  path.write_bytes(cleaned)
+                  fixed_assets += 1
+
+                  print(
+                      f"✓ {path}: black background removed"
+                  )
+              else:
+                  print(
+                      f"✓ {path}: already transparent"
                   )
 
+          # --------------------------------------------------
+          # NATIVE ANDROID FLOATING HUD ICONS
+          # --------------------------------------------------
+
+          config_path = Path("app.config.js")
+          fixed_native = 0
+
+          if config_path.exists():
+              config = config_path.read_text()
+
+              embedded = re.search(
+                  r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");',
+                  config,
+              )
+
+              if embedded:
+                  service = json.loads(
+                      embedded.group(1)
+                  )
+
+                  for const_name in NATIVE_CONSTANTS:
+                      icon_re = re.compile(
+                          rf'(private val {re.escape(const_name)} = ")([A-Za-z0-9+/=]+)(")'
+                      )
+
+                      match = icon_re.search(
+                          service
+                      )
+
+                      if not match:
+                          print(
+                              f"• {const_name}: native constant not found"
+                          )
+                          continue
+
+                      try:
+                          raw = base64.b64decode(
+                              match.group(2)
+                          )
+
+                          cleaned, changed = (
+                              clean_black_background(raw)
+                          )
+
+                      except Exception as exc:
+                          print(
+                              f"• {const_name}: could not process ({exc})"
+                          )
+                          continue
+
+                      if not changed:
+                          print(
+                              f"✓ {const_name}: already transparent"
+                          )
+                          continue
+
+                      encoded = base64.b64encode(
+                          cleaned
+                      ).decode("ascii")
+
+                      service = (
+                          service[:match.start(2)]
+                          + encoded
+                          + service[match.end(2):]
+                      )
+
+                      fixed_native += 1
+
+                      print(
+                          f"✓ {const_name}: native HUD background removed"
+                      )
+
+                  config = (
+                      config[:embedded.start(1)]
+                      + json.dumps(service)
+                      + config[embedded.end(1):]
+                  )
+
+                  config_path.write_text(config)
+
+              else:
+                  print(
+                      "• OVERLAY_SERVICE_KT not found; native icon cleanup skipped"
+                  )
+
+          else:
               print(
-                  f"✓ {name}: {width}x{height} transparent PNG"
+                  "• app.config.js not found; native icon cleanup skipped"
               )
+
+          print(
+              f"✅ Vital icon cleanup complete "
+              f"({fixed_assets} dashboard asset(s), "
+              f"{fixed_native} native HUD icon(s) repaired)"
+          )
           PY
 
-          cat > /tmp/tornpulse-item-icons.cjs <<'TORNPULSE_ICONS'
-          const fs = require('fs');
-
-          const APP_FILE = 'App.js';
-          const CONFIG_FILE = 'app.config.js';
-
-          function extractEmbedded(src, name) {
-            const prefix = `const ${name} = `;
-            const start = src.indexOf(prefix);
-
-            if (start < 0) {
-              throw new Error(`Missing embedded ${name}`);
-            }
-
-            const valueStart = start + prefix.length;
-
-            if (src[valueStart] !== '"') {
-              throw new Error(`${name} is not a JSON string`);
-            }
-
-            let i = valueStart + 1;
-            let escaped = false;
-
-            for (; i < src.length; i++) {
-              const ch = src[i];
-
-              if (escaped) {
-                escaped = false;
-                continue;
-              }
-
-              if (ch === '\\') {
-                escaped = true;
-                continue;
-              }
-
-              if (ch === '"') break;
-            }
-
-            if (i >= src.length) {
-              throw new Error(`Could not parse ${name}`);
-            }
-
-            return {
-              start: valueStart,
-              end: i + 1,
-              value: JSON.parse(
-                src.slice(valueStart, i + 1)
-              )
-            };
-          }
-
-          function setEmbedded(src, name, value) {
-            const found = extractEmbedded(src, name);
-
-            return (
-              src.slice(0, found.start) +
-              JSON.stringify(value) +
-              src.slice(found.end)
-            );
-          }
-
-          let app = fs.readFileSync(
-            APP_FILE,
-            'utf8'
-          );
-
-          const iconStyle =
-            /v2CooldownIcon:\{width:\d+,height:\d+\}/;
-
-          if (!iconStyle.test(app)) {
-            throw new Error(
-              'Could not locate v2CooldownIcon style'
-            );
-          }
-
-          app = app.replace(
-            iconStyle,
-            'v2CooldownIcon:{width:48,height:48}'
-          );
-
-          fs.writeFileSync(
-            APP_FILE,
-            app,
-            'utf8'
-          );
-
-          console.log(
-            '✓ Dashboard Torn item icons set to 48x48'
-          );
-
-          let config = fs.readFileSync(
-            CONFIG_FILE,
-            'utf8'
-          );
-
-          const embeddedKt = extractEmbedded(
-            config,
-            'OVERLAY_SERVICE_KT'
-          );
-
-          let kt = embeddedKt.value;
-
-          const icons = [
-            ['TP_DRUG_ICON', 'tp-drug.png'],
-            ['TP_BOOSTER_ICON', 'tp-booster.png'],
-            ['TP_MEDICAL_ICON', 'tp-medical.png']
-          ];
-
-          for (const [constant, file] of icons) {
-            const encoded = fs
-              .readFileSync(file)
-              .toString('base64');
-
-            const re = new RegExp(
-              `((?:private\\s+)?val\\s+${constant}\\s*=\\s*")[^"]*(")`
-            );
-
-            if (!re.test(kt)) {
-              throw new Error(
-                `Could not locate ${constant}`
-              );
-            }
-
-            kt = kt.replace(
-              re,
-              `$1${encoded}$2`
-            );
-
-            console.log(
-              `✓ ${constant} refreshed`
-            );
-          }
-
-          kt = kt.replaceAll(
-            'makeHudGlyph(label, labelColor, 11)',
-            'makeHudGlyph(label, labelColor, 18)'
-          );
-
-          kt = kt.replaceAll(
-            'makeHudGlyph(label, labelColor, 12)',
-            'makeHudGlyph(label, labelColor, 18)'
-          );
-
-          config = setEmbedded(
-            config,
-            'OVERLAY_SERVICE_KT',
-            kt
-          );
-
-          fs.writeFileSync(
-            CONFIG_FILE,
-            config,
-            'utf8'
-          );
-
-          console.log(
-            '✅ Transparent Torn item icon upgrade complete'
-          );
-          TORNPULSE_ICONS
-
-          node /tmp/tornpulse-item-icons.cjs
-
-          grep -q \
-            "v2CooldownIcon:{width:48,height:48}" \
-            App.js
-
-          grep -q "TP_DRUG_ICON" app.config.js
-          grep -q "TP_BOOSTER_ICON" app.config.js
-          grep -q "TP_MEDICAL_ICON" app.config.js
-
-          echo "✓ Transparent item icon verification passed"
+          # Confirm all three images still exist.
+          test -s tp-health.png
+          test -s tp-energy.png
+          test -s tp-happiness.png
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -733,10 +723,15 @@ jobs:
           import androidx.core.view.WindowInsetsControllerCompat
           """
 
-          package_end = src.find("\n", src.find("package "))
+          package_end = src.find(
+              "\n",
+              src.find("package ")
+          )
 
           if package_end == -1:
-              raise SystemExit("MainActivity package declaration not found")
+              raise SystemExit(
+                  "MainActivity package declaration not found"
+              )
 
           src = (
               src[:package_end + 1]
@@ -747,7 +742,9 @@ jobs:
           class_end = src.rfind("\n}")
 
           if class_end == -1:
-              raise SystemExit("MainActivity class ending not found")
+              raise SystemExit(
+                  "MainActivity class ending not found"
+              )
 
           immersive = r'''
 
@@ -756,7 +753,10 @@ jobs:
             // The top status bar stays visible.
             private fun applyTornPulseImmersiveNavigation() {
               val controller =
-                WindowCompat.getInsetsController(window, window.decorView)
+                WindowCompat.getInsetsController(
+                  window,
+                  window.decorView
+                )
 
               controller.hide(
                 WindowInsetsCompat.Type.navigationBars()
@@ -766,8 +766,12 @@ jobs:
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
 
-            override fun onWindowFocusChanged(hasFocus: Boolean) {
-              super.onWindowFocusChanged(hasFocus)
+            override fun onWindowFocusChanged(
+              hasFocus: Boolean
+            ) {
+              super.onWindowFocusChanged(
+                hasFocus
+              )
 
               if (hasFocus) {
                 applyTornPulseImmersiveNavigation()
@@ -775,7 +779,11 @@ jobs:
             }
           '''
 
-          src = src[:class_end] + immersive + src[class_end:]
+          src = (
+              src[:class_end]
+              + immersive
+              + src[class_end:]
+          )
 
           on_create_anchor = "super.onCreate(null)"
 
@@ -790,12 +798,17 @@ jobs:
               """,
                   1
               )
+
           else:
-              print("• onCreate anchor not found; focus listener will still apply immersive mode")
+              print(
+                  "• onCreate anchor not found; focus listener will still apply immersive mode"
+              )
 
           path.write_text(src)
 
-          print("✓ Samsung/Android bottom navigation hidden")
+          print(
+              "✓ Samsung/Android bottom navigation hidden"
+          )
           PY
 
           MAIN=android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt
