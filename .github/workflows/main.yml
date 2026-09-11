@@ -667,7 +667,104 @@ jobs:
           test -s tp-health.png
           test -s tp-energy.png
           test -s tp-happiness.png
+      - name: Restore corrected cooldown icons
+        shell: bash
+        run: |
+          # DRUG = Xanax
+          cat <<'B64' | base64 -d > tp-drug.png
+          iVBORw0KGgoAAAANSUhEUgAAAF4AAAA2CAMAAAB5q95rAAAAwFBMVEUSGSPZ1tHOysXJw7rj4dy5ta7DvLPh3dnl5OGtqqaKiYmXlpUTFhwzNTkoKy9HSEsRFh12dndWVlhoaGoZHSQVFxqppJw5PEKinJccISceIiggISOanKFbXWI8QUceHyIhIymFgX0bHSTe4NwcICQiJStdYWdiYV59gYSBfXy8vMAMDxQREhYfJjB5fIGeo6m/wcDf4eAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVj1JlAAAAQHRSTlMA//////////////8u//r/F////y1I////bIiJ////Ya//R/9Vy///////onHL/////wAAAAAAAAAAAAAAAAAAqnN5SAAABDNJREFUeNrtl+l24jgUhJFkSba8ryRAIGvvs73/y82tK8nQwExCD/Oj+0QnMRIHfy7VLcn2YvHe3tvbW/PTKb6tyuWy/I16xXXFDy/Vsu4+tG7zh2u7bXU98qpc1nd96/JN9kVKQU1qV69/QH5x0H++va/KLYGdyzOtpQQ6SaxNkzQVul0XF2GHw1QM1bYmwRvPJcGWmODiwB+6uyA7j97ggWpX1l3ffoJgzU4Ij2Q8Wppaa+nrvLwgw+REVcLinMB/suKnv56E15tE4Qm4uAYddXf7lkhw2qA4z6PDYKTpk0c+JTYJjTyiugp0RCo+vRKfR3ABhsd7bhKUxsaik9RCOsjEx+/+zZ0XzgSFLZuLJyI2kuGC5X9LyJQvTiVOgg7gz4Zntex+z/eh4LNS3yxUUvh8ARMhJY1SKPb1pF9aoWTEn2vLnnMsQpWSaEQa/nAJmAs88zCSwoooJag6i69qx/B0dnhvMwmneTBe8grysnmhirnZMHJn8NUHhzJyNGbRcMP7HLCED3ZE1fKA7/GyrU5DeLfJMokc2APJTEQpGUtHz591fi9fCmlopO9W36+doVh1DnS4br1i+jXX0sbSSYlO0H+Il3NHSkXVzbbDkfhi6zabL3G+Hs8qrZiTcQScD1L5DrFpZKTMj70pqp5Wpj+dBIgYhpnMH2rGg4N/CTRGkpWjZ5RqV8c3xJqWkZ8kR5pXnxD7yAVqnIQiKREqyW8ZfDFkvM7rk9R0wIvg/bG5wVdfN++DVh5vtCaoYuWGhNOXuj/Z0Mre5fNKJUPMUaA9nibOHsEQAw9VsJu4zFZGK92WJ7t9iU1R7fl81ikekxccDsFe+D1AejQuQXcCV55uN0tHeLPns8IjOphYduCyLypQIdqgETxryzNPCoS/IbyKEcYalYerhsVKyTP0sqnPlvA1NFo25Q9ddYZeLJ0j/KF8Hz4hRcwcFNIhlJCCo0FnyUTOshv30Nfl4zic7sVjTfiMTwvPE1RA4/EhdH4VmSiZlOBDe3ju2o91Wa2L8ew2X5SfGc/yvVigfAaDHzwNpY1kzdHqDOie0cU/Pp4NVU94HeQHmmKjZcgEW0wjxuvoSN53ZVWtX7tr399FfETOfKbHS2AZGRQRZSQ0qR7e8Kz0jE1Be41erwLeYBDZXnQG+I2D6nEkQ972GErratKBH/Is4DRnGmnRwZCbvAX6fjfu0a9PYNUDr0PRgn5pOB3mICB9V1fjt2FRXPiAWj+Q+TM+bCIHhhC6o4A8I3vD5a8juw738eCPNzqsmBm9LpriRx/Vi/vO6XgBHVUT2aNX/+k9YKQJD3VLSZ6yOdTZ9Lmvq5fV7hrvcs3XHe36E0En7CCINaneNc2iucqr3rAYx/Kjy6dpcm1drinWo1/oV3sXoyfjuoPq22HR/A+vp02BtmjG5viF6v2t/b39Ou1vSPU7IBGP/fwAAAAASUVORK5CYII=
+          B64
 
+          # BOOSTER = Feathery Hotels Group
+          cat <<'B64' | base64 -d > tp-booster.png
+          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
+          B64
+
+          # MEDICAL = red / white medical item
+          cat <<'B64' | base64 -d > tp-medical.png
+          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
+          B64
+
+          python3 <<'PY'
+          from pathlib import Path
+          import base64
+          import json
+          import re
+
+          # Update the exact same icons inside the native floating HUD.
+          replacements = {
+              "TP_DRUG_ICON": base64.b64encode(
+                  Path("tp-drug.png").read_bytes()
+              ).decode("ascii"),
+
+              "TP_BOOSTER_ICON": base64.b64encode(
+                  Path("tp-booster.png").read_bytes()
+              ).decode("ascii"),
+
+              "TP_MEDICAL_ICON": base64.b64encode(
+                  Path("tp-medical.png").read_bytes()
+              ).decode("ascii"),
+          }
+
+          config_path = Path("app.config.js")
+          config = config_path.read_text()
+
+          embedded = re.search(
+              r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");',
+              config,
+          )
+
+          if not embedded:
+              raise SystemExit(
+                  "OVERLAY_SERVICE_KT not found in app.config.js"
+              )
+
+          service = json.loads(
+              embedded.group(1)
+          )
+
+          for name, encoded in replacements.items():
+
+              pattern = re.compile(
+                  rf'(private val {re.escape(name)} = ")([A-Za-z0-9+/=]+)(")'
+              )
+
+              if not pattern.search(service):
+                  raise SystemExit(
+                      f"{name} not found in native HUD service"
+                  )
+
+              service = pattern.sub(
+                  lambda m:
+                      m.group(1)
+                      + encoded
+                      + m.group(3),
+                  service,
+                  count=1,
+              )
+
+              print(
+                  f"✓ {name} restored"
+              )
+
+          config = (
+              config[:embedded.start(1)]
+              + json.dumps(service)
+              + config[embedded.end(1):]
+          )
+
+          config_path.write_text(
+              config
+          )
+
+          print(
+              "✅ Correct Drug / Booster / Medical icons restored"
+          )
+          PY
+
+          test -s tp-drug.png
+          test -s tp-booster.png
+          test -s tp-medical.png
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
