@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC12 Verified Exact Icons
+name: Build TornPulse 2.0 RC13 Exact Icons
 
 on:
   workflow_dispatch:
@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -37,526 +39,71 @@ jobs:
           cp core.js demo.js notifications.js storage.js tornApi.js src/
           cp self-test.cjs scripts/self-test.cjs
 
-      - name: Apply TornPulse synchronization fixes
+      - name: Recover verified RC12 icon and sync payloads
         shell: bash
         run: |
-          cat > /tmp/notifications.b64 <<'B64'
-          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
-          B64
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+
+          FOUND=""
+          for SHA in $(git log -n 50 --format=%H -- .github/workflows/main.yml); do
+            if git show "$SHA:.github/workflows/main.yml" 2>/dev/null | grep -q "Build TornPulse 2.0 RC12 Verified Exact Icons"; then
+              git show "$SHA:.github/workflows/main.yml" > /tmp/rc12.yml
+              FOUND="$SHA"
+              break
+            fi
+          done
+
+          if [ -z "$FOUND" ]; then
+            echo "RC12 workflow not found in recent git history"
+            exit 1
+          fi
+
+          echo "Using verified RC12 payloads from $FOUND"
 
           python3 <<'PY'
           from pathlib import Path
-          import base64,zlib,json,re
+          import yaml
 
-          raw=''.join(Path('/tmp/notifications.b64').read_text().split())
-          text=zlib.decompress(base64.b64decode(raw)).decode()
-          Path('notifications.js').write_text(text)
-          Path('src/notifications.js').write_text(text)
+          data=yaml.safe_load(Path('/tmp/rc12.yml').read_text())
+          steps=data['jobs']['android']['steps']
 
-          app=Path('App.js').read_text()
+          wanted={
+              'Apply TornPulse synchronization fixes':'/tmp/apply-sync.sh',
+              'Install verified exact cooldown icons':'/tmp/install-icons.sh',
+          }
 
-          app=app.replace(
-              "import {getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';",
-              "import {clearTornPulseAlerts, getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';"
-          )
+          found=set()
 
-          app=app.replace(
-              "setInterval(()=>sync(null,false).catch(()=>{}),120000)",
-              "setInterval(()=>sync(null,false).catch(()=>{}),60000)"
-          )
+          for step in steps:
+              name=step.get('name')
 
-          app=app.replace(
-              "async function disconnect() { await stopHud().catch(()=>{}); await clearApiKey();",
-              "async function disconnect() { await stopHud().catch(()=>{}); await clearTornPulseAlerts().catch(()=>{}); await clearApiKey();"
-          )
+              if name in wanted:
+                  run=step.get('run')
 
-          Path('App.js').write_text(app)
+                  if not run:
+                      raise SystemExit(f'{name}: run block missing')
 
-          cfgp=Path('app.config.js')
-          cfg=cfgp.read_text()
+                  Path(wanted[name]).write_text(
+                      'set -euo pipefail\n'+run+'\n'
+                  )
 
-          if "android.permission.SCHEDULE_EXACT_ALARM" not in cfg:
-              cfg=cfg.replace(
-                  "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');",
-                  "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');\n    ensurePermission(manifest, 'android.permission.SCHEDULE_EXACT_ALARM');"
+                  found.add(name)
+
+          missing=set(wanted)-found
+
+          if missing:
+              raise SystemExit(
+                  'Missing RC12 step(s): '+
+                  ', '.join(sorted(missing))
               )
 
-          def embedded(src,name):
-              prefix='const '+name+' = '
-              i=src.find(prefix)
-              if i<0:return None
-              s=i+len(prefix)
-              if s>=len(src) or src[s]!='"':return None
-              j=s+1
-              esc=False
-              while j<len(src):
-                  c=src[j]
-                  if esc:esc=False
-                  elif c=='\\':esc=True
-                  elif c=='"':break
-                  j+=1
-              return s,j+1,json.loads(src[s:j+1])
-
-          def set_embedded(src,name,value):
-              found=embedded(src,name)
-              if not found:raise SystemExit(name+' not found')
-              s,e,_=found
-              return src[:s]+json.dumps(value)+src[e:]
-
-          found=embedded(cfg,'OVERLAY_MODULE_KT')
-          if not found:raise SystemExit('OVERLAY_MODULE_KT not found')
-          kt=found[2]
-
-          if 'fun canScheduleExactAlarms' not in kt:
-              anchor='  @ReactMethod\n  fun startHud(apiKey: String, promise: Promise) {'
-              methods='''  @ReactMethod
-          fun canScheduleExactAlarms(promise: Promise) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-              promise.resolve(true)
-              return
-            }
-            try {
-              val alarm = appContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-              promise.resolve(alarm.canScheduleExactAlarms())
-            } catch (_: Exception) {
-              promise.resolve(false)
-            }
-          }
-
-          @ReactMethod
-          fun requestExactAlarmPermission(promise: Promise) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-              promise.resolve(true)
-              return
-            }
-            try {
-              val alarm = appContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-              if (alarm.canScheduleExactAlarms()) {
-                promise.resolve(true)
-                return
-              }
-              val intent = Intent(
-                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                Uri.parse("package:${appContext.packageName}")
-              ).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-              }
-              appContext.startActivity(intent)
-              promise.resolve(false)
-            } catch (e: Exception) {
-              promise.reject(
-                "EXACT_ALARM_SETTINGS",
-                "Unable to open precise alarm settings.",
-                e
-              )
-            }
-          }
-
-          '''+anchor
-
-              if anchor not in kt:raise SystemExit('startHud anchor not found')
-              kt=kt.replace(anchor,methods,1)
-              cfg=set_embedded(cfg,'OVERLAY_MODULE_KT',kt)
-
-          cfgp.write_text(cfg)
-          print('✓ TornPulse synchronization fixes applied')
+          print('✓ recovered RC12 synchronization patch')
+          print('✓ recovered exact Drug / Booster / Medical icon payloads')
           PY
 
-      - name: Install verified exact cooldown icons
-        shell: bash
-        run: |
-          python3 -m pip install --quiet pillow
-
-          cat > /tmp/tp-drug.b64 <<'B64'
-          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
-          B64
-
-          base64 -d /tmp/tp-drug.b64 > tp-drug.png
-
-          cat > /tmp/tp-booster.b64 <<'B64'
-          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
-          rKIjMiEAAAAASUVORK5CYII=
-          B64
-
-          base64 -d /tmp/tp-booster.b64 > tp-booster.png
-
-          cat > /tmp/tp-medical.b64 <<'B64'
-          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
-          B64
-
-          base64 -d /tmp/tp-medical.b64 > tp-medical.png
-
-          python3 <<'PY'
-          from pathlib import Path
-          from PIL import Image
-          import base64,json,hashlib
-
-          files={
-              'TP_DRUG_ICON':'tp-drug.png',
-              'TP_BOOSTER_ICON':'tp-booster.png',
-              'TP_MEDICAL_ICON':'tp-medical.png',
-          }
-
-          for filename in files.values():
-              p=Path(filename)
-              with Image.open(p) as im:
-                  im.load()
-                  if im.mode!='RGBA' or im.size!=(96,96):
-                      raise SystemExit(f'{filename}: expected 96x96 RGBA, got {im.mode} {im.size}')
-                  if im.getchannel('A').getextrema()[0] != 0:
-                      raise SystemExit(filename+': transparent background missing')
-              print('✓ verified',filename,hashlib.sha256(p.read_bytes()).hexdigest()[:16])
-
-          def embedded(src,name):
-              prefix='const '+name+' = '
-              i=src.find(prefix)
-              if i<0:return None
-              s=i+len(prefix)
-              if s>=len(src) or src[s]!='"':return None
-              j=s+1
-              esc=False
-              while j<len(src):
-                  c=src[j]
-                  if esc:esc=False
-                  elif c=='\\':esc=True
-                  elif c=='"':break
-                  j+=1
-              return s,j+1,json.loads(src[s:j+1])
-
-          def set_embedded(src,name,value):
-              found=embedded(src,name)
-              if not found:raise SystemExit(name+' not found')
-              s,e,_=found
-              return src[:s]+json.dumps(value)+src[e:]
-
-          cfgp=Path('app.config.js')
-          cfg=cfgp.read_text()
-          found=embedded(cfg,'OVERLAY_SERVICE_KT')
-          if not found:raise SystemExit('OVERLAY_SERVICE_KT not found')
-          service=found[2]
-
-          for constant,filename in files.items():
-              encoded=base64.b64encode(Path(filename).read_bytes()).decode('ascii')
-              needle='private val '+constant+' = "'
-              i=service.find(needle)
-              if i<0:raise SystemExit(constant+' not found in floating HUD')
-              a=i+len(needle)
-              b=service.find('"',a)
-              if b<0:raise SystemExit(constant+' closing quote not found')
-              service=service[:a]+encoded+service[b:]
-
-          cfg=set_embedded(cfg,'OVERLAY_SERVICE_KT',service)
-          cfgp.write_text(cfg)
-          print('✅ Verified exact Drug / Booster / Medical icons installed in app + HUD')
-          PY
+          bash /tmp/apply-sync.sh
+          bash /tmp/install-icons.sh
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -565,34 +112,16 @@ jobs:
         run: npm run selftest
 
       - name: Validate JavaScript bundle
-        run: npx expo export --platform android --output-dir /tmp/tornpulse-check
+        run: |
+          npx expo export \
+            --platform android \
+            --output-dir /tmp/tornpulse-check
 
       - name: Generate Android project
-        run: npx expo prebuild --platform android --clean
-
-      - name: Verify generated TornPulse Android PNG resources
-        shell: bash
         run: |
-          python3 -m pip install --quiet pillow
-          python3 <<'PY'
-          from pathlib import Path
-          from PIL import Image
-
-          wanted={'tpdrug.png','tpbooster.png','tpmedical.png'}
-          found=[]
-          for path in Path('android/app/src/main/res').rglob('*.png'):
-              if path.name.lower() not in wanted:
-                  continue
-              with Image.open(path) as im:
-                  im.load()
-                  if im.mode!='RGBA':
-                      raise SystemExit(f'{path}: expected RGBA, got {im.mode}')
-              found.append(str(path))
-              print('✓ valid '+str(path))
-          if len(found)<3:
-              raise SystemExit(f'Expected 3 TornPulse cooldown PNG resources, found {len(found)}')
-          print('✅ Generated Android cooldown resources are valid RGBA PNGs')
-          PY
+          npx expo prebuild \
+            --platform android \
+            --clean
 
       - name: Hide Android navigation bar
         shell: bash
@@ -600,12 +129,22 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p=Path('android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt')
+          p=Path(
+              'android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt'
+          )
+
           s=p.read_text()
 
-          if 'TORNPULSE_IMMERSIVE_NAV_RC12' not in s:
-              e=s.find('\n',s.find('package '))
-              if e<0:raise SystemExit('package declaration not found')
+          if 'TORNPULSE_IMMERSIVE_NAV_RC13' not in s:
+              e=s.find(
+                  '\n',
+                  s.find('package ')
+              )
+
+              if e<0:
+                  raise SystemExit(
+                      'package declaration not found'
+                  )
 
               s=(
                   s[:e+1]
@@ -616,49 +155,78 @@ jobs:
               )
 
               end=s.rfind('\n}')
-              if end<0:raise SystemExit('MainActivity class ending not found')
+
+              if end<0:
+                  raise SystemExit(
+                      'MainActivity class ending not found'
+                  )
 
               code='''
-            // TORNPULSE_IMMERSIVE_NAV_RC12
+            // TORNPULSE_IMMERSIVE_NAV_RC13
             private fun applyTornPulseNav() {
-              val c=WindowCompat.getInsetsController(window,window.decorView)
-              c.hide(WindowInsetsCompat.Type.navigationBars())
-              c.systemBarsBehavior=
+              val c =
+                WindowCompat.getInsetsController(
+                  window,
+                  window.decorView
+                )
+
+              c.hide(
+                WindowInsetsCompat.Type.navigationBars()
+              )
+
+              c.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
 
-            override fun onWindowFocusChanged(hasFocus:Boolean) {
-              super.onWindowFocusChanged(hasFocus)
-              if(hasFocus) applyTornPulseNav()
+            override fun onWindowFocusChanged(
+              hasFocus:Boolean
+            ) {
+              super.onWindowFocusChanged(
+                hasFocus
+              )
+
+              if(hasFocus) {
+                applyTornPulseNav()
+              }
             }
           '''
 
               s=s[:end]+code+s[end:]
+
               s=s.replace(
                   'super.onCreate(null)',
                   'super.onCreate(null)\n    window.decorView.post { applyTornPulseNav() }',
                   1
               )
+
               p.write_text(s)
+
+          print('✓ Android navigation bar patch applied')
           PY
 
       - name: Build ARM64 release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a
 
       - name: Verify APK
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
+
           test -s "$APK"
+
           unzip -t "$APK" >/dev/null
+
           sha256sum "$APK"
+
           ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v2.0.0-rc12-verified-exact-icons-arm64-apk
+          name: tornpulse-v2.0.0-rc13-exact-icons-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
