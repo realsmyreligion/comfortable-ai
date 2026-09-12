@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC4
+name: Build TornPulse 2.0 RC5
 
 on:
   workflow_dispatch:
@@ -730,7 +730,7 @@ jobs:
           grep -q 'Find an item in seconds' App.js
           grep -q 'key={activePage}' App.js
 
-      - name: Remove black boxes from vital icons
+      - name: Remove black boxes from all TornPulse icons
         shell: bash
         run: |
           python3 -m pip install --quiet pillow
@@ -743,56 +743,62 @@ jobs:
           import re
           from PIL import Image
 
-          # The Nerve icon is already clean/transparent. These are the three
-          # visible problem icons from the current dashboard/HUD screenshots.
+          # These are the six dashboard/HUD icons that must render with
+          # transparent backgrounds. Nerve is intentionally left untouched.
           ASSET_FILES = [
               Path("tp-health.png"),
               Path("tp-energy.png"),
               Path("tp-happiness.png"),
+              Path("tp-drug.png"),
+              Path("tp-booster.png"),
+              Path("tp-medical.png"),
           ]
 
           NATIVE_CONSTANTS = [
               "TP_HEALTH_ICON",
               "TP_ENERGY_ICON",
               "TP_HAPPINESS_ICON",
+              "TP_DRUG_ICON",
+              "TP_BOOSTER_ICON",
+              "TP_MEDICAL_ICON",
           ]
 
-          def corners_are_transparent(im):
-              pts = [
-                  (0, 0),
-                  (im.width - 1, 0),
-                  (0, im.height - 1),
-                  (im.width - 1, im.height - 1),
-              ]
-              return all(im.getpixel(p)[3] <= 10 for p in pts)
+          # TornPulse artwork has historically used this dark matte behind
+          # exported icons. Key it out completely rather than leaving a
+          # semi-transparent dark square.
+          MATTE = (18, 25, 35)
 
-          def clean_black_background(raw):
+          def clean_background(raw):
               im = Image.open(io.BytesIO(raw)).convert("RGBA")
-
-              # If this asset has already been repaired, leave it untouched.
-              if corners_are_transparent(im):
-                  return raw, False
-
               px = im.load()
               changed = False
-
-              # Remove the solid/near-black matte while preserving the colored
-              # icon. The fade band also removes the dark JPEG halo around edges.
-              low = 28
-              high = 88
 
               for y in range(im.height):
                   for x in range(im.width):
                       r, g, b, a = px[x, y]
-                      strongest = max(r, g, b)
 
-                      if strongest <= low:
+                      if a == 0:
+                          continue
+
+                      matte_distance = max(
+                          abs(r - MATTE[0]),
+                          abs(g - MATTE[1]),
+                          abs(b - MATTE[2]),
+                      )
+
+                      # Remove the exact/near TornPulse matte and true black.
+                      if matte_distance <= 34 or max(r, g, b) <= 28:
                           na = 0
-                      elif strongest < high:
-                          na = round(a * (strongest - low) / (high - low))
+                      # Feather the edge of the removed matte so JPEG-style
+                      # halos do not survive as a visible rectangle.
+                      elif matte_distance <= 58:
+                          na = round(a * (matte_distance - 34) / 24)
+                      elif max(r, g, b) < 70:
+                          na = round(a * (max(r, g, b) - 28) / 42)
                       else:
                           na = a
 
+                      na = max(0, min(255, na))
                       if na != a:
                           px[x, y] = (r, g, b, na)
                           changed = True
@@ -801,108 +807,39 @@ jobs:
               im.save(out, "PNG", optimize=True)
               return out.getvalue(), changed
 
-          # Fix the React Native dashboard assets.
-          fixed_assets = 0
+          def verify_transparency(raw, label):
+              im = Image.open(io.BytesIO(raw)).convert("RGBA")
+              corners = [
+                  im.getpixel((0, 0))[3],
+                  im.getpixel((im.width - 1, 0))[3],
+                  im.getpixel((0, im.height - 1))[3],
+                  im.getpixel((im.width - 1, im.height - 1))[3],
+              ]
+              transparent = sum(1 for *_, a in im.getdata() if a <= 10)
+              ratio = transparent / float(im.width * im.height)
+
+              if max(corners) > 10:
+                  raise SystemExit(f"{label}: black-box regression detected (opaque corner)")
+              if ratio < 0.12:
+                  raise SystemExit(f"{label}: transparency check failed ({ratio:.1%})")
+
+              print(f"✓ {label}: transparent background verified ({ratio:.1%})")
+
+          # Clean dashboard image files first.
           for path in ASSET_FILES:
-              if not path.exists():
-                  print(f"• {path}: not found, skipping")
-                  continue
-
-              cleaned, changed = clean_black_background(path.read_bytes())
-              if changed:
-                  path.write_bytes(cleaned)
-                  fixed_assets += 1
-                  print(f"✓ {path}: black background removed")
-              else:
-                  print(f"✓ {path}: already transparent")
-
-          # Fix the same icons embedded in the native Android floating HUD.
-          config_path = Path("app.config.js")
-          fixed_native = 0
-
-          if config_path.exists():
-              config = config_path.read_text()
-
-              embedded = re.search(
-                  r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");',
-                  config,
-              )
-
-              if embedded:
-                  service = json.loads(embedded.group(1))
-
-                  for const_name in NATIVE_CONSTANTS:
-                      icon_re = re.compile(
-                          rf'(private val {re.escape(const_name)} = ")([A-Za-z0-9+/=]+)(")'
-                      )
-                      match = icon_re.search(service)
-
-                      if not match:
-                          print(f"• {const_name}: native constant not found")
-                          continue
-
-                      try:
-                          raw = base64.b64decode(match.group(2))
-                          cleaned, changed = clean_black_background(raw)
-                      except Exception as exc:
-                          print(f"• {const_name}: could not process ({exc})")
-                          continue
-
-                      if not changed:
-                          print(f"✓ {const_name}: already transparent")
-                          continue
-
-                      encoded = base64.b64encode(cleaned).decode("ascii")
-                      service = (
-                          service[:match.start(2)]
-                          + encoded
-                          + service[match.end(2):]
-                      )
-                      fixed_native += 1
-                      print(f"✓ {const_name}: native HUD background removed")
-
-                  config = (
-                      config[:embedded.start(1)]
-                      + json.dumps(service)
-                      + config[embedded.end(1):]
-                  )
-                  config_path.write_text(config)
-              else:
-                  print("• OVERLAY_SERVICE_KT not found; native icon cleanup skipped")
-          else:
-              print("• app.config.js not found; native icon cleanup skipped")
-
-          print(
-              f"✅ Vital icon cleanup complete "
-              f"({fixed_assets} dashboard asset(s), {fixed_native} native HUD icon(s) repaired)"
-          )
-          PY
-
-          # Nerve intentionally remains untouched because its PNG is already
-          # transparent in the current build.
-          test -s tp-health.png
-          test -s tp-energy.png
-          test -s tp-happiness.png
-
-      - name: Sync current cooldown icons into native HUD
-        shell: bash
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-          import base64
-          import json
-          import re
-
-          files = {
-              "TP_DRUG_ICON": Path("tp-drug.png"),
-              "TP_BOOSTER_ICON": Path("tp-booster.png"),
-              "TP_MEDICAL_ICON": Path("tp-medical.png"),
-          }
-
-          for name, path in files.items():
               if not path.is_file() or path.stat().st_size == 0:
                   raise SystemExit(f"Missing required icon: {path}")
 
+              cleaned, changed = clean_background(path.read_bytes())
+              path.write_bytes(cleaned)
+              verify_transparency(cleaned, str(path))
+
+              if changed:
+                  print(f"✓ {path}: dark matte removed")
+              else:
+                  print(f"✓ {path}: already clean")
+
+          # Clean the same six images embedded in the native Android HUD.
           config_path = Path("app.config.js")
           config = config_path.read_text()
 
@@ -916,22 +853,30 @@ jobs:
 
           service = json.loads(embedded.group(1))
 
-          for name, path in files.items():
-              encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-              pattern = re.compile(
-                  rf'(private val {re.escape(name)} = ")([A-Za-z0-9+/=]+)(")'
+          for const_name in NATIVE_CONSTANTS:
+              icon_re = re.compile(
+                  rf'(private val {re.escape(const_name)} = ")([A-Za-z0-9+/=]+)(")'
+              )
+              match = icon_re.search(service)
+
+              if not match:
+                  raise SystemExit(f"{const_name}: native HUD constant not found")
+
+              raw = base64.b64decode(match.group(2))
+              cleaned, changed = clean_background(raw)
+              verify_transparency(cleaned, const_name)
+              encoded = base64.b64encode(cleaned).decode("ascii")
+
+              service = (
+                  service[:match.start(2)]
+                  + encoded
+                  + service[match.end(2):]
               )
 
-              if not pattern.search(service):
-                  raise SystemExit(f"{name} not found in native HUD service")
-
-              service = pattern.sub(
-                  lambda m: m.group(1) + encoded + m.group(3),
-                  service,
-                  count=1,
-              )
-
-              print(f"✓ {name} synced from {path}")
+              if changed:
+                  print(f"✓ {const_name}: native HUD matte removed")
+              else:
+                  print(f"✓ {const_name}: native HUD already clean")
 
           config = (
               config[:embedded.start(1)]
@@ -940,8 +885,15 @@ jobs:
           )
           config_path.write_text(config)
 
-          print("✅ Current Drug / Booster / Medical icons synced into native HUD")
+          print("✅ All TornPulse dashboard + HUD icon backgrounds verified clean")
           PY
+
+          test -s tp-health.png
+          test -s tp-energy.png
+          test -s tp-happiness.png
+          test -s tp-drug.png
+          test -s tp-booster.png
+          test -s tp-medical.png
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -1108,9 +1060,9 @@ jobs:
           sha256sum "$APK"
           ls -lh "$APK"
 
-      - name: Upload TornPulse RC4 ARM64 APK
+      - name: Upload TornPulse RC5 ARM64 APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v2.0.0-rc4-alert-sync-arm64-apk
+          name: tornpulse-v2.0.0-rc5-alert-sync-clean-icons-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
