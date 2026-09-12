@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC8
+name: Build TornPulse 2.0 RC9 Exact Icons
 
 on:
   workflow_dispatch:
@@ -40,285 +40,124 @@ jobs:
       - name: Apply alert sync and UI fixes
         shell: bash
         run: |
-          cat > notifications.js <<'EOF'
-          import {Platform} from 'react-native';
-          import * as Notifications from 'expo-notifications';
-
-          const CHANNEL='torn-alerts';
-          const SOURCE='tornpulse';
-          const OUR=new Set(['tornpulse','comfortable-ai']);
-          const LEAD=6000;
-
-          Notifications.setNotificationHandler({
-            handleNotification:async()=>({
-              shouldPlaySound:true,
-              shouldSetBadge:false,
-              shouldShowBanner:true,
-              shouldShowList:true
-            })
-          });
-
-          export async function prepareNotifications(){
-            if(Platform.OS==='android'){
-              await Notifications.setNotificationChannelAsync(CHANNEL,{
-                name:'Torn Alerts',
-                importance:Notifications.AndroidImportance.MAX,
-                sound:'default',
-                vibrationPattern:[0,300,150,300]
-              });
-            }
-            let p=await Notifications.getPermissionsAsync();
-            if(!p.granted) p=await Notifications.requestPermissionsAsync();
-            return !!p.granted;
-          }
-
-          export async function getNotificationPermission(){
-            return !!(await Notifications.getPermissionsAsync()).granted;
-          }
-
-          export async function clearTornPulseAlerts(){
-            const all=await Notifications.getAllScheduledNotificationsAsync();
-            await Promise.all(
-              all
-                .filter(x=>OUR.has(x.content.data?.source))
-                .map(x=>Notifications.cancelScheduledNotificationAsync(x.identifier))
-            );
-          }
-
-          const unix=s=>Number(s||0)>0?new Date(Number(s)*1000):null;
-
-          const future=d=>
-            d instanceof Date &&
-            Number.isFinite(d.getTime()) &&
-            d.getTime()>Date.now()+LEAD;
-
-          const fromSecs=(snap,s)=>
-            new Date(Number(snap?.fetchedAt||Date.now())+Math.max(0,Number(s||0))*1000);
-
-          function warn(target,min){
-            if(!target) return null;
-            const d=new Date(target.getTime()-Math.max(0,Number(min||0))*60000);
-            if(future(d)) return d;
-            if(target.getTime()>Date.now()+15000) return new Date(Date.now()+7000);
-            return null;
-          }
-
-          async function add(title,body,date,kind,snap,key=''){
-            if(!future(date)) return;
-            await Notifications.scheduleNotificationAsync({
-              content:{
-                title,
-                body,
-                sound:'default',
-                data:{
-                  source:SOURCE,
-                  kind,
-                  profileId:String(snap?.profile?.id||''),
-                  eventKey:String(key)
-                }
-              },
-              trigger:{
-                type:Notifications.SchedulableTriggerInputTypes.DATE,
-                date,
-                channelId:CHANNEL
-              }
-            });
-          }
-
-          function arrival(snap){
-            const t=snap?.travel;
-            if(!t) return 0;
-            const a=Number(t.arrival||t.arrival_at||0);
-            if(a>0) return a;
-            const left=Number(t.time_left||0);
-            return left>0 ? Math.floor(Number(snap?.fetchedAt||Date.now())/1000)+left : 0;
-          }
-
-          export async function scheduleSnapshotAlerts(snap,settings={}){
-            await clearTornPulseAlerts();
-            if(!snap||snap.demo) return;
-
-            for(const [name,label] of [['energy','Energy'],['nerve','Nerve']]){
-              const b=snap[name];
-              const max=Number(b?.maximum||0);
-              const cur=Number(b?.current||0);
-              const full=unix(b?.full_time);
-              if(full && cur<max){
-                const m=settings[name+'WarningMinutes']??15;
-                const w=warn(full,m);
-                if(w){
-                  await add(
-                    label+' warning',
-                    label+' reaches cap in '+m+' minutes.',
-                    w,
-                    name+'-warning',
-                    snap,
-                    b.full_time
-                  );
-                }
-                await add(
-                  label+' full',
-                  'Your '+label+' is full.',
-                  full,
-                  name+'-full',
-                  snap,
-                  b.full_time
-                );
-              }
-            }
-
-            if(settings.cooldownAlerts!==false){
-              for(const [k,t,b] of [
-                ['drug','Drug ready','Your drug cooldown is clear.'],
-                ['booster','Booster ready','Your booster cooldown is clear.'],
-                ['medical','Medical ready','Your medical cooldown is clear.']
-              ]){
-                const s=Number(snap.cooldowns?.[k]||0);
-                if(s>5){
-                  await add(t,b,fromSecs(snap,s),k,snap,String(snap.fetchedAt)+':'+s);
-                }
-              }
-            }
-
-            if(settings.statusAlerts!==false){
-              const st=String(snap.status?.state||'').toLowerCase();
-              const u=Number(snap.status?.until||0);
-              if(u>0 && (st.includes('hospital')||st.includes('jail'))){
-                const l=st.includes('hospital')?'Hospital':'Jail';
-                await add(
-                  l+' release',
-                  'Your '+l.toLowerCase()+' timer has ended.',
-                  unix(u),
-                  'status-release',
-                  snap,
-                  l+':'+u
-                );
-              }
-            }
-
-            const a=arrival(snap);
-            const now=Math.floor(Date.now()/1000);
-            const t=snap.travel;
-            if(t && a>now && (t.active===true || Number(t.time_left||0)>0)){
-              const dest=String(t.destination||'your destination');
-              const w=warn(unix(a),5);
-              if(w){
-                await add(
-                  'Landing soon',
-                  'You are expected to land in '+dest+' in about 5 minutes.',
-                  w,
-                  'travel-5m',
-                  snap,
-                  String(t.departed||t.departed_at||0)+':'+a+':'+dest
-                );
-              }
-            }
-          }
-          EOF
-
-          cp notifications.js src/notifications.js
-
           python3 <<'PY'
           from pathlib import Path
-          import json
-          import re
+          import base64,zlib,json,re
 
-          app = Path('App.js').read_text()
+          NOTIFICATIONS=(
+              'eNqNV21z4jYQ/s6vUL4g+zAuN520M1wNwyXp3LVJminptB2GuRG2ADWyTSU5hAn8967ejE2S631IsLXa1e6zu89a'
+              'LN+UQqHnO07UshT5AS1FmSMsKElVvyCKPVL8ocPstneISHRbKrZkKYjKQrrt9GlT9oumAJQ6KfwqdPFpcnt7dZ1g'
+              'VYqiTzgVSkutcPrbH79fXFnZpuKS1hIQJAXdoilVwawhj3Ba5uCqIgtO+4TheehVrq8ml8kPg8EAzm55GUuqmguf'
+              'SJGBH8FzB6G1eW5Kh0TuijQIk5HZgJBclxXPAKLdtKyKbKhERaOGBFz8SLIVHS4JeNiSrMvtR1IUVLxUAtE1k8oI'
+              'YP0Qdg4QSUdDCVAbH9CyKlLtEtoIuiGi5aYMQu0eWwY+efFv0yRJMAQkSpbh0HpPtoQp9FU8LtbaRz4xcbt8RVYb'
+              'oYLkdIjvIQFoYpMXOYmtClKkdNg2P7EefK7l8c3kL68lDYY4o0tScVUbe2QLYdTviFJUFMPZIPp+MIjen5vfudmm'
+              'EYL/8MepQpvktdhWVN1RkTMp9auNyagBUmebeCVIoWgWvqEt6L8VlW9YEFRVAMPZ0cyHzuGtlK3aGB8t2rzVtoJv'
+              'DiL8hlNTTonQybrT3WITZg+0PUI4fwu1CefTdE2zitOsJWwgYFXvoOmZpDEYC2yNcR4vGYe8BU/JCFo3XhMZPMVw'
+              'pqKFijOiyDiGzIuUhqHLeJyTjd7ediTV9fK6I9aPp5hlYBNWqTC2QgOHDa8q2FMiwWaVL8AZud8PwtFgrInkkiga'
+              '+PXw3XvgiXBYVJx7+lhWkBGaZMkoQwwWtCPl0uh1u1YxZvJnVjAwlGnE7llOIS3dbuNtpPfHRbkNwp4mpNo6YDal'
+              'qUwCWZBNJIFeXngFgnG8pEoHP1H7/dFU2Lshag2IPQWDqBmcCwSIoy6BLRFFoIgAl6KcFZ4lzuxS6ArPRu7LIktq'
+              'Z+y2Y0D9lyeDVXu2JtuBby6LX5CF/ojMCU4tNiGC9gYL3ifvQ2PDj/6Elt+Q8JPCJ1kWKKY4jRZltoug4mj0wIos'
+              'MnA/0F2CcQ2FdxU2eW+P1X1Cla4SXxaiJUhX4kNPlw0f3mA63QzDZ9sMQzsAracbUUIT0c/ZcKoEK1auINzyGOp+'
+              'v4cgIvoIB/5Kd34bBBceLD/aM2B5tYKZ86x2m1Nudp2lp+e93fYZJqu6h50yvpzcX1noUjsSwBc3Dw4dS7+HRqUR'
+              'Idgj4cbPBseoxDquBHmk3FNvXXmDY9mRxFWUip2t/b5+/EKUrjKnT0Z1mZCjAU6X6mhDQXl90UtezynoJWABU8hL'
+              'XpbiWzruO9NYPa07HHyFcX2BTMEWjHblONd2OVUKMiST54PBxxbY6xztcdKK+73+H2c0L+vyBDEM+cDGPdNTOYIs'
+              'Uj5HQFKzGabwlbHawffRlX2YRzMMT4/6k+nW/M7nYV2zYGNh0mQszSMEDe6BXIx1u7O8yjWOEUor0RDBm4D6s6Il'
+              'dGOiSVdL9MsXnQMTi+MEzrtdUPkJLIa+R+z5eeLhMT708J9AXPB6w4pKUYnn4/H78w8tlW1iyE1bjfLQy+CcbWih'
+              '1SxgUOlhw4NgDkd+QX/UrqlEKdkAwSPcy2Ext6fFONpG1o1+rWhyuHgRl89j8zC9B4D+G7oaDPtVJo0AjBuXnX27'
+              '9w3jps86thY8PjBHS56V28LWylmSmC9Nh2ejKh4iFS1sQThPZzgTFYSCL+FHI5DtvJtagLxl7aqpyxgKp9ZdlKWE'
+              'oQ4aH+1T24IT/4+RnGbAPhqdG/vUNuLErxoxNuYndSOTRvfW0MhxPHuY+8Z3ZSFH543CAGwiP4b9FI4ebCIajHvk'
+              'g7CHh7gnv5YZ+ExQlXw1L85blTRt2/1j80sNnceqvC63VFwQSQN3lPuYaQXqNSv49uHHOMGZajTodgOpYlakvMqo'
+              'DPC6lBumAPQQqKQp+IcwWAxPIOXJG9pj/Mk/D/EvWveVFjCtBRkztzPfAe2wYIuucQHXLYlokdEMesLwRhVG2IbW'
+              'r42YjHADfnUKvh8crdkTIeDspMHvRx63NB65odSeSarbJSPYBejB1En1ZRcuUPpCtt+/PlRgCLWyC3DV+YXPXHhj'
+              'hRm0kNqdabLjEm4l11GZwYCE0fkxnU0uw9dwmwPjcGsCAwZdmLoUwSiiKdwEkCoRhy2Wz/RhmnVgRC7KSqHzFrth'
+              'G3v/PMetmtd+w+USrOnh65/d9DVJIOa/tu7uX4fOf+MCacc='
+          )
+          text=zlib.decompress(base64.b64decode(NOTIFICATIONS)).decode()
+          Path('notifications.js').write_text(text)
+          Path('src/notifications.js').write_text(text)
 
-          app = app.replace(
+          app=Path('App.js').read_text()
+          app=app.replace(
               "import {getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';",
               "import {clearTornPulseAlerts, getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';"
           )
-
-          app = app.replace(
+          app=app.replace(
               "setInterval(()=>sync(null,false).catch(()=>{}),120000)",
               "setInterval(()=>sync(null,false).catch(()=>{}),60000)"
           )
-
-          app = app.replace(
+          app=app.replace(
               "async function disconnect() { await stopHud().catch(()=>{}); await clearApiKey();",
               "async function disconnect() { await stopHud().catch(()=>{}); await clearTornPulseAlerts().catch(()=>{}); await clearApiKey();"
           )
 
-          # Move the Start HUD button above Vitals if found
           if '      <Text style={styles.v2SectionTitle}>Vitals</Text>' in app:
-              m = re.search(
+              m=re.search(
                   r'\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?</Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)',
                   app
               )
               if m:
-                  button = m.group(0).strip('\n') + '\n'
-                  app = app[:m.start()] + '\n' + app[m.end():]
-                  app = app.replace(
+                  button=m.group(0).strip('\n')+'\n'
+                  app=app[:m.start()]+'\n'+app[m.end():]
+                  app=app.replace(
                       '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
-                      button + '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
+                      button+'      <Text style={styles.v2SectionTitle}>Vitals</Text>',
                       1
                   )
 
-          replacements = {
+          for old,new in {
               "v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:48}":
               "v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?12:4,paddingBottom:42}",
-
               "v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:16,padding:14,marginBottom:12}":
               "v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:15,padding:12,marginBottom:10}",
-
               "v2Vital:{width:'50%',padding:10}":
               "v2Vital:{width:'50%',padding:8}",
-
               "v2CooldownIcon:{width:36,height:36}":
               "v2CooldownIcon:{width:32,height:32}",
-
               "v2HudButtonIcon:{width:44,height:44,borderRadius:22,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'}":
               "v2HudButtonIcon:{width:38,height:38,borderRadius:19,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'}"
-          }
-
-          for a,b in replacements.items():
-              app = app.replace(a,b)
+          }.items():
+              app=app.replace(old,new)
 
           Path('App.js').write_text(app)
 
-          cfg = Path('app.config.js').read_text()
+          cfgp=Path('app.config.js')
+          cfg=cfgp.read_text()
 
-          cfg = cfg.replace(
-              "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');",
-              "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');\n    ensurePermission(manifest, 'android.permission.SCHEDULE_EXACT_ALARM');"
-          )
+          if "android.permission.SCHEDULE_EXACT_ALARM" not in cfg:
+              cfg=cfg.replace(
+                  "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');",
+                  "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');\n    ensurePermission(manifest, 'android.permission.SCHEDULE_EXACT_ALARM');"
+              )
 
           def embedded(src,name):
-              prefix = 'const ' + name + ' = '
-              i = src.find(prefix)
-              if i < 0:
-                  return None
-              s = i + len(prefix)
-              j = s + 1
-              esc = False
-              while j < len(src):
-                  c = src[j]
-                  if esc:
-                      esc = False
-                  elif c == '\\':
-                      esc = True
-                  elif c == '"':
-                      break
-                  j += 1
-              return (s, j+1, json.loads(src[s:j+1]))
+              prefix='const '+name+' = '
+              i=src.find(prefix)
+              if i<0:return None
+              s=i+len(prefix)
+              if src[s] != '"':return None
+              j=s+1
+              esc=False
+              while j<len(src):
+                  c=src[j]
+                  if esc:esc=False
+                  elif c=='\\':esc=True
+                  elif c=='"':break
+                  j+=1
+              return s,j+1,json.loads(src[s:j+1])
 
-          def set_embedded(src,name,val):
-              x = embedded(src,name)
-              if not x:
-                  raise SystemExit(name + ' not found')
-              s,e,_ = x
-              return src[:s] + json.dumps(val) + src[e:]
+          def set_embedded(src,name,value):
+              found=embedded(src,name)
+              if not found:raise SystemExit(name+' not found')
+              s,e,_=found
+              return src[:s]+json.dumps(value)+src[e:]
 
-          x = embedded(cfg,'OVERLAY_MODULE_KT')
-          if not x:
-              raise SystemExit('OVERLAY_MODULE_KT not found')
-
-          kt = x[2]
+          found=embedded(cfg,'OVERLAY_MODULE_KT')
+          if not found:raise SystemExit('OVERLAY_MODULE_KT not found')
+          kt=found[2]
 
           if 'fun canScheduleExactAlarms' not in kt:
-              anchor = '  @ReactMethod\n  fun startHud(apiKey: String, promise: Promise) {'
-              methods = '''  @ReactMethod
+              anchor='  @ReactMethod\n  fun startHud(apiKey: String, promise: Promise) {'
+              methods='''  @ReactMethod
           fun canScheduleExactAlarms(promise: Promise) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
               promise.resolve(true)
@@ -361,311 +200,44 @@ jobs:
             }
           }
 
-          ''' + anchor
-
+          '''+anchor
               if anchor not in kt:
                   raise SystemExit('startHud anchor not found')
+              kt=kt.replace(anchor,methods,1)
+              cfg=set_embedded(cfg,'OVERLAY_MODULE_KT',kt)
 
-              kt = kt.replace(anchor, methods, 1)
-              cfg = set_embedded(cfg, 'OVERLAY_MODULE_KT', kt)
-
-          Path('app.config.js').write_text(cfg)
-          print('✓ alert sync + UI patch applied')
+          cfgp.write_text(cfg)
+          print('✓ alert sync + UI fixes applied')
           PY
 
-      - name: Rebuild Torn cooldown symbols with transparency
-        shell: bash
-        run: |
-          python3 -m pip install --quiet pillow
-
-          python3 <<'PY'
-          from pathlib import Path
-          from PIL import Image, ImageDraw
-          import base64
-          import json
-          import math
-          import re
-
-          S = 128
-
-          def blank():
-              return Image.new('RGBA', (S, S), (0, 0, 0, 0))
-
-          def verify_transparent(path):
-              im = Image.open(path).convert('RGBA')
-              corners = [
-                  im.getpixel((0, 0))[3],
-                  im.getpixel((im.width - 1, 0))[3],
-                  im.getpixel((0, im.height - 1))[3],
-                  im.getpixel((im.width - 1, im.height - 1))[3],
-              ]
-              if max(corners) > 10:
-                  raise SystemExit(f'{path}: background transparency failed')
-              return True
-
-          def down_arrow(color):
-              im = blank()
-              d = ImageDraw.Draw(im)
-              d.rounded_rectangle((84, 84, 108, 106), radius=5, fill=color)
-              d.polygon([(96, 114), (78, 98), (114, 98)], fill=color)
-              return im
-
-          def paste_center(base, overlay):
-              base.alpha_composite(overlay)
-
-          def leaf_icon():
-              im = blank()
-              d = ImageDraw.Draw(im)
-
-              leaf = (92, 150, 26, 255)
-              stem = (85, 135, 18, 255)
-
-              def leaflet(cx, cy, angle_deg, length, width):
-                  ang = math.radians(angle_deg)
-                  dx = math.sin(ang)
-                  dy = -math.cos(ang)
-                  px = -dy
-                  py = dx
-                  mx = cx + dx * length * 0.52
-                  my = cy + dy * length * 0.52
-                  d.polygon(
-                      [
-                          (cx, cy),
-                          (cx + px * width, cy + py * width),
-                          (mx + px * width * 0.45, my + py * width * 0.45),
-                          (cx + dx * length, cy + dy * length),
-                          (mx - px * width * 0.45, my - py * width * 0.45),
-                          (cx - px * width, cy - py * width),
-                      ],
-                      fill=leaf
-                  )
-
-              d.line((60, 105, 60, 72), fill=stem, width=5)
-              base = (60, 76)
-
-              leaflet(base[0], base[1], 0, 38, 7)
-              leaflet(base[0]-2, base[1]+3, -26, 32, 6)
-              leaflet(base[0]-4, base[1]+9, -50, 27, 5)
-              leaflet(base[0]-5, base[1]+15, -74, 22, 4)
-              leaflet(base[0]+2, base[1]+3, 26, 32, 6)
-              leaflet(base[0]+4, base[1]+9, 50, 27, 5)
-              leaflet(base[0]+5, base[1]+15, 74, 22, 4)
-
-              # small glow edge mimic
-              d.line((60, 105, 60, 72), fill=(70, 110, 18, 180), width=1)
-
-              im.alpha_composite(down_arrow((225, 109, 95, 255)))
-              return im
-
-          def bottle_icon():
-              base = blank()
-              d = ImageDraw.Draw(base)
-
-              # draw upright bottle first, then rotate for Torn look
-              body_fill = (245, 245, 245, 255)
-              glass_edge = (220, 220, 220, 255)
-              liquid_top = (222, 46, 48, 255)
-              liquid_body = (229, 143, 63, 255)
-              cap_fill = (240, 240, 240, 255)
-
-              d.rounded_rectangle((34, 26, 80, 104), radius=16, fill=body_fill, outline=glass_edge, width=2)
-              d.rounded_rectangle((46, 8, 70, 32), radius=7, fill=cap_fill, outline=glass_edge, width=2)
-              d.rounded_rectangle((34, 58, 80, 104), radius=14, fill=liquid_body)
-              d.rectangle((34, 50, 80, 60), fill=liquid_top)
-
-              bottle = base.rotate(-36, resample=Image.Resampling.BICUBIC, expand=False)
-
-              final = blank()
-              final.alpha_composite(bottle)
-              final.alpha_composite(down_arrow((214, 173, 54, 255)))
-              return final
-
-          def syringe_icon():
-              base = blank()
-              d = ImageDraw.Draw(base)
-
-              white = (245, 245, 245, 255)
-              blue = (111, 191, 235, 255)
-              light_blue = (166, 216, 245, 255)
-              edge = (230, 230, 230, 255)
-
-              d.rounded_rectangle((28, 54, 84, 76), radius=7, fill=blue, outline=edge, width=2)
-              d.polygon([(20, 63), (28, 54), (28, 76)], fill=white)
-              d.line((84, 65, 106, 65), fill=white, width=4)
-              d.line((106, 65, 117, 60), fill=white, width=2)
-              d.line((106, 65, 117, 70), fill=white, width=2)
-              d.line((44, 57, 44, 73), fill=light_blue, width=3)
-              d.line((56, 57, 56, 73), fill=light_blue, width=3)
-              d.line((68, 57, 68, 73), fill=light_blue, width=3)
-              d.rectangle((12, 58, 22, 72), fill=white)
-              d.line((8, 65, 12, 65), fill=white, width=4)
-
-              syringe = base.rotate(-36, resample=Image.Resampling.BICUBIC, expand=False)
-              final = blank()
-              final.alpha_composite(syringe)
-              final.alpha_composite(down_arrow((23, 138, 63, 255)))
-              return final
-
-          builders = {
-              'tp-drug.png': leaf_icon,
-              'tp-booster.png': bottle_icon,
-              'tp-medical.png': syringe_icon,
-          }
-
-          for filename, fn in builders.items():
-              im = fn()
-              im.save(filename, 'PNG', optimize=True)
-              verify_transparent(filename)
-              print(f'✓ built {filename} with transparent background')
-
-          # Clean health / energy / happiness if they exist, removing any dark matte
-          def clean_dark_matte(path):
-              if not Path(path).exists():
-                  return
-              im = Image.open(path).convert('RGBA')
-              px = im.load()
-              changed = False
-              for y in range(im.height):
-                  for x in range(im.width):
-                      r,g,b,a = px[x,y]
-                      m = max(r,g,b)
-                      if a == 0:
-                          continue
-                      if m <= 28:
-                          px[x,y] = (r,g,b,0)
-                          changed = True
-                      elif m < 72:
-                          px[x,y] = (r,g,b,round(a*(m-28)/44))
-                          changed = True
-              im.save(path, 'PNG', optimize=True)
-              verify_transparent(path)
-              if changed:
-                  print(f'✓ cleaned matte from {path}')
-
-          for file_name in ('tp-health.png','tp-energy.png','tp-happiness.png'):
-              if Path(file_name).exists():
-                  clean_dark_matte(file_name)
-
-          cfg = Path('app.config.js').read_text()
-
-          m = re.search(r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");', cfg)
-          if not m:
-              raise SystemExit('OVERLAY_SERVICE_KT not found')
-
-          service = json.loads(m.group(1))
-
-          mapping = {
-              'TP_DRUG_ICON': 'tp-drug.png',
-              'TP_BOOSTER_ICON': 'tp-booster.png',
-              'TP_MEDICAL_ICON': 'tp-medical.png',
-          }
-
-          # also refresh these if present so there are no old boxed versions in native HUD
-          optional_mapping = {
-              'TP_HEALTH_ICON': 'tp-health.png',
-              'TP_ENERGY_ICON': 'tp-energy.png',
-              'TP_HAPPINESS_ICON': 'tp-happiness.png',
-          }
-
-          all_mapping = {}
-          all_mapping.update(mapping)
-          all_mapping.update(optional_mapping)
-
-          for const_name, filename in all_mapping.items():
-              if not Path(filename).exists():
-                  continue
-              encoded = base64.b64encode(Path(filename).read_bytes()).decode('ascii')
-              pattern = re.compile(r'(private val ' + re.escape(const_name) + r' = ")([A-Za-z0-9+/=]+)(")')
-              if pattern.search(service):
-                  service = pattern.sub(lambda z: z.group(1) + encoded + z.group(3), service, count=1)
-                  print(f'✓ synced {const_name} from {filename}')
-
-          cfg = cfg[:m.start(1)] + json.dumps(service) + cfg[m.end(1):]
-          Path('app.config.js').write_text(cfg)
-
-          print('✅ Torn cooldown symbols rebuilt with transparent backgrounds')
-          PY
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Run self-test
-        run: npm run selftest
-
-      - name: Validate JavaScript bundle
-        run: |
-          npx expo export \
-            --platform android \
-            --output-dir /tmp/tornpulse-check
-
-      - name: Generate Android project
-        run: |
-          npx expo prebuild \
-            --platform android \
-            --clean
-
-      - name: Hide Android navigation bar
+      - name: Install exact approved cooldown icons
         shell: bash
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import base64,json,re
 
-          p = Path('android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt')
-          s = p.read_text()
-
-          if 'TORNPULSE_IMMERSIVE_NAV_RC8' not in s:
-              e = s.find('\n', s.find('package '))
-              s = (
-                  s[:e+1]
-                  + 'import androidx.core.view.WindowCompat\n'
-                  + 'import androidx.core.view.WindowInsetsCompat\n'
-                  + 'import androidx.core.view.WindowInsetsControllerCompat\n'
-                  + s[e+1:]
-              )
-
-              end = s.rfind('\n}')
-              code = '''
-            // TORNPULSE_IMMERSIVE_NAV_RC8
-            private fun applyTornPulseNav() {
-              val c = WindowCompat.getInsetsController(window, window.decorView)
-              c.hide(WindowInsetsCompat.Type.navigationBars())
-              c.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-
-            override fun onWindowFocusChanged(hasFocus: Boolean) {
-              super.onWindowFocusChanged(hasFocus)
-              if (hasFocus) {
-                applyTornPulseNav()
-              }
-            }
-          '''
-              s = s[:end] + code + s[end:]
-              s = s.replace(
-                  'super.onCreate(null)',
-                  'super.onCreate(null)\n    window.decorView.post { applyTornPulseNav() }',
-                  1
-              )
-              p.write_text(s)
-          PY
-
-      - name: Build ARM64 release APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
-
-      - name: Verify APK
-        run: |
-          APK=android/app/build/outputs/apk/release/app-release.apk
-          test -s "$APK"
-          unzip -t "$APK" >/dev/null
-          sha256sum "$APK"
-          ls -lh "$APK"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: tornpulse-v2.0.0-rc8-torn-cooldown-icons-arm64-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+          ICONS={
+            'tp-drug.png':(
+                'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAADAFBMVEUAAAA1dgFPlwUsZwFapQQlWAFFiARttg1k'
+                'qgwKKAA8gwESNwAEPAAbRgEAVQAIJQCHxib6RSsIJQD7NyT8KiFRAQEHJQAJJgACGQAIJwD5dkn7ZzoJJwBDfAWF'
+                'xhohTAEBGQB3uCL7VzUDGgACGwAIJgB8AgL4KB1WAABFAAB7wxcCGgA7AABOAAADGgBOAABsExBqBgf4Z0kSNQEe'
+                'UgGuDBIACQAIHgAFHQAQNwASNADzGx3wAw4SMgBKAACCvSSV1SrSFBoABwATNAAxFwA1OwBRAQF/fwCoERPTLCT7'
+                'gU0qBwCOAwuMJRuIMiuQ1hvZNCj7HCD/f3///wARMQATQwAdQgAbQQEAfwA8BgA1BAAiSQJRBABVVQBmCgN8KB1v'
+                'qiB9wSGJKSWlGRnPDxn5MR//OTn9WkYAACQWQgAbQgAA/wAhLAAkJQEhOgEkSAAzZgAqfwBBFgBIkQBmZgBjnRR/'
+                '/wCCvx6q/wDVJh/Qc2P/AP//VVX7cD/4hmsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAnPCmFAAABAHRSTlMA/Pz8/P38+/z1/PkG/QPQ/PyS/Pz7b7BTDfz8Uf37/DT9/Iz4'
+                'MQf9Bc78bgSSEVT+//vT/fsrsssuU/oEcrH9+fhNlP0IcAL+/P3v/f/9+f38AgGvEybXApPOyiwDJv/+/PoK+f0E'
+                '+QdRkgEXxf8HBQb2BwX8AvkD/f4BA/38AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                'AAAAAAAAAAAAAAAAAAAAAAAAAAAAa36MugAAB99JREFUeNrtWGlXG0cW7a7q2rpUtNRoNVqRhAABCWYxi22IPY7j'
+                'cWzHk2Qy2TNZZ9/37bfnvpKEAWdiWkQ5M+fwPnAO6u536963dgfBlV3Z929z/+8EcvuzdR/csrnZMni/UQ5mB/GT'
+                'YFeot2aqULnRbM1UoYQ94dWbs9Oo7aKmTGcXhB/3hG4yc2tG1YYItKRu6nBrZiFOQ6abStuNWXWhyhhgd0YUaluh'
+                'jJTSojojiRIbxkwpJczBTBJp1/I4JgYNMZtMbTsmiUGkwvTyiZr7JoA4BoCOorDyTQCXxqyOACIPcOmavfUchXLP'
+                'xWFIALrRq8w9d/zaQS6DPnWxtXtGJlSZ4BMAKc7X2lzQfsfVsmQM17Z9rowFkwSgdaRZcv605ZZ+P4tEP9tqKlf9'
+                '22mALkIwYoA0Su6duf1PqWj+OUvuoivIYy
