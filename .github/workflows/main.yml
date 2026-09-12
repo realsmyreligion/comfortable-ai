@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC15 Revamped Vitals
+name: Build TornPulse 2.0 RC16 Vitals + HUD
 
 on:
   workflow_dispatch:
@@ -39,27 +39,18 @@ jobs:
           cp core.js demo.js notifications.js storage.js tornApi.js src/
           cp self-test.cjs scripts/self-test.cjs
 
-      - name: Recover verified RC12 sync and exact cooldown icons
+      - name: Recover RC15 sync cooldowns and revamped vitals
         shell: bash
         run: |
           set -euo pipefail
 
-          RC12_SHA="2f155d7f58e009803504b7f32db6caadc6b0f040"
+          RC15_SHA="ce2b6370078d8ba113aaf12cfc791a8a9f67088d"
 
-          echo "Using verified RC12 commit:"
-          echo "$RC12_SHA"
+          echo "Using verified RC15 commit:"
+          echo "$RC15_SHA"
 
-          git cat-file -e "$RC12_SHA:.github/workflows/main.yml"
-
-          git show "$RC12_SHA:.github/workflows/main.yml" > /tmp/rc12.yml
-
-          FIRST_LINE="$(head -n 1 /tmp/rc12.yml)"
-
-          if [ "$FIRST_LINE" != "name: Build TornPulse 2.0 RC12 Verified Exact Icons" ]; then
-            echo "Unexpected RC12 workflow header:"
-            echo "$FIRST_LINE"
-            exit 1
-          fi
+          git cat-file -e "$RC15_SHA:.github/workflows/main.yml"
+          git show "$RC15_SHA:.github/workflows/main.yml" > /tmp/rc15.yml
 
           python3 -m pip install --quiet pyyaml
 
@@ -67,301 +58,296 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path('/tmp/rc12.yml')
-          data = yaml.safe_load(path.read_text())
+          data = yaml.safe_load(Path('/tmp/rc15.yml').read_text())
           steps = data['jobs']['android']['steps']
 
           wanted = {
-              'Apply TornPulse synchronization fixes': '/tmp/apply-sync.sh',
-              'Install verified exact cooldown icons': '/tmp/install-icons.sh',
+              'Recover verified RC12 sync and exact cooldown icons':
+                  '/tmp/01-recover-rc12.sh',
+              'Generate revamped vital icons':
+                  '/tmp/02-generate-vitals.sh',
+              'Verify revamped vital icons':
+                  '/tmp/03-verify-vitals.sh',
           }
 
-          recovered = []
+          found = set()
 
           for step in steps:
               name = str(step.get('name', '')).strip()
+
               if name not in wanted:
                   continue
 
               run = step.get('run')
+
               if not run:
-                  raise SystemExit(name + ': run block missing')
+                  raise SystemExit(
+                      name + ': run block missing'
+                  )
 
-              Path(wanted[name]).write_text(
-                  'set -euo pipefail\n' + run + '\n'
+              Path(
+                  wanted[name]
+              ).write_text(
+                  'set -euo pipefail\n'
+                  + run
+                  + '\n'
               )
-              recovered.append(name)
 
-          missing = [name for name in wanted if name not in recovered]
+              found.add(name)
+
+          missing = [
+              name
+              for name in wanted
+              if name not in found
+          ]
 
           if missing:
               raise SystemExit(
-                  'Missing RC12 step(s): ' + ', '.join(missing)
+                  'Missing RC15 step(s): '
+                  + ', '.join(missing)
               )
 
-          print('✓ RC12 synchronization patch recovered')
-          print('✓ RC12 exact Drug / Booster / Medical icons recovered')
+          print(
+              '✓ recovered RC15 synchronization + cooldown icon step'
+          )
+
+          print(
+              '✓ recovered RC15 revamped vital generator'
+          )
+
+          print(
+              '✓ recovered RC15 vital transparency verification'
+          )
           PY
 
-          echo "Applying synchronization fixes..."
-          bash /tmp/apply-sync.sh
+          bash /tmp/01-recover-rc12.sh
+          bash /tmp/02-generate-vitals.sh
+          bash /tmp/03-verify-vitals.sh
 
-          echo "Installing exact cooldown icons..."
-          bash /tmp/install-icons.sh
-
-          echo "✓ RC12 sync and exact icon payloads applied"
-
-      - name: Generate revamped vital icons
+      - name: Inject revamped vital icons into floating HUD
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet pillow
 
           python3 <<'PY'
-          from PIL import Image, ImageDraw, ImageFilter
           from pathlib import Path
-          import math
+          import base64
+          import json
 
-          SIZE = 256
-          OUT = Path(".")
+          cfg_path = Path(
+              'app.config.js'
+          )
 
-          def rgb(hex_color):
-              hex_color = hex_color.lstrip('#')
-              return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+          cfg = cfg_path.read_text()
 
-          def rgba(hex_color, a=255):
-              return rgb(hex_color) + (a,)
+          def embedded(src, name):
+              prefix = (
+                  'const '
+                  + name
+                  + ' = '
+              )
 
-          def empty():
-              return Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+              i = src.find(prefix)
 
-          def solid_from_mask(mask, color, alpha=255):
-              img = empty()
-              fill = Image.new("RGBA", (SIZE, SIZE), rgba(color, alpha))
-              img.paste(fill, (0, 0), mask)
-              return img
+              if i < 0:
+                  return None
 
-          def glow_from_mask(mask, color, blur, alpha):
-              glow_mask = mask.filter(ImageFilter.GaussianBlur(blur))
-              img = empty()
-              fill = Image.new("RGBA", (SIZE, SIZE), rgba(color, alpha))
-              img.paste(fill, (0, 0), glow_mask)
-              return img
+              start = i + len(prefix)
 
-          def alpha_over(base, top):
-              return Image.alpha_composite(base, top)
+              if (
+                  start >= len(src)
+                  or src[start] != '"'
+              ):
+                  return None
 
-          def line_layer(points, color, width, blur=0, alpha=255):
-              img = empty()
-              d = ImageDraw.Draw(img)
-              d.line(points, fill=rgba(color, alpha), width=width, joint="curve")
-              if blur > 0:
-                  img = img.filter(ImageFilter.GaussianBlur(blur))
-              return img
+              j = start + 1
+              escaped = False
 
-          def poly_mask(points):
-              mask = Image.new("L", (SIZE, SIZE), 0)
-              d = ImageDraw.Draw(mask)
-              d.polygon(points, fill=255)
-              return mask
+              while j < len(src):
+                  c = src[j]
 
-          def ellipse_mask(box):
-              mask = Image.new("L", (SIZE, SIZE), 0)
-              d = ImageDraw.Draw(mask)
-              d.ellipse(box, fill=255)
-              return mask
+                  if escaped:
+                      escaped = False
 
-          def heart_mask():
-              m = Image.new("L", (SIZE, SIZE), 0)
-              d = ImageDraw.Draw(m)
-              d.ellipse((46, 42, 126, 122), fill=255)
-              d.ellipse((130, 42, 210, 122), fill=255)
-              d.polygon([(40, 96), (216, 96), (128, 214)], fill=255)
-              return m.filter(ImageFilter.GaussianBlur(1))
+                  elif c == '\\':
+                      escaped = True
 
-          def energy_mask():
-              pts = [
-                  (148, 26),
-                  (72, 142),
-                  (116, 142),
-                  (92, 230),
-                  (186, 106),
-                  (140, 106),
-              ]
-              return poly_mask(pts).filter(ImageFilter.GaussianBlur(1))
+                  elif c == '"':
+                      break
 
-          def nerve_mask():
-              cx, cy = 128, 128
-              outer = 86
-              inner = 56
-              spikes = 12
-              pts = []
-              for i in range(spikes * 2):
-                  ang = math.radians((360 / (spikes * 2)) * i - 90)
-                  r = outer if i % 2 == 0 else inner
-                  pts.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
-              m = poly_mask(pts)
-              center = ellipse_mask((82, 82, 174, 174))
-              m = Image.eval(m, lambda p: p)
-              m.paste(255, (0, 0), center)
-              return m.filter(ImageFilter.GaussianBlur(1))
+                  j += 1
 
-          def save_health():
-              purple = "#8A78FF"
-              cyan = "#7BE7FF"
-              white = "#F2F8FF"
+              if j >= len(src):
+                  return None
 
-              base = empty()
-              m = heart_mask()
+              return (
+                  start,
+                  j + 1,
+                  json.loads(
+                      src[start:j+1]
+                  )
+              )
 
-              base = alpha_over(base, glow_from_mask(m, purple, 18, 70))
-              base = alpha_over(base, glow_from_mask(m, purple, 10, 125))
-              base = alpha_over(base, solid_from_mask(m, purple, 245))
+          def set_embedded(
+              src,
+              name,
+              value
+          ):
+              found = embedded(
+                  src,
+                  name
+              )
 
-              highlight = ellipse_mask((70, 56, 184, 150))
-              base = alpha_over(base, glow_from_mask(highlight, white, 14, 18))
+              if not found:
+                  raise SystemExit(
+                      name
+                      + ' not found in app.config.js'
+                  )
 
-              pulse = [(54, 140), (88, 140), (104, 118), (122, 156), (146, 102), (164, 140), (202, 140)]
-              base = alpha_over(base, line_layer(pulse, cyan, 20, blur=9, alpha=90))
-              base = alpha_over(base, line_layer(pulse, cyan, 11, blur=0, alpha=255))
+              start, end, _ = found
 
-              base.save(OUT / "tp-health.png")
+              return (
+                  src[:start]
+                  + json.dumps(value)
+                  + src[end:]
+              )
 
-          def save_energy():
-              green = "#8AF24E"
-              lime = "#CBFF76"
+          found = embedded(
+              cfg,
+              'OVERLAY_SERVICE_KT'
+          )
 
-              base = empty()
-              m = energy_mask()
+          if not found:
+              raise SystemExit(
+                  'OVERLAY_SERVICE_KT not found'
+              )
 
-              base = alpha_over(base, glow_from_mask(m, green, 18, 75))
-              base = alpha_over(base, glow_from_mask(m, green, 9, 130))
-              base = alpha_over(base, solid_from_mask(m, green, 245))
+          service = found[2]
 
-              inner = poly_mask([
-                  (142, 44),
-                  (94, 120),
-                  (126, 120),
-                  (110, 192),
-                  (170, 112),
-                  (138, 112),
-              ]).filter(ImageFilter.GaussianBlur(1))
-              base = alpha_over(base, solid_from_mask(inner, lime, 105))
+          icons = {
+              'TP_HEALTH_ICON':
+                  'tp-health.png',
 
-              base.save(OUT / "tp-energy.png")
+              'TP_ENERGY_ICON':
+                  'tp-energy.png',
 
-          def save_nerve():
-              orange = "#FF9650"
-              yellow = "#FFC46B"
+              'TP_NERVE_ICON':
+                  'tp-nerve.png',
 
-              base = empty()
-              m = nerve_mask()
+              'TP_HAPPINESS_ICON':
+                  'tp-happiness.png',
+          }
 
-              base = alpha_over(base, glow_from_mask(m, orange, 18, 75))
-              base = alpha_over(base, glow_from_mask(m, orange, 9, 130))
-              base = alpha_over(base, solid_from_mask(m, orange, 245))
+          for constant, filename in icons.items():
 
-              center = ellipse_mask((92, 92, 164, 164))
-              base = alpha_over(base, solid_from_mask(center, yellow, 100))
+              path = Path(filename)
 
-              base.save(OUT / "tp-nerve.png")
+              if not path.exists():
+                  raise SystemExit(
+                      filename + ' not found'
+                  )
 
-          def save_happiness():
-              gold = "#FFD84A"
-              soft = "#FFF1A6"
+              encoded = base64.b64encode(
+                  path.read_bytes()
+              ).decode(
+                  'ascii'
+              )
 
-              base = empty()
+              needle = (
+                  'private val '
+                  + constant
+                  + ' = "'
+              )
 
-              # Outer circle glow
-              glow = empty()
-              d = ImageDraw.Draw(glow)
-              d.ellipse((38, 38, 218, 218), outline=rgba(gold, 110), width=18)
-              glow = glow.filter(ImageFilter.GaussianBlur(10))
-              base = alpha_over(base, glow)
+              i = service.find(
+                  needle
+              )
 
-              ring = empty()
-              d = ImageDraw.Draw(ring)
-              d.ellipse((44, 44, 212, 212), outline=rgba(gold, 255), width=12)
-              base = alpha_over(base, ring)
+              if i < 0:
+                  raise SystemExit(
+                      constant
+                      + ' not found in native HUD service'
+                  )
 
-              # Eyes
-              eyes = empty()
-              d = ImageDraw.Draw(eyes)
-              d.ellipse((90, 98, 110, 118), fill=rgba(soft, 255))
-              d.ellipse((146, 98, 166, 118), fill=rgba(soft, 255))
-              eyes_glow = eyes.filter(ImageFilter.GaussianBlur(5))
-              base = alpha_over(base, eyes_glow)
-              base = alpha_over(base, eyes)
+              start = (
+                  i
+                  + len(needle)
+              )
 
-              # Smile
-              smile_glow = empty()
-              d = ImageDraw.Draw(smile_glow)
-              d.arc((76, 84, 180, 184), start=20, end=160, fill=rgba(gold, 110), width=18)
-              smile_glow = smile_glow.filter(ImageFilter.GaussianBlur(8))
-              base = alpha_over(base, smile_glow)
+              end = service.find(
+                  '"',
+                  start
+              )
 
-              smile = empty()
-              d = ImageDraw.Draw(smile)
-              d.arc((80, 88, 176, 180), start=20, end=160, fill=rgba(gold, 255), width=10)
-              base = alpha_over(base, smile)
+              if end < 0:
+                  raise SystemExit(
+                      constant
+                      + ' closing quote not found'
+                  )
 
-              base.save(OUT / "tp-happiness.png")
+              service = (
+                  service[:start]
+                  + encoded
+                  + service[end:]
+              )
 
-          save_health()
-          save_energy()
-          save_nerve()
-          save_happiness()
+              if not encoded.startswith(
+                  'iVBOR'
+              ):
+                  raise SystemExit(
+                      constant
+                      + ' did not encode as PNG'
+                  )
 
-          print("✓ Generated tp-health.png")
-          print("✓ Generated tp-energy.png")
-          print("✓ Generated tp-nerve.png")
-          print("✓ Generated tp-happiness.png")
-          PY
+              print(
+                  '✓ HUD replaced '
+                  + constant
+                  + ' with '
+                  + filename
+              )
 
-      - name: Verify revamped vital icons
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install --quiet pillow
+          cfg = set_embedded(
+              cfg,
+              'OVERLAY_SERVICE_KT',
+              service
+          )
 
-          python3 <<'PY'
-          from PIL import Image
-          from pathlib import Path
+          cfg_path.write_text(
+              cfg
+          )
 
-          files = [
-              "tp-health.png",
-              "tp-energy.png",
-              "tp-nerve.png",
-              "tp-happiness.png",
-          ]
+          check = embedded(
+              cfg,
+              'OVERLAY_SERVICE_KT'
+          )
 
-          for name in files:
-              p = Path(name)
-              if not p.exists():
-                  raise SystemExit(f"Missing {name}")
+          if not check:
+              raise SystemExit(
+                  'HUD service verification failed'
+              )
 
-              img = Image.open(p).convert("RGBA")
+          updated = check[2]
 
-              if img.size[0] < 64 or img.size[1] < 64:
-                  raise SystemExit(f"{name} is unexpectedly small: {img.size}")
+          for constant in icons:
+              needle = (
+                  'private val '
+                  + constant
+                  + ' = "iVBOR'
+              )
 
-              alpha = img.getchannel("A")
-              bbox = alpha.getbbox()
+              if needle not in updated:
+                  raise SystemExit(
+                      constant
+                      + ' is not using the new PNG'
+                  )
 
-              if bbox is None:
-                  raise SystemExit(f"{name} has no visible pixels")
+          print(
+              '✅ Health / Energy / Nerve / Happiness updated in floating HUD'
+          )
 
-              corners = [
-                  img.getpixel((0, 0))[3],
-                  img.getpixel((img.size[0]-1, 0))[3],
-                  img.getpixel((0, img.size[1]-1))[3],
-                  img.getpixel((img.size[0]-1, img.size[1]-1))[3],
-              ]
-
-              if any(a != 0 for a in corners):
-                  raise SystemExit(f"{name} does not have transparent corners")
-
-              print(f"✓ {name} verified with transparent background")
+          print(
+              '✅ Transparent PNG artwork now matches the main TornPulse screen'
+          )
           PY
 
       - name: Install dependencies
@@ -390,35 +376,66 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path('android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt')
+          p = Path(
+              'android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt'
+          )
 
           if not p.exists():
-              raise SystemExit('MainActivity.kt not found')
+              raise SystemExit(
+                  'MainActivity.kt not found'
+              )
 
           s = p.read_text()
-          marker = 'TORNPULSE_IMMERSIVE_NAV_RC15'
+
+          marker = (
+              'TORNPULSE_IMMERSIVE_NAV_RC16'
+          )
 
           if marker not in s:
-              package_pos = s.find('package ')
-              e = s.find('\n', package_pos)
 
-              if package_pos < 0 or e < 0:
-                  raise SystemExit('package declaration not found')
+              package_pos = s.find(
+                  'package '
+              )
+
+              end_package = s.find(
+                  '\n',
+                  package_pos
+              )
+
+              if (
+                  package_pos < 0
+                  or end_package < 0
+              ):
+                  raise SystemExit(
+                      'package declaration not found'
+                  )
 
               imports = '''import androidx.core.view.WindowCompat
           import androidx.core.view.WindowInsetsCompat
           import androidx.core.view.WindowInsetsControllerCompat
           '''
 
-              if 'import androidx.core.view.WindowCompat' not in s:
-                  s = s[:e+1] + imports + s[e+1:]
+              if (
+                  'import androidx.core.view.WindowCompat'
+                  not in s
+              ):
+                  s = (
+                      s[:end_package+1]
+                      + imports
+                      + s[end_package+1:]
+                  )
 
-              end = s.rfind('\n}')
-              if end < 0:
-                  raise SystemExit('MainActivity class ending not found')
+              end_class = s.rfind(
+                  '\n}'
+              )
+
+              if end_class < 0:
+                  raise SystemExit(
+                      'MainActivity class ending not found'
+                  )
 
               code = '''
-            // TORNPULSE_IMMERSIVE_NAV_RC15
+            // TORNPULSE_IMMERSIVE_NAV_RC16
             private fun applyTornPulseNav() {
               val controller =
                 WindowCompat.getInsetsController(
@@ -447,39 +464,53 @@ jobs:
             }
           '''
 
-              s = s[:end] + code + s[end:]
+              s = (
+                  s[:end_class]
+                  + code
+                  + s[end_class:]
+              )
 
-              if 'window.decorView.post { applyTornPulseNav() }' not in s:
+              if (
+                  'window.decorView.post { applyTornPulseNav() }'
+                  not in s
+              ):
                   s = s.replace(
                       'super.onCreate(null)',
-                      'super.onCreate(null)\n    window.decorView.post { applyTornPulseNav() }',
+                      'super.onCreate(null)\n'
+                      '    window.decorView.post { applyTornPulseNav() }',
                       1
                   )
 
               p.write_text(s)
 
-          print('✓ immersive navigation patch applied')
+          print(
+              '✓ immersive navigation patch applied'
+          )
           PY
 
       - name: Build ARM64 release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a
 
       - name: Verify APK
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
+
           test -s "$APK"
+
           unzip -t "$APK" >/dev/null
-          echo "APK SHA256:"
+
           sha256sum "$APK"
-          echo "APK size:"
+
           ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v2.0.0-rc15-revamped-vitals-arm64-apk
+          name: tornpulse-v2.0.0-rc16-vitals-hud-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
