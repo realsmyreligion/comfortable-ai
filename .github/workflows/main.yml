@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC13 Exact Icons
+name: Build TornPulse 2.0 RC14 Exact Icons
 
 on:
   workflow_dispatch:
@@ -39,77 +39,118 @@ jobs:
           cp core.js demo.js notifications.js storage.js tornApi.js src/
           cp self-test.cjs scripts/self-test.cjs
 
-      - name: Recover verified RC12 icon and sync payloads
+      - name: Recover verified RC12 sync and exact icons
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet pyyaml
 
-          FOUND=""
-          for SHA in $(git log -n 50 --format=%H -- .github/workflows/main.yml); do
-            if git show "$SHA:.github/workflows/main.yml" 2>/dev/null | grep -q "Build TornPulse 2.0 RC12 Verified Exact Icons"; then
-              git show "$SHA:.github/workflows/main.yml" > /tmp/rc12.yml
-              FOUND="$SHA"
-              break
-            fi
-          done
+          RC12_SHA="2f155d7f58e009803504b7f32db6caadc6b0f040"
 
-          if [ -z "$FOUND" ]; then
-            echo "RC12 workflow not found in recent git history"
+          echo "Using verified RC12 commit:"
+          echo "$RC12_SHA"
+
+          git cat-file -e "$RC12_SHA:.github/workflows/main.yml"
+
+          git show \
+            "$RC12_SHA:.github/workflows/main.yml" \
+            > /tmp/rc12.yml
+
+          FIRST_LINE="$(head -n 1 /tmp/rc12.yml)"
+
+          if [ "$FIRST_LINE" != "name: Build TornPulse 2.0 RC12 Verified Exact Icons" ]; then
+            echo "Unexpected RC12 workflow header:"
+            echo "$FIRST_LINE"
             exit 1
           fi
 
-          echo "Using verified RC12 payloads from $FOUND"
+          python3 -m pip install --quiet pyyaml
 
           python3 <<'PY'
           from pathlib import Path
           import yaml
 
-          data=yaml.safe_load(Path('/tmp/rc12.yml').read_text())
+          path=Path('/tmp/rc12.yml')
+
+          data=yaml.safe_load(
+              path.read_text()
+          )
+
           steps=data['jobs']['android']['steps']
 
           wanted={
-              'Apply TornPulse synchronization fixes':'/tmp/apply-sync.sh',
-              'Install verified exact cooldown icons':'/tmp/install-icons.sh',
+              'Apply TornPulse synchronization fixes':
+                  '/tmp/apply-sync.sh',
+
+              'Install verified exact cooldown icons':
+                  '/tmp/install-icons.sh',
           }
 
-          found=set()
+          recovered=[]
 
           for step in steps:
-              name=step.get('name')
+              name=str(
+                  step.get('name','')
+              ).strip()
 
-              if name in wanted:
-                  run=step.get('run')
+              if name not in wanted:
+                  continue
 
-                  if not run:
-                      raise SystemExit(f'{name}: run block missing')
+              run=step.get('run')
 
-                  Path(wanted[name]).write_text(
-                      'set -euo pipefail\n'+run+'\n'
+              if not run:
+                  raise SystemExit(
+                      name+
+                      ': run block missing'
                   )
 
-                  found.add(name)
+              Path(
+                  wanted[name]
+              ).write_text(
+                  'set -euo pipefail\n'
+                  +run+
+                  '\n'
+              )
 
-          missing=set(wanted)-found
+              recovered.append(
+                  name
+              )
+
+          missing=[
+              name
+              for name in wanted
+              if name not in recovered
+          ]
 
           if missing:
               raise SystemExit(
                   'Missing RC12 step(s): '+
-                  ', '.join(sorted(missing))
+                  ', '.join(missing)
               )
 
-          print('✓ recovered RC12 synchronization patch')
-          print('✓ recovered exact Drug / Booster / Medical icon payloads')
+          print(
+              '✓ RC12 synchronization patch recovered'
+          )
+
+          print(
+              '✓ RC12 exact Drug / Booster / Medical icons recovered'
+          )
           PY
 
+          echo "Applying synchronization fixes..."
           bash /tmp/apply-sync.sh
+
+          echo "Installing exact cooldown icons..."
           bash /tmp/install-icons.sh
 
+          echo "✓ RC12 sync and exact icon payloads applied"
+
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          npm ci --no-audit --no-fund
 
       - name: Run self-test
-        run: npm run selftest
+        run: |
+          npm run selftest
 
       - name: Validate JavaScript bundle
         run: |
@@ -133,28 +174,46 @@ jobs:
               'android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt'
           )
 
-          s=p.read_text()
-
-          if 'TORNPULSE_IMMERSIVE_NAV_RC13' not in s:
-              e=s.find(
-                  '\n',
-                  s.find('package ')
+          if not p.exists():
+              raise SystemExit(
+                  'MainActivity.kt not found'
               )
 
-              if e<0:
+          s=p.read_text()
+
+          marker='TORNPULSE_IMMERSIVE_NAV_RC14'
+
+          if marker not in s:
+
+              package_pos=s.find(
+                  'package '
+              )
+
+              e=s.find(
+                  '\n',
+                  package_pos
+              )
+
+              if package_pos<0 or e<0:
                   raise SystemExit(
                       'package declaration not found'
                   )
 
-              s=(
-                  s[:e+1]
-                  +'import androidx.core.view.WindowCompat\n'
-                  +'import androidx.core.view.WindowInsetsCompat\n'
-                  +'import androidx.core.view.WindowInsetsControllerCompat\n'
-                  +s[e+1:]
-              )
+              imports='''import androidx.core.view.WindowCompat
+          import androidx.core.view.WindowInsetsCompat
+          import androidx.core.view.WindowInsetsControllerCompat
+          '''
 
-              end=s.rfind('\n}')
+              if 'import androidx.core.view.WindowCompat' not in s:
+                  s=(
+                      s[:e+1]
+                      +imports
+                      +s[e+1:]
+                  )
+
+              end=s.rfind(
+                  '\n}'
+              )
 
               if end<0:
                   raise SystemExit(
@@ -162,46 +221,59 @@ jobs:
                   )
 
               code='''
-            // TORNPULSE_IMMERSIVE_NAV_RC13
+            // TORNPULSE_IMMERSIVE_NAV_RC14
             private fun applyTornPulseNav() {
-              val c =
+              val controller =
                 WindowCompat.getInsetsController(
                   window,
                   window.decorView
                 )
 
-              c.hide(
+              controller.hide(
                 WindowInsetsCompat.Type.navigationBars()
               )
 
-              c.systemBarsBehavior =
+              controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
 
             override fun onWindowFocusChanged(
-              hasFocus:Boolean
+              hasFocus: Boolean
             ) {
               super.onWindowFocusChanged(
                 hasFocus
               )
 
-              if(hasFocus) {
+              if (hasFocus) {
                 applyTornPulseNav()
               }
             }
           '''
 
-              s=s[:end]+code+s[end:]
-
-              s=s.replace(
-                  'super.onCreate(null)',
-                  'super.onCreate(null)\n    window.decorView.post { applyTornPulseNav() }',
-                  1
+              s=(
+                  s[:end]
+                  +code
+                  +s[end:]
               )
 
-              p.write_text(s)
+              if (
+                  'window.decorView.post { applyTornPulseNav() }'
+                  not in s
+              ):
+                  s=s.replace(
+                      'super.onCreate(null)',
+                      'super.onCreate(null)\n'
+                      '    window.decorView.post { applyTornPulseNav() }',
+                      1
+                  )
 
-          print('✓ Android navigation bar patch applied')
+              p.write_text(
+                  s
+              )
+
+          print(
+              '✓ immersive navigation patch applied'
+          )
           PY
 
       - name: Build ARM64 release APK
@@ -220,13 +292,15 @@ jobs:
 
           unzip -t "$APK" >/dev/null
 
+          echo "APK SHA256:"
           sha256sum "$APK"
 
+          echo "APK size:"
           ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v2.0.0-rc13-exact-icons-arm64-apk
+          name: tornpulse-v2.0.0-rc14-exact-icons-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
