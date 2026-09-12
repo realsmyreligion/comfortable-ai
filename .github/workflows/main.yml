@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC7
+name: Build TornPulse 2.0 RC8
 
 on:
   workflow_dispatch:
@@ -49,10 +49,24 @@ jobs:
           const OUR=new Set(['tornpulse','comfortable-ai']);
           const LEAD=6000;
 
-          Notifications.setNotificationHandler({handleNotification:async()=>({shouldPlaySound:true,shouldSetBadge:false,shouldShowBanner:true,shouldShowList:true})});
+          Notifications.setNotificationHandler({
+            handleNotification:async()=>({
+              shouldPlaySound:true,
+              shouldSetBadge:false,
+              shouldShowBanner:true,
+              shouldShowList:true
+            })
+          });
 
           export async function prepareNotifications(){
-            if(Platform.OS==='android') await Notifications.setNotificationChannelAsync(CHANNEL,{name:'Torn Alerts',importance:Notifications.AndroidImportance.MAX,sound:'default',vibrationPattern:[0,300,150,300]});
+            if(Platform.OS==='android'){
+              await Notifications.setNotificationChannelAsync(CHANNEL,{
+                name:'Torn Alerts',
+                importance:Notifications.AndroidImportance.MAX,
+                sound:'default',
+                vibrationPattern:[0,300,150,300]
+              });
+            }
             let p=await Notifications.getPermissionsAsync();
             if(!p.granted) p=await Notifications.requestPermissionsAsync();
             return !!p.granted;
@@ -79,37 +93,18 @@ jobs:
             d.getTime()>Date.now()+LEAD;
 
           const fromSecs=(snap,s)=>
-            new Date(
-              Number(snap?.fetchedAt||Date.now())+
-              Math.max(0,Number(s||0))*1000
-            );
+            new Date(Number(snap?.fetchedAt||Date.now())+Math.max(0,Number(s||0))*1000);
 
           function warn(target,min){
-            if(!target)return null;
-
-            const d=new Date(
-              target.getTime()-
-              Math.max(0,Number(min||0))*60000
-            );
-
-            if(future(d))return d;
-
-            if(target.getTime()>Date.now()+15000)
-              return new Date(Date.now()+7000);
-
+            if(!target) return null;
+            const d=new Date(target.getTime()-Math.max(0,Number(min||0))*60000);
+            if(future(d)) return d;
+            if(target.getTime()>Date.now()+15000) return new Date(Date.now()+7000);
             return null;
           }
 
-          async function add(
-            title,
-            body,
-            date,
-            kind,
-            snap,
-            key=''
-          ){
-            if(!future(date))return;
-
+          async function add(title,body,date,kind,snap,key=''){
+            if(!future(date)) return;
             await Notifications.scheduleNotificationAsync({
               content:{
                 title,
@@ -132,49 +127,26 @@ jobs:
 
           function arrival(snap){
             const t=snap?.travel;
-
-            if(!t)return 0;
-
-            const a=Number(
-              t.arrival||
-              t.arrival_at||
-              0
-            );
-
-            if(a>0)return a;
-
+            if(!t) return 0;
+            const a=Number(t.arrival||t.arrival_at||0);
+            if(a>0) return a;
             const left=Number(t.time_left||0);
-
-            return left>0
-              ?Math.floor(Number(snap?.fetchedAt||Date.now())/1000)+left
-              :0;
+            return left>0 ? Math.floor(Number(snap?.fetchedAt||Date.now())/1000)+left : 0;
           }
 
-          export async function scheduleSnapshotAlerts(
-            snap,
-            settings={}
-          ){
+          export async function scheduleSnapshotAlerts(snap,settings={}){
             await clearTornPulseAlerts();
+            if(!snap||snap.demo) return;
 
-            if(!snap||snap.demo)return;
-
-            for(const [name,label] of [
-              ['energy','Energy'],
-              ['nerve','Nerve']
-            ]){
+            for(const [name,label] of [['energy','Energy'],['nerve','Nerve']]){
               const b=snap[name];
               const max=Number(b?.maximum||0);
               const cur=Number(b?.current||0);
               const full=unix(b?.full_time);
-
-              if(full&&cur<max){
-                const m=
-                  settings[name+'WarningMinutes']??
-                  15;
-
+              if(full && cur<max){
+                const m=settings[name+'WarningMinutes']??15;
                 const w=warn(full,m);
-
-                if(w)
+                if(w){
                   await add(
                     label+' warning',
                     label+' reaches cap in '+m+' minutes.',
@@ -183,7 +155,7 @@ jobs:
                     snap,
                     b.full_time
                   );
-
+                }
                 await add(
                   label+' full',
                   'Your '+label+' is full.',
@@ -197,62 +169,22 @@ jobs:
 
             if(settings.cooldownAlerts!==false){
               for(const [k,t,b] of [
-                [
-                  'drug',
-                  'Drug ready',
-                  'Your drug cooldown is clear.'
-                ],
-                [
-                  'booster',
-                  'Booster ready',
-                  'Your booster cooldown is clear.'
-                ],
-                [
-                  'medical',
-                  'Medical ready',
-                  'Your medical cooldown is clear.'
-                ]
+                ['drug','Drug ready','Your drug cooldown is clear.'],
+                ['booster','Booster ready','Your booster cooldown is clear.'],
+                ['medical','Medical ready','Your medical cooldown is clear.']
               ]){
-                const s=Number(
-                  snap.cooldowns?.[k]||
-                  0
-                );
-
-                if(s>5)
-                  await add(
-                    t,
-                    b,
-                    fromSecs(snap,s),
-                    k,
-                    snap,
-                    String(snap.fetchedAt)+':'+s
-                  );
+                const s=Number(snap.cooldowns?.[k]||0);
+                if(s>5){
+                  await add(t,b,fromSecs(snap,s),k,snap,String(snap.fetchedAt)+':'+s);
+                }
               }
             }
 
             if(settings.statusAlerts!==false){
-              const st=String(
-                snap.status?.state||
-                ''
-              ).toLowerCase();
-
-              const u=Number(
-                snap.status?.until||
-                0
-              );
-
-              if(
-                u>0 &&
-                (
-                  st.includes('hospital')||
-                  st.includes('jail')
-                )
-              ){
-                const l=
-                  st.includes('hospital')
-                    ?'Hospital'
-                    :'Jail';
-
+              const st=String(snap.status?.state||'').toLowerCase();
+              const u=Number(snap.status?.until||0);
+              if(u>0 && (st.includes('hospital')||st.includes('jail'))){
+                const l=st.includes('hospital')?'Hospital':'Jail';
                 await add(
                   l+' release',
                   'Your '+l.toLowerCase()+' timer has ended.',
@@ -267,42 +199,19 @@ jobs:
             const a=arrival(snap);
             const now=Math.floor(Date.now()/1000);
             const t=snap.travel;
-
-            if(
-              t &&
-              a>now &&
-              (
-                t.active===true ||
-                Number(t.time_left||0)>0
-              )
-            ){
-              const dest=String(
-                t.destination||
-                'your destination'
-              );
-
-              const w=warn(
-                unix(a),
-                5
-              );
-
-              if(w)
+            if(t && a>now && (t.active===true || Number(t.time_left||0)>0)){
+              const dest=String(t.destination||'your destination');
+              const w=warn(unix(a),5);
+              if(w){
                 await add(
                   'Landing soon',
                   'You are expected to land in '+dest+' in about 5 minutes.',
                   w,
                   'travel-5m',
                   snap,
-                  String(
-                    t.departed||
-                    t.departed_at||
-                    0
-                  )+
-                  ':'+
-                  a+
-                  ':'+
-                  dest
+                  String(t.departed||t.departed_at||0)+':'+a+':'+dest
                 );
+              }
             }
           }
           EOF
@@ -314,47 +223,39 @@ jobs:
           import json
           import re
 
-          app=Path('App.js').read_text()
+          app = Path('App.js').read_text()
 
-          app=app.replace(
+          app = app.replace(
               "import {getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';",
               "import {clearTornPulseAlerts, getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';"
           )
 
-          app=app.replace(
+          app = app.replace(
               "setInterval(()=>sync(null,false).catch(()=>{}),120000)",
               "setInterval(()=>sync(null,false).catch(()=>{}),60000)"
           )
 
-          app=app.replace(
+          app = app.replace(
               "async function disconnect() { await stopHud().catch(()=>{}); await clearApiKey();",
               "async function disconnect() { await stopHud().catch(()=>{}); await clearTornPulseAlerts().catch(()=>{}); await clearApiKey();"
           )
 
-          # Keep the Start HUD button above Vitals.
+          # Move the Start HUD button above Vitals if found
           if '      <Text style={styles.v2SectionTitle}>Vitals</Text>' in app:
-              m=re.search(
+              m = re.search(
                   r'\n\s*<Pressable accessibilityRole="button" onPress=\{hudRunning\?stopHud:startHud\}[\s\S]*?</Pressable>\n(?=\s*<Text style=\{styles\.v2Sync\}>)',
                   app
               )
-
               if m:
-                  button=m.group(0).strip('\n')+'\n'
-
-                  app=(
-                      app[:m.start()]
-                      +'\n'
-                      +app[m.end():]
-                  )
-
-                  app=app.replace(
+                  button = m.group(0).strip('\n') + '\n'
+                  app = app[:m.start()] + '\n' + app[m.end():]
+                  app = app.replace(
                       '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
-                      button+
-                      '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
+                      button + '      <Text style={styles.v2SectionTitle}>Vitals</Text>',
                       1
                   )
 
-          pairs={
+          replacements = {
               "v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:48}":
               "v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?12:4,paddingBottom:42}",
 
@@ -367,109 +268,65 @@ jobs:
               "v2CooldownIcon:{width:36,height:36}":
               "v2CooldownIcon:{width:32,height:32}",
 
-              "v2HudButton:{minHeight:76,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:12}":
-              "v2HudButton:{minHeight:64,borderRadius:15,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:14,gap:11,marginBottom:10}",
-
               "v2HudButtonIcon:{width:44,height:44,borderRadius:22,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'}":
               "v2HudButtonIcon:{width:38,height:38,borderRadius:19,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'}"
           }
 
-          for a,b in pairs.items():
-              app=app.replace(a,b)
+          for a,b in replacements.items():
+              app = app.replace(a,b)
 
           Path('App.js').write_text(app)
 
-          cfg=Path('app.config.js').read_text()
+          cfg = Path('app.config.js').read_text()
 
-          cfg=cfg.replace(
+          cfg = cfg.replace(
               "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');",
               "    ensurePermission(manifest, 'android.permission.POST_NOTIFICATIONS');\n    ensurePermission(manifest, 'android.permission.SCHEDULE_EXACT_ALARM');"
           )
 
           def embedded(src,name):
-              p='const '+name+' = '
-              i=src.find(p)
-
-              if i<0:
+              prefix = 'const ' + name + ' = '
+              i = src.find(prefix)
+              if i < 0:
                   return None
-
-              s=i+len(p)
-              j=s+1
-              esc=False
-
-              while j<len(src):
-                  c=src[j]
-
+              s = i + len(prefix)
+              j = s + 1
+              esc = False
+              while j < len(src):
+                  c = src[j]
                   if esc:
-                      esc=False
-                  elif c=='\\':
-                      esc=True
-                  elif c=='"':
+                      esc = False
+                  elif c == '\\':
+                      esc = True
+                  elif c == '"':
                       break
+                  j += 1
+              return (s, j+1, json.loads(src[s:j+1]))
 
-                  j+=1
-
-              return (
-                  s,
-                  j+1,
-                  json.loads(
-                      src[s:j+1]
-                  )
-              )
-
-          def setemb(src,name,val):
-              x=embedded(
-                  src,
-                  name
-              )
-
+          def set_embedded(src,name,val):
+              x = embedded(src,name)
               if not x:
-                  raise SystemExit(
-                      name+
-                      ' not found'
-                  )
+                  raise SystemExit(name + ' not found')
+              s,e,_ = x
+              return src[:s] + json.dumps(val) + src[e:]
 
-              s,e,_=x
-
-              return (
-                  src[:s]
-                  +json.dumps(val)
-                  +src[e:]
-              )
-
-          x=embedded(
-              cfg,
-              'OVERLAY_MODULE_KT'
-          )
-
+          x = embedded(cfg,'OVERLAY_MODULE_KT')
           if not x:
-              raise SystemExit(
-                  'OVERLAY_MODULE_KT not found'
-              )
+              raise SystemExit('OVERLAY_MODULE_KT not found')
 
-          kt=x[2]
+          kt = x[2]
 
           if 'fun canScheduleExactAlarms' not in kt:
-              anchor=(
-                  '  @ReactMethod\n'
-                  '  fun startHud(apiKey: String, promise: Promise) {'
-              )
-
-              methods='''  @ReactMethod
+              anchor = '  @ReactMethod\n  fun startHud(apiKey: String, promise: Promise) {'
+              methods = '''  @ReactMethod
           fun canScheduleExactAlarms(promise: Promise) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
               promise.resolve(true)
               return
             }
-
             try {
-              val a =
-                appContext.getSystemService(Context.ALARM_SERVICE)
-                as android.app.AlarmManager
-
-              promise.resolve(
-                a.canScheduleExactAlarms()
-              )
+              val a = appContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+              promise.resolve(a.canScheduleExactAlarms())
             } catch (_: Exception) {
               promise.resolve(false)
             }
@@ -481,28 +338,18 @@ jobs:
               promise.resolve(true)
               return
             }
-
             try {
-              val a =
-                appContext.getSystemService(Context.ALARM_SERVICE)
-                as android.app.AlarmManager
-
+              val a = appContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
               if (a.canScheduleExactAlarms()) {
                 promise.resolve(true)
                 return
               }
-
               val i = Intent(
                 Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                Uri.parse(
-                  "package:${appContext.packageName}"
-                )
+                Uri.parse("package:${appContext.packageName}")
               ).apply {
-                addFlags(
-                  Intent.FLAG_ACTIVITY_NEW_TASK
-                )
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
               }
-
               appContext.startActivity(i)
               promise.resolve(false)
             } catch (e: Exception) {
@@ -514,459 +361,229 @@ jobs:
             }
           }
 
-          '''+anchor
+          ''' + anchor
 
               if anchor not in kt:
-                  raise SystemExit(
-                      'startHud anchor not found'
-                  )
+                  raise SystemExit('startHud anchor not found')
 
-              kt=kt.replace(
-                  anchor,
-                  methods,
-                  1
-              )
+              kt = kt.replace(anchor, methods, 1)
+              cfg = set_embedded(cfg, 'OVERLAY_MODULE_KT', kt)
 
-              cfg=setemb(
-                  cfg,
-                  'OVERLAY_MODULE_KT',
-                  kt
-              )
-
-          Path(
-              'app.config.js'
-          ).write_text(cfg)
-
-          print(
-              '✓ alert sync + UI patch applied'
-          )
+          Path('app.config.js').write_text(cfg)
+          print('✓ alert sync + UI patch applied')
           PY
 
-      - name: Rebuild Torn cooldown symbols
+      - name: Rebuild Torn cooldown symbols with transparency
         shell: bash
         run: |
           python3 -m pip install --quiet pillow
 
           python3 <<'PY'
           from pathlib import Path
-          from PIL import Image,ImageDraw
+          from PIL import Image, ImageDraw
           import base64
           import json
           import math
           import re
 
-          S=128
+          S = 128
 
-          def canvas():
-              return Image.new(
-                  'RGBA',
-                  (S,S),
-                  (0,0,0,0)
-              )
+          def blank():
+              return Image.new('RGBA', (S, S), (0, 0, 0, 0))
 
-          def leaflet(
-              d,
-              cx,
-              cy,
-              a,
-              L,
-              w,
-              color
-          ):
-              a=math.radians(a)
+          def verify_transparent(path):
+              im = Image.open(path).convert('RGBA')
+              corners = [
+                  im.getpixel((0, 0))[3],
+                  im.getpixel((im.width - 1, 0))[3],
+                  im.getpixel((0, im.height - 1))[3],
+                  im.getpixel((im.width - 1, im.height - 1))[3],
+              ]
+              if max(corners) > 10:
+                  raise SystemExit(f'{path}: background transparency failed')
+              return True
 
-              dx=math.sin(a)
-              dy=-math.cos(a)
-
-              px=-dy
-              py=dx
-
-              mx=cx+dx*L*.52
-              my=cy+dy*L*.52
-
-              d.polygon(
-                  [
-                      (cx,cy),
-                      (
-                          cx+px*w,
-                          cy+py*w
-                      ),
-                      (
-                          mx+px*w*.6,
-                          my+py*w*.6
-                      ),
-                      (
-                          cx+dx*L,
-                          cy+dy*L
-                      ),
-                      (
-                          mx-px*w*.6,
-                          my-py*w*.6
-                      ),
-                      (
-                          cx-px*w,
-                          cy-py*w
-                      )
-                  ],
-                  fill=color
-              )
-
-          def drug():
-              im=canvas()
-              d=ImageDraw.Draw(im)
-
-              c=(
-                  196,
-                  110,
-                  255,
-                  255
-              )
-
-              s=(
-                  222,
-                  180,
-                  255,
-                  255
-              )
-
-              d.line(
-                  (64,96,64,61),
-                  fill=s,
-                  width=6
-              )
-
-              for a,L,w,o in [
-                  (0,39,8,0),
-                  (-24,35,7,-3),
-                  (-47,29,6,-5),
-                  (-72,23,5,-6),
-                  (24,35,7,3),
-                  (47,29,6,5),
-                  (72,23,5,6)
-              ]:
-                  leaflet(
-                      d,
-                      64+o,
-                      79+abs(o),
-                      a,
-                      L,
-                      w,
-                      c
-                  )
-
+          def down_arrow(color):
+              im = blank()
+              d = ImageDraw.Draw(im)
+              d.rounded_rectangle((84, 84, 108, 106), radius=5, fill=color)
+              d.polygon([(96, 114), (78, 98), (114, 98)], fill=color)
               return im
 
-          def booster():
-              im=canvas()
-              d=ImageDraw.Draw(im)
+          def paste_center(base, overlay):
+              base.alpha_composite(overlay)
 
-              o=(
-                  130,
-                  226,
-                  255,
-                  255
-              )
+          def leaf_icon():
+              im = blank()
+              d = ImageDraw.Draw(im)
 
-              a=(
-                  180,
-                  245,
-                  255,
-                  255
-              )
+              leaf = (92, 150, 26, 255)
+              stem = (85, 135, 18, 255)
 
-              f=(
-                  40,
-                  92,
-                  130,
-                  90
-              )
-
-              d.rounded_rectangle(
-                  (39,35,89,104),
-                  12,
-                  fill=f,
-                  outline=o,
-                  width=5
-              )
-
-              d.rounded_rectangle(
-                  (50,24,78,41),
-                  6,
-                  fill=f,
-                  outline=o,
-                  width=5
-              )
-
-              d.rounded_rectangle(
-                  (47,18,81,28),
-                  5,
-                  fill=(
-                      70,
-                      120,
-                      145,
-                      130
-                  ),
-                  outline=a,
-                  width=4
-              )
-
-              d.rounded_rectangle(
-                  (46,51,82,83),
-                  8,
-                  fill=(
-                      10,
-                      24,
-                      36,
-                      120
-                  ),
-                  outline=a,
-                  width=3
-              )
-
-              d.polygon(
-                  [
-                      (63,54),
-                      (56,68),
-                      (63,68),
-                      (59,81),
-                      (72,63),
-                      (65,63),
-                      (69,54)
-                  ],
-                  fill=a
-              )
-
-              return im
-
-          def medical():
-              im=canvas()
-              d=ImageDraw.Draw(im)
-
-              o=(
-                  255,
-                  120,
-                  120,
-                  255
-              )
-
-              a=(
-                  255,
-                  215,
-                  215,
-                  255
-              )
-
-              f=(
-                  110,
-                  35,
-                  45,
-                  90
-              )
-
-              d.rounded_rectangle(
-                  (28,54,82,76),
-                  8,
-                  fill=f,
-                  outline=o,
-                  width=5
-              )
-
-              d.line(
-                  (82,65,106,65),
-                  fill=a,
-                  width=4
-              )
-
-              d.line(
-                  (106,65,116,62),
-                  fill=a,
-                  width=2
-              )
-
-              d.line(
-                  (106,65,116,68),
-                  fill=a,
-                  width=2
-              )
-
-              d.rectangle(
-                  (18,58,28,72),
-                  outline=o,
-                  width=4
-              )
-
-              d.line(
-                  (12,65,18,65),
-                  fill=o,
-                  width=4
-              )
-
-              d.line(
-                  (8,60,8,70),
-                  fill=o,
-                  width=4
-              )
-
-              for x in (
-                  45,
-                  56,
-                  67
-              ):
-                  d.line(
-                      (x,58,x,72),
-                      fill=a,
-                      width=3
+              def leaflet(cx, cy, angle_deg, length, width):
+                  ang = math.radians(angle_deg)
+                  dx = math.sin(ang)
+                  dy = -math.cos(ang)
+                  px = -dy
+                  py = dx
+                  mx = cx + dx * length * 0.52
+                  my = cy + dy * length * 0.52
+                  d.polygon(
+                      [
+                          (cx, cy),
+                          (cx + px * width, cy + py * width),
+                          (mx + px * width * 0.45, my + py * width * 0.45),
+                          (cx + dx * length, cy + dy * length),
+                          (mx - px * width * 0.45, my - py * width * 0.45),
+                          (cx - px * width, cy - py * width),
+                      ],
+                      fill=leaf
                   )
 
-              return im.rotate(
-                  -35,
-                  resample=
-                  Image.Resampling.BICUBIC
-              )
+              d.line((60, 105, 60, 72), fill=stem, width=5)
+              base = (60, 76)
 
-          for name,fn in {
-              'tp-drug.png':drug,
-              'tp-booster.png':booster,
-              'tp-medical.png':medical
-          }.items():
-              fn().save(
-                  name,
-                  'PNG',
-                  optimize=True
-              )
+              leaflet(base[0], base[1], 0, 38, 7)
+              leaflet(base[0]-2, base[1]+3, -26, 32, 6)
+              leaflet(base[0]-4, base[1]+9, -50, 27, 5)
+              leaflet(base[0]-5, base[1]+15, -74, 22, 4)
+              leaflet(base[0]+2, base[1]+3, 26, 32, 6)
+              leaflet(base[0]+4, base[1]+9, 50, 27, 5)
+              leaflet(base[0]+5, base[1]+15, 74, 22, 4)
 
-          def clean(path):
-              im=Image.open(
-                  path
-              ).convert(
-                  'RGBA'
-              )
+              # small glow edge mimic
+              d.line((60, 105, 60, 72), fill=(70, 110, 18, 180), width=1)
 
-              p=im.load()
+              im.alpha_composite(down_arrow((225, 109, 95, 255)))
+              return im
 
-              for y in range(
-                  im.height
-              ):
-                  for x in range(
-                      im.width
-                  ):
-                      r,g,b,a=p[x,y]
-                      m=max(r,g,b)
+          def bottle_icon():
+              base = blank()
+              d = ImageDraw.Draw(base)
 
-                      if m<=28:
-                          p[x,y]=(
-                              r,
-                              g,
-                              b,
-                              0
-                          )
+              # draw upright bottle first, then rotate for Torn look
+              body_fill = (245, 245, 245, 255)
+              glass_edge = (220, 220, 220, 255)
+              liquid_top = (222, 46, 48, 255)
+              liquid_body = (229, 143, 63, 255)
+              cap_fill = (240, 240, 240, 255)
 
-                      elif m<72:
-                          p[x,y]=(
-                              r,
-                              g,
-                              b,
-                              round(
-                                  a*
-                                  (m-28)/
-                                  44
-                              )
-                          )
+              d.rounded_rectangle((34, 26, 80, 104), radius=16, fill=body_fill, outline=glass_edge, width=2)
+              d.rounded_rectangle((46, 8, 70, 32), radius=7, fill=cap_fill, outline=glass_edge, width=2)
+              d.rounded_rectangle((34, 58, 80, 104), radius=14, fill=liquid_body)
+              d.rectangle((34, 50, 80, 60), fill=liquid_top)
 
-              im.save(
-                  path,
-                  'PNG',
-                  optimize=True
-              )
+              bottle = base.rotate(-36, resample=Image.Resampling.BICUBIC, expand=False)
 
-          for f in (
-              'tp-health.png',
-              'tp-energy.png',
-              'tp-happiness.png'
-          ):
-              if Path(f).exists():
-                  clean(f)
+              final = blank()
+              final.alpha_composite(bottle)
+              final.alpha_composite(down_arrow((214, 173, 54, 255)))
+              return final
 
-          cfg=Path(
-              'app.config.js'
-          ).read_text()
+          def syringe_icon():
+              base = blank()
+              d = ImageDraw.Draw(base)
 
-          m=re.search(
-              r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");',
-              cfg
-          )
+              white = (245, 245, 245, 255)
+              blue = (111, 191, 235, 255)
+              light_blue = (166, 216, 245, 255)
+              edge = (230, 230, 230, 255)
 
-          if not m:
-              raise SystemExit(
-                  'OVERLAY_SERVICE_KT not found'
-              )
+              d.rounded_rectangle((28, 54, 84, 76), radius=7, fill=blue, outline=edge, width=2)
+              d.polygon([(20, 63), (28, 54), (28, 76)], fill=white)
+              d.line((84, 65, 106, 65), fill=white, width=4)
+              d.line((106, 65, 117, 60), fill=white, width=2)
+              d.line((106, 65, 117, 70), fill=white, width=2)
+              d.line((44, 57, 44, 73), fill=light_blue, width=3)
+              d.line((56, 57, 56, 73), fill=light_blue, width=3)
+              d.line((68, 57, 68, 73), fill=light_blue, width=3)
+              d.rectangle((12, 58, 22, 72), fill=white)
+              d.line((8, 65, 12, 65), fill=white, width=4)
 
-          kt=json.loads(
-              m.group(1)
-          )
+              syringe = base.rotate(-36, resample=Image.Resampling.BICUBIC, expand=False)
+              final = blank()
+              final.alpha_composite(syringe)
+              final.alpha_composite(down_arrow((23, 138, 63, 255)))
+              return final
 
-          mapping={
-              'TP_DRUG_ICON':
-              'tp-drug.png',
-
-              'TP_BOOSTER_ICON':
-              'tp-booster.png',
-
-              'TP_MEDICAL_ICON':
-              'tp-medical.png',
-
-              'TP_HEALTH_ICON':
-              'tp-health.png',
-
-              'TP_ENERGY_ICON':
-              'tp-energy.png',
-
-              'TP_HAPPINESS_ICON':
-              'tp-happiness.png'
+          builders = {
+              'tp-drug.png': leaf_icon,
+              'tp-booster.png': bottle_icon,
+              'tp-medical.png': syringe_icon,
           }
 
-          for key,f in mapping.items():
-              if not Path(f).exists():
+          for filename, fn in builders.items():
+              im = fn()
+              im.save(filename, 'PNG', optimize=True)
+              verify_transparent(filename)
+              print(f'✓ built {filename} with transparent background')
+
+          # Clean health / energy / happiness if they exist, removing any dark matte
+          def clean_dark_matte(path):
+              if not Path(path).exists():
+                  return
+              im = Image.open(path).convert('RGBA')
+              px = im.load()
+              changed = False
+              for y in range(im.height):
+                  for x in range(im.width):
+                      r,g,b,a = px[x,y]
+                      m = max(r,g,b)
+                      if a == 0:
+                          continue
+                      if m <= 28:
+                          px[x,y] = (r,g,b,0)
+                          changed = True
+                      elif m < 72:
+                          px[x,y] = (r,g,b,round(a*(m-28)/44))
+                          changed = True
+              im.save(path, 'PNG', optimize=True)
+              verify_transparent(path)
+              if changed:
+                  print(f'✓ cleaned matte from {path}')
+
+          for file_name in ('tp-health.png','tp-energy.png','tp-happiness.png'):
+              if Path(file_name).exists():
+                  clean_dark_matte(file_name)
+
+          cfg = Path('app.config.js').read_text()
+
+          m = re.search(r'const OVERLAY_SERVICE_KT = ("(?:\\.|[^"\\])*");', cfg)
+          if not m:
+              raise SystemExit('OVERLAY_SERVICE_KT not found')
+
+          service = json.loads(m.group(1))
+
+          mapping = {
+              'TP_DRUG_ICON': 'tp-drug.png',
+              'TP_BOOSTER_ICON': 'tp-booster.png',
+              'TP_MEDICAL_ICON': 'tp-medical.png',
+          }
+
+          # also refresh these if present so there are no old boxed versions in native HUD
+          optional_mapping = {
+              'TP_HEALTH_ICON': 'tp-health.png',
+              'TP_ENERGY_ICON': 'tp-energy.png',
+              'TP_HAPPINESS_ICON': 'tp-happiness.png',
+          }
+
+          all_mapping = {}
+          all_mapping.update(mapping)
+          all_mapping.update(optional_mapping)
+
+          for const_name, filename in all_mapping.items():
+              if not Path(filename).exists():
                   continue
+              encoded = base64.b64encode(Path(filename).read_bytes()).decode('ascii')
+              pattern = re.compile(r'(private val ' + re.escape(const_name) + r' = ")([A-Za-z0-9+/=]+)(")')
+              if pattern.search(service):
+                  service = pattern.sub(lambda z: z.group(1) + encoded + z.group(3), service, count=1)
+                  print(f'✓ synced {const_name} from {filename}')
 
-              data=base64.b64encode(
-                  Path(f).read_bytes()
-              ).decode()
+          cfg = cfg[:m.start(1)] + json.dumps(service) + cfg[m.end(1):]
+          Path('app.config.js').write_text(cfg)
 
-              pat=re.compile(
-                  r'(private val '
-                  +re.escape(key)
-                  +r' = ")([A-Za-z0-9+/=]+)(")'
-              )
-
-              if not pat.search(kt):
-                  raise SystemExit(
-                      key+
-                      ' not found'
-                  )
-
-              kt=pat.sub(
-                  lambda z:
-                  z.group(1)
-                  +data
-                  +z.group(3),
-                  kt,
-                  count=1
-              )
-
-          cfg=(
-              cfg[:m.start(1)]
-              +json.dumps(kt)
-              +cfg[m.end(1):]
-          )
-
-          Path(
-              'app.config.js'
-          ).write_text(cfg)
-
-          print(
-              '✓ Drug=leaf • Booster=bottle • Medical=syringe'
-          )
+          print('✅ Torn cooldown symbols rebuilt with transparent backgrounds')
           PY
 
       - name: Install dependencies
@@ -993,72 +610,42 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          p=Path(
-              'android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt'
-          )
+          p = Path('android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt')
+          s = p.read_text()
 
-          s=p.read_text()
-
-          if 'TORNPULSE_IMMERSIVE_NAV_RC7' not in s:
-              e=s.find(
-                  '\n',
-                  s.find('package ')
-              )
-
-              s=(
+          if 'TORNPULSE_IMMERSIVE_NAV_RC8' not in s:
+              e = s.find('\n', s.find('package '))
+              s = (
                   s[:e+1]
-                  +'import androidx.core.view.WindowCompat\n'
-                  +'import androidx.core.view.WindowInsetsCompat\n'
-                  +'import androidx.core.view.WindowInsetsControllerCompat\n'
-                  +s[e+1:]
+                  + 'import androidx.core.view.WindowCompat\n'
+                  + 'import androidx.core.view.WindowInsetsCompat\n'
+                  + 'import androidx.core.view.WindowInsetsControllerCompat\n'
+                  + s[e+1:]
               )
 
-              end=s.rfind(
-                  '\n}'
-              )
-
-              code='''
-            // TORNPULSE_IMMERSIVE_NAV_RC7
+              end = s.rfind('\n}')
+              code = '''
+            // TORNPULSE_IMMERSIVE_NAV_RC8
             private fun applyTornPulseNav() {
-              val c =
-                WindowCompat.getInsetsController(
-                  window,
-                  window.decorView
-                )
-
-              c.hide(
-                WindowInsetsCompat.Type.navigationBars()
-              )
-
+              val c = WindowCompat.getInsetsController(window, window.decorView)
+              c.hide(WindowInsetsCompat.Type.navigationBars())
               c.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
 
-            override fun onWindowFocusChanged(
-              hasFocus: Boolean
-            ) {
-              super.onWindowFocusChanged(
-                hasFocus
-              )
-
+            override fun onWindowFocusChanged(hasFocus: Boolean) {
+              super.onWindowFocusChanged(hasFocus)
               if (hasFocus) {
                 applyTornPulseNav()
               }
             }
           '''
-
-              s=(
-                  s[:end]
-                  +code
-                  +s[end:]
-              )
-
-              s=s.replace(
+              s = s[:end] + code + s[end:]
+              s = s.replace(
                   'super.onCreate(null)',
                   'super.onCreate(null)\n    window.decorView.post { applyTornPulseNav() }',
                   1
               )
-
               p.write_text(s)
           PY
 
@@ -1066,25 +653,19 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-
-          ./gradlew assembleRelease \
-            -PreactNativeArchitectures=arm64-v8a
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
       - name: Verify APK
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
-
           test -s "$APK"
-
           unzip -t "$APK" >/dev/null
-
           sha256sum "$APK"
-
           ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tornpulse-v2.0.0-rc7-fixed-cooldown-icons-arm64-apk
+          name: tornpulse-v2.0.0-rc8-torn-cooldown-icons-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
