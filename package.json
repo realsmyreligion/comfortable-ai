@@ -1,20 +1,17 @@
 {
-  "name": "tornpulse",
-  "version": "2.0.0",
+  "name": "tornpulse-market",
+  "version": "3.0.0",
   "private": true,
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
-    "prebuild:android": "expo prebuild --platform android --clean",
-    "apk:debug": "npm run prebuild:android && cd android && ./gradlew assembleDebug",
-    "bundle:release": "npm run prebuild:android && cd android && ./gradlew bundleRelease",
+    "android": "expo start --android",
     "selftest": "node scripts/self-test.cjs",
-    "verify": "node scripts/verify-v2-foundation.cjs"
+    "prebuild:android": "expo prebuild --platform android --clean",
+    "bundle:android": "expo export --platform android"
   },
   "dependencies": {
     "expo": "~57.0.0",
-    "expo-notifications": "~57.0.13",
     "expo-secure-store": "*",
     "expo-status-bar": "*",
     "react": "19.2.3",

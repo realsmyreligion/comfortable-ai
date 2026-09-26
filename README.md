@@ -1,39 +1,35 @@
-# Comfortable AI v0.5
+# Torn Pulse — Foreign Market V1
 
-A mobile-first, read-only Torn co-pilot for Mr. Comfortable.
+This is a clean rebuild of Torn Pulse as a foreign-market-only companion. The old HUD, battle bars, cooldowns, activity pages, generic item market, and general Torn companion features are intentionally removed.
 
-## What this build does
-- Live Torn API v2 Bars + Cooldowns
-- Energy and Nerve cap countdowns
-- Drug / Booster / Medical cooldown countdowns
-- Android local notifications scheduled from Torn's real `full_time`
-- Secure API key storage using Expo SecureStore
-- Demo Mode that works without a Torn API key
-- Basic Next Move recommendations
-- Automatic refresh every 2 minutes while open and on return to foreground
-- GitHub Actions workflow that builds an installable debug APK
+## App structure
 
-## Security
-Never commit your Torn API key. The app stores it locally in Android secure storage. Comfortable AI never needs your Torn password.
+- **Radar** — crowdsourced foreign quantities, freshness, country/item search, profit per slot when Torn prices are connected, session depletion tracking, arrival-risk label, and a best-current-run card.
+- **Trips** — ranks each country by its strongest current stocked item. With a Torn API key it ranks by projected profit per round-trip minute.
+- **Watchlist** — star specific foreign items and keep them together.
+- **Settings** — local Torn API key, normal carrying capacity, Tourism multiplier, travel method, Mailing Yourself Abroad, refresh interval, sold-out filtering.
 
-## Torn key access
-Bars and Cooldowns both require only a **Minimal access** Torn API key according to Torn API v2.
+## Data sources
 
-## Build locally
-Requires Node 22.13+.
+- Foreign quantities: `https://yata.yt/api/v1/travel/export/` (crowdsourced observations).
+- Market values: Torn API v2 `torn/items` when the user supplies an API key.
 
-```bash
-npm install
-npx expo install --fix
-npm run selftest
-npm run apk:debug
-```
+The UI deliberately labels foreign inventory as observed/crowdsourced data. It does not claim to have a direct per-second Torn shop feed.
 
-APK output:
-`android/app/build/outputs/apk/debug/app-debug.apk`
+## Build
 
-## Build automatically on GitHub
-Push this folder's contents to the root of the `comfortable-ai` repository. The included **Build Android APK** workflow runs on every push to `main` or manually from the Actions tab. Download the `comfortable-ai-debug-apk` artifact when the job finishes.
+The included GitHub Actions workflow builds an ARM64 Android release APK on each push to `main` or manual workflow run.
 
-## Important v0.5 scope
-This version deliberately favors reliability over feature count. Background polling while Android fully suspends the app is not yet promised; notifications are scheduled from the latest real Torn snapshot and are re-scheduled whenever the app syncs.
+1. Replace the old repository contents with this project.
+2. Keep `.github/workflows/android.yml`.
+3. Commit to `main`.
+4. Open **Actions → Build Torn Pulse Market V1**.
+5. Download the `torn-pulse-market-v1-arm64-apk` artifact.
+
+The Android package remains `com.comfortableai.torncopilot` so this project continues the existing Torn Pulse application identity. If Android reports a signing conflict with a previously installed development APK, uninstall that older APK first and install the new build.
+
+## Version
+
+- App version: **3.0.0**
+- Android versionCode: **30**
+- Product milestone: **Market V1**
