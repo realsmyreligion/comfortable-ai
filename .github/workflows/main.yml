@@ -1,4 +1,4 @@
-name: Build TornPulse 2.0 RC16 Vitals + HUD
+name: Build Torn Pulse Market V1
 
 on:
   workflow_dispatch:
@@ -18,14 +18,11 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 50
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22.13.1"
-          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -33,484 +30,256 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore source folders
+      - name: Restore Market V1 source modules
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p src scripts
-          cp core.js demo.js notifications.js storage.js tornApi.js src/
-          cp self-test.cjs scripts/self-test.cjs
 
-      - name: Recover RC15 sync cooldowns and revamped vitals
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RC15_SHA="ce2b6370078d8ba113aaf12cfc791a8a9f67088d"
-
-          echo "Using verified RC15 commit:"
-          echo "$RC15_SHA"
-
-          git cat-file -e "$RC15_SHA:.github/workflows/main.yml"
-          git show "$RC15_SHA:.github/workflows/main.yml" > /tmp/rc15.yml
-
-          python3 -m pip install --quiet pyyaml
-
-          python3 <<'PY'
-          from pathlib import Path
-          import yaml
-
-          data = yaml.safe_load(Path('/tmp/rc15.yml').read_text())
-          steps = data['jobs']['android']['steps']
-
-          wanted = {
-              'Recover verified RC12 sync and exact cooldown icons':
-                  '/tmp/01-recover-rc12.sh',
-              'Generate revamped vital icons':
-                  '/tmp/02-generate-vitals.sh',
-              'Verify revamped vital icons':
-                  '/tmp/03-verify-vitals.sh',
-          }
-
-          found = set()
-
-          for step in steps:
-              name = str(step.get('name', '')).strip()
-
-              if name not in wanted:
-                  continue
-
-              run = step.get('run')
-
-              if not run:
-                  raise SystemExit(
-                      name + ': run block missing'
-                  )
-
-              Path(
-                  wanted[name]
-              ).write_text(
-                  'set -euo pipefail\n'
-                  + run
-                  + '\n'
-              )
-
-              found.add(name)
-
-          missing = [
-              name
-              for name in wanted
-              if name not in found
-          ]
-
-          if missing:
-              raise SystemExit(
-                  'Missing RC15 step(s): '
-                  + ', '.join(missing)
-              )
-
-          print(
-              '✓ recovered RC15 synchronization + cooldown icon step'
-          )
-
-          print(
-              '✓ recovered RC15 revamped vital generator'
-          )
-
-          print(
-              '✓ recovered RC15 vital transparency verification'
-          )
-          PY
-
-          bash /tmp/01-recover-rc12.sh
-          bash /tmp/02-generate-vitals.sh
-          bash /tmp/03-verify-vitals.sh
-
-      - name: Inject revamped vital icons into floating HUD
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python3 <<'PY'
-          from pathlib import Path
-          import base64
-          import json
-
-          cfg_path = Path(
-              'app.config.js'
-          )
-
-          cfg = cfg_path.read_text()
-
-          def embedded(src, name):
-              prefix = (
-                  'const '
-                  + name
-                  + ' = '
-              )
-
-              i = src.find(prefix)
-
-              if i < 0:
-                  return None
-
-              start = i + len(prefix)
-
-              if (
-                  start >= len(src)
-                  or src[start] != '"'
-              ):
-                  return None
-
-              j = start + 1
-              escaped = False
-
-              while j < len(src):
-                  c = src[j]
-
-                  if escaped:
-                      escaped = False
-
-                  elif c == '\\':
-                      escaped = True
-
-                  elif c == '"':
-                      break
-
-                  j += 1
-
-              if j >= len(src):
-                  return None
-
-              return (
-                  start,
-                  j + 1,
-                  json.loads(
-                      src[start:j+1]
-                  )
-              )
-
-          def set_embedded(
-              src,
-              name,
-              value
-          ):
-              found = embedded(
-                  src,
-                  name
-              )
-
-              if not found:
-                  raise SystemExit(
-                      name
-                      + ' not found in app.config.js'
-                  )
-
-              start, end, _ = found
-
-              return (
-                  src[:start]
-                  + json.dumps(value)
-                  + src[end:]
-              )
-
-          found = embedded(
-              cfg,
-              'OVERLAY_SERVICE_KT'
-          )
-
-          if not found:
-              raise SystemExit(
-                  'OVERLAY_SERVICE_KT not found'
-              )
-
-          service = found[2]
-
-          icons = {
-              'TP_HEALTH_ICON':
-                  'tp-health.png',
-
-              'TP_ENERGY_ICON':
-                  'tp-energy.png',
-
-              'TP_NERVE_ICON':
-                  'tp-nerve.png',
-
-              'TP_HAPPINESS_ICON':
-                  'tp-happiness.png',
-          }
-
-          for constant, filename in icons.items():
-
-              path = Path(filename)
-
-              if not path.exists():
-                  raise SystemExit(
-                      filename + ' not found'
-                  )
-
-              encoded = base64.b64encode(
-                  path.read_bytes()
-              ).decode(
-                  'ascii'
-              )
-
-              needle = (
-                  'private val '
-                  + constant
-                  + ' = "'
-              )
-
-              i = service.find(
-                  needle
-              )
-
-              if i < 0:
-                  raise SystemExit(
-                      constant
-                      + ' not found in native HUD service'
-                  )
-
-              start = (
-                  i
-                  + len(needle)
-              )
-
-              end = service.find(
-                  '"',
-                  start
-              )
-
-              if end < 0:
-                  raise SystemExit(
-                      constant
-                      + ' closing quote not found'
-                  )
-
-              service = (
-                  service[:start]
-                  + encoded
-                  + service[end:]
-              )
-
-              if not encoded.startswith(
-                  'iVBOR'
-              ):
-                  raise SystemExit(
-                      constant
-                      + ' did not encode as PNG'
-                  )
-
-              print(
-                  '✓ HUD replaced '
-                  + constant
-                  + ' with '
-                  + filename
-              )
-
-          cfg = set_embedded(
-              cfg,
-              'OVERLAY_SERVICE_KT',
-              service
-          )
-
-          cfg_path.write_text(
-              cfg
-          )
-
-          check = embedded(
-              cfg,
-              'OVERLAY_SERVICE_KT'
-          )
-
-          if not check:
-              raise SystemExit(
-                  'HUD service verification failed'
-              )
-
-          updated = check[2]
-
-          for constant in icons:
-              needle = (
-                  'private val '
-                  + constant
-                  + ' = "iVBOR'
-              )
-
-              if needle not in updated:
-                  raise SystemExit(
-                      constant
-                      + ' is not using the new PNG'
-                  )
-
-          print(
-              '✅ Health / Energy / Nerve / Happiness updated in floating HUD'
-          )
-
-          print(
-              '✅ Transparent PNG artwork now matches the main TornPulse screen'
-          )
-          PY
-
-      - name: Install dependencies
-        run: |
-          npm ci --no-audit --no-fund
-
-      - name: Run self-test
-        run: |
-          npm run selftest
-
-      - name: Validate JavaScript bundle
-        run: |
-          npx expo export \
-            --platform android \
-            --output-dir /tmp/tornpulse-check
-
-      - name: Generate Android project
-        run: |
-          npx expo prebuild \
-            --platform android \
-            --clean
-
-      - name: Hide Android navigation bar
-        shell: bash
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          p = Path(
-              'android/app/src/main/java/com/comfortableai/torncopilot/MainActivity.kt'
-          )
-
-          if not p.exists():
-              raise SystemExit(
-                  'MainActivity.kt not found'
-              )
-
-          s = p.read_text()
-
-          marker = (
-              'TORNPULSE_IMMERSIVE_NAV_RC16'
-          )
-
-          if marker not in s:
-
-              package_pos = s.find(
-                  'package '
-              )
-
-              end_package = s.find(
-                  '\n',
-                  package_pos
-              )
-
-              if (
-                  package_pos < 0
-                  or end_package < 0
-              ):
-                  raise SystemExit(
-                      'package declaration not found'
-                  )
-
-              imports = '''import androidx.core.view.WindowCompat
-          import androidx.core.view.WindowInsetsCompat
-          import androidx.core.view.WindowInsetsControllerCompat
-          '''
-
-              if (
-                  'import androidx.core.view.WindowCompat'
-                  not in s
-              ):
-                  s = (
-                      s[:end_package+1]
-                      + imports
-                      + s[end_package+1:]
-                  )
-
-              end_class = s.rfind(
-                  '\n}'
-              )
-
-              if end_class < 0:
-                  raise SystemExit(
-                      'MainActivity class ending not found'
-                  )
-
-              code = '''
-            // TORNPULSE_IMMERSIVE_NAV_RC16
-            private fun applyTornPulseNav() {
-              val controller =
-                WindowCompat.getInsetsController(
-                  window,
-                  window.decorView
+          cat > src/api.js <<'TP_SRC_API_JS'
+          const {normalizeForeignStock} = require('./marketCore');
+
+          const YATA_EXPORT_URL =
+            'https://yata.yt/api/v1/travel/export/';
+
+          const TORN_ITEMS_URL =
+            'https://api.torn.com/v2/torn/items?cat=All&sort=ASC&comment=TornPulseMkt';
+
+          async function fetchJson(
+            url,
+            options = {},
+            timeoutMs = 15000
+          ) {
+            const controller =
+              typeof AbortController !== 'undefined'
+                ? new AbortController()
+                : null;
+
+            const timer = controller
+              ? setTimeout(
+                  () => controller.abort(),
+                  timeoutMs
                 )
+              : null;
 
-              controller.hide(
-                WindowInsetsCompat.Type.navigationBars()
-              )
+            try {
+              const response = await fetch(url, {
+                ...options,
+                signal: controller
+                  ? controller.signal
+                  : undefined
+              });
 
-              controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
+              if (!response.ok) {
+                throw new Error(
+                  `Request failed (${response.status})`
+                );
+              }
 
-            override fun onWindowFocusChanged(
-              hasFocus: Boolean
-            ) {
-              super.onWindowFocusChanged(
-                hasFocus
-              )
+              const data = await response.json();
 
-              if (hasFocus) {
-                applyTornPulseNav()
+              if (data && data.error) {
+                const message =
+                  data.error.error ||
+                  data.error.message ||
+                  JSON.stringify(data.error);
+
+                throw new Error(message);
+              }
+
+              return data;
+            } catch (error) {
+              if (
+                String(error && error.name) ===
+                'AbortError'
+              ) {
+                throw new Error(
+                  'Request timed out'
+                );
+              }
+
+              throw error;
+            } finally {
+              if (timer) {
+                clearTimeout(timer);
               }
             }
-          '''
+          }
 
-              s = (
-                  s[:end_class]
-                  + code
-                  + s[end_class:]
+          async function fetchForeignStock() {
+            const payload = await fetchJson(
+              YATA_EXPORT_URL,
+              {
+                headers: {
+                  Accept: 'application/json'
+                }
+              }
+            );
+
+            const rows =
+              normalizeForeignStock(payload);
+
+            if (!rows.length) {
+              throw new Error(
+                'Foreign stock feed returned no usable stock data.'
+              );
+            }
+
+            return {
+              rows,
+              fetchedAt: Date.now()
+            };
+          }
+
+          function extractItems(payload) {
+            if (
+              Array.isArray(
+                payload && payload.items
               )
+            ) {
+              return payload.items;
+            }
 
-              if (
-                  'window.decorView.post { applyTornPulseNav() }'
-                  not in s
-              ):
-                  s = s.replace(
-                      'super.onCreate(null)',
-                      'super.onCreate(null)\n'
-                      '    window.decorView.post { applyTornPulseNav() }',
-                      1
+            if (
+              payload &&
+              payload.items &&
+              typeof payload.items === 'object'
+            ) {
+              return Object.entries(
+                payload.items
+              ).map(
+                ([id, item]) => ({
+                  id: Number(
+                    item && item.id || id
+                  ),
+                  ...(item || {})
+                })
+              );
+            }
+
+            if (Array.isArray(payload)) {
+              return payload;
+            }
+
+            return [];
+          }
+
+          async function fetchTornItemPrices(
+            apiKey
+          ) {
+            const key =
+              String(apiKey || '').trim();
+
+            if (!key) {
+              throw new Error(
+                'Add a Torn API key in Settings to sync market values.'
+              );
+            }
+
+            const url =
+              `${TORN_ITEMS_URL}&key=` +
+              encodeURIComponent(key);
+
+            const payload = await fetchJson(
+              url,
+              {
+                headers: {
+                  Accept: 'application/json'
+                }
+              },
+              20000
+            );
+
+            const items =
+              extractItems(payload);
+
+            if (!items.length) {
+              throw new Error(
+                'Torn items API returned no item data.'
+              );
+            }
+
+            const map = {};
+
+            for (const item of items) {
+              const id = Number(
+                item && item.id
+              );
+
+              if (!Number.isFinite(id)) {
+                continue;
+              }
+
+              const value =
+                item && item.value || {};
+
+              const marketPrice = Number(
+                value.market_price ??
+                item.market_price ??
+                item.market_value ??
+                0
+              );
+
+              map[String(id)] = {
+                id,
+                name: String(
+                  item.name ||
+                  `Item #${id}`
+                ),
+                marketPrice:
+                  Number.isFinite(
+                    marketPrice
                   )
+                    ? marketPrice
+                    : 0
+              };
+            }
 
-              p.write_text(s)
+            return {
+              map,
+              fetchedAt: Date.now(),
+              count:
+                Object.keys(map).length
+            };
+          }
 
-          print(
-              '✓ immersive navigation patch applied'
-          )
-          PY
+          module.exports = {
+            fetchForeignStock,
+            fetchTornItemPrices
+          };
+          TP_SRC_API_JS
 
-      - name: Build ARM64 release APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
+          cat > src/marketCore.js <<'TP_SRC_MARKETCORE_JS'
+          const COUNTRIES = {
+            mex: {
+              name: 'Mexico',
+              city: 'Ciudad Juárez',
+              flag: '🇲🇽',
+              cost: 6500,
+              times: {
+                standard: 24,
+                airstrip: 17,
+                wlt: 12,
+                business: 7
+              },
+              bookTimes: {
+                standard: 18,
+                airstrip: 13,
+                wlt: 9,
+                business: 5
+              }
+            },
 
-          ./gradlew assembleRelease \
-            -PreactNativeArchitectures=arm64-v8a
-
-      - name: Verify APK
-        run: |
-          APK=android/app/build/outputs/apk/release/app-release.apk
-
-          test -s "$APK"
-
-          unzip -t "$APK" >/dev/null
-
-          sha256sum "$APK"
-
-          ls -lh "$APK"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: tornpulse-v2.0.0-rc16-vitals-hud-arm64-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+            cay: {
+              name: 'Cayman Islands',
+              city: 'George Town',
+              flag: '🇰🇾',
+              cost: 10000,
+              times: {
+                standard: 33,
+                airstrip: 23,
+                wlt: 17,
+                business: 10
+              },
+              bookTimes: {
+               
