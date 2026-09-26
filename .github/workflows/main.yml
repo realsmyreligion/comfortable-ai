@@ -11,6 +11,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
+
     env:
       CI: true
       NODE_ENV: production
@@ -30,256 +31,43 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore Market V1 source modules
-        shell: bash
+      - name: Verify Market V1 source
         run: |
-          set -euo pipefail
-          mkdir -p src scripts
+          test -f App.js
+          test -f src/api.js
+          test -f src/marketCore.js
+          test -f src/storage.js
+          test -f scripts/self-test.cjs
 
-          cat > src/api.js <<'TP_SRC_API_JS'
-          const {normalizeForeignStock} = require('./marketCore');
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
 
-          const YATA_EXPORT_URL =
-            'https://yata.yt/api/v1/travel/export/';
+      - name: Run market self-test
+        run: npm run selftest
 
-          const TORN_ITEMS_URL =
-            'https://api.torn.com/v2/torn/items?cat=All&sort=ASC&comment=TornPulseMkt';
+      - name: Validate JavaScript bundle
+        run: npx expo export --platform android
 
-          async function fetchJson(
-            url,
-            options = {},
-            timeoutMs = 15000
-          ) {
-            const controller =
-              typeof AbortController !== 'undefined'
-                ? new AbortController()
-                : null;
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --clean --no-install
 
-            const timer = controller
-              ? setTimeout(
-                  () => controller.abort(),
-                  timeoutMs
-                )
-              : null;
+      - name: Build ARM64 release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 
-            try {
-              const response = await fetch(url, {
-                ...options,
-                signal: controller
-                  ? controller.signal
-                  : undefined
-              });
+      - name: Verify APK
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          sha256sum "$APK"
+          ls -lh "$APK"
 
-              if (!response.ok) {
-                throw new Error(
-                  `Request failed (${response.status})`
-                );
-              }
-
-              const data = await response.json();
-
-              if (data && data.error) {
-                const message =
-                  data.error.error ||
-                  data.error.message ||
-                  JSON.stringify(data.error);
-
-                throw new Error(message);
-              }
-
-              return data;
-            } catch (error) {
-              if (
-                String(error && error.name) ===
-                'AbortError'
-              ) {
-                throw new Error(
-                  'Request timed out'
-                );
-              }
-
-              throw error;
-            } finally {
-              if (timer) {
-                clearTimeout(timer);
-              }
-            }
-          }
-
-          async function fetchForeignStock() {
-            const payload = await fetchJson(
-              YATA_EXPORT_URL,
-              {
-                headers: {
-                  Accept: 'application/json'
-                }
-              }
-            );
-
-            const rows =
-              normalizeForeignStock(payload);
-
-            if (!rows.length) {
-              throw new Error(
-                'Foreign stock feed returned no usable stock data.'
-              );
-            }
-
-            return {
-              rows,
-              fetchedAt: Date.now()
-            };
-          }
-
-          function extractItems(payload) {
-            if (
-              Array.isArray(
-                payload && payload.items
-              )
-            ) {
-              return payload.items;
-            }
-
-            if (
-              payload &&
-              payload.items &&
-              typeof payload.items === 'object'
-            ) {
-              return Object.entries(
-                payload.items
-              ).map(
-                ([id, item]) => ({
-                  id: Number(
-                    item && item.id || id
-                  ),
-                  ...(item || {})
-                })
-              );
-            }
-
-            if (Array.isArray(payload)) {
-              return payload;
-            }
-
-            return [];
-          }
-
-          async function fetchTornItemPrices(
-            apiKey
-          ) {
-            const key =
-              String(apiKey || '').trim();
-
-            if (!key) {
-              throw new Error(
-                'Add a Torn API key in Settings to sync market values.'
-              );
-            }
-
-            const url =
-              `${TORN_ITEMS_URL}&key=` +
-              encodeURIComponent(key);
-
-            const payload = await fetchJson(
-              url,
-              {
-                headers: {
-                  Accept: 'application/json'
-                }
-              },
-              20000
-            );
-
-            const items =
-              extractItems(payload);
-
-            if (!items.length) {
-              throw new Error(
-                'Torn items API returned no item data.'
-              );
-            }
-
-            const map = {};
-
-            for (const item of items) {
-              const id = Number(
-                item && item.id
-              );
-
-              if (!Number.isFinite(id)) {
-                continue;
-              }
-
-              const value =
-                item && item.value || {};
-
-              const marketPrice = Number(
-                value.market_price ??
-                item.market_price ??
-                item.market_value ??
-                0
-              );
-
-              map[String(id)] = {
-                id,
-                name: String(
-                  item.name ||
-                  `Item #${id}`
-                ),
-                marketPrice:
-                  Number.isFinite(
-                    marketPrice
-                  )
-                    ? marketPrice
-                    : 0
-              };
-            }
-
-            return {
-              map,
-              fetchedAt: Date.now(),
-              count:
-                Object.keys(map).length
-            };
-          }
-
-          module.exports = {
-            fetchForeignStock,
-            fetchTornItemPrices
-          };
-          TP_SRC_API_JS
-
-          cat > src/marketCore.js <<'TP_SRC_MARKETCORE_JS'
-          const COUNTRIES = {
-            mex: {
-              name: 'Mexico',
-              city: 'Ciudad Juárez',
-              flag: '🇲🇽',
-              cost: 6500,
-              times: {
-                standard: 24,
-                airstrip: 17,
-                wlt: 12,
-                business: 7
-              },
-              bookTimes: {
-                standard: 18,
-                airstrip: 13,
-                wlt: 9,
-                business: 5
-              }
-            },
-
-            cay: {
-              name: 'Cayman Islands',
-              city: 'George Town',
-              flag: '🇰🇾',
-              cost: 10000,
-              times: {
-                standard: 33,
-                airstrip: 23,
-                wlt: 17,
-                business: 10
-              },
-              bookTimes: {
-               
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: torn-pulse-market-v1-arm64-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
