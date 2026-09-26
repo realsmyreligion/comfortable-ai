@@ -5,6 +5,7 @@ import {fetchItemCatalog, fetchItemMarket, fetchSnapshot} from './src/tornApi';
 import {clearApiKey, DEFAULT_SETTINGS, getApiKey, loadSettings, saveApiKey, saveSettings} from './src/storage';
 import {getNotificationPermission, prepareNotifications, scheduleSnapshotAlerts} from './src/notifications';
 import {makeDemo} from './src/demo';
+import {fetchForeignStock, formatMoney as foreignMoney, freshnessState, groupForeignStock, nextQuarterHour} from './src/foreignMarket';
 const {projectBar, timeUntil, formatDuration, recommend} = require('./src/core');
 const {ComfortableOverlay} = NativeModules;
 
@@ -99,8 +100,6 @@ function Cooldown({label, icon, seconds}) {
   </View>;
 }
 
-// TORNPULSE_V208_BRANDING — full Torn Pulse 2.0 launcher, splash, header and HUD identity.
-// TORNPULSE_V207_COMMUNITY_POLISH — curated external tools hub + Samsung home/nav spacing.
 // TORNPULSE_COMMUNITY_TOOLS_V1 — curated external Torn resources; TornPulse never forwards the user's stored API key.
 const COMMUNITY_TOOLS={
   baldr:{name:'Baldr’s List',url:'https://oran.pw/baldrstargets/'},
@@ -140,10 +139,9 @@ function TPTravelHub({travel,onOpen,clock}){
   </Pressable>
 }
 const TP_CATEGORY_IMAGES={health:require('./tp-health.png'),energy:require('./tp-energy.png'),nerve:require('./tp-nerve.png'),happiness:require('./tp-happiness.png'),drug:require('./tp-drug.png'),booster:require('./tp-booster.png'),medical:require('./tp-medical.png'),baldr:require('./tp-baldr.png')};
-const TP_BRAND={header:require('./header-logo-wide-1200x360.png'),emblem:require('./hud-icon-256.png')};
 function tornClock(ms){return new Date(ms).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'})}
 function tornCountdown(ms){const d=new Date(ms);return formatDuration((59-d.getUTCMinutes())*60+(60-d.getUTCSeconds()))}
-function TPHeader({refreshing=false,onRefresh,onSettings,onBack}){const action=onBack||onRefresh;return <View style={styles.v2SubHeader}><Pressable accessibilityRole="button" accessibilityLabel={onBack?'Back':'Refresh Torn data'} disabled={!action||refreshing} onPress={action} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubBackText}>{onBack?'‹':refreshing?'…':'↻'}</Text></Pressable><View style={styles.v2SubBrand}><View style={styles.v2SubMark}><Image source={TP_BRAND.emblem} resizeMode="contain" style={styles.v2SubMarkImage}/></View><Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2SubLogo}/></View>{onSettings?<Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={onSettings} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubGear}>⚙</Text></Pressable>:<View style={styles.v2SubBack}/>}</View>}
+function TPHeader({refreshing=false,onRefresh,onSettings,onBack}){const action=onBack||onRefresh;return <View style={styles.v2SubHeader}><Pressable accessibilityRole="button" accessibilityLabel={onBack?'Back':'Refresh Torn data'} disabled={!action||refreshing} onPress={action} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubBackText}>{onBack?'‹':refreshing?'…':'↻'}</Text></Pressable><View style={styles.v2SubBrand}><View style={styles.v2SubMark}><Text style={styles.v2SubMarkText}>TP</Text></View><Text style={styles.v2SubTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text></View>{onSettings?<Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={onSettings} hitSlop={8} style={({pressed})=>[styles.v2SubBack,pressed&&styles.nPressed]}><Text style={styles.v2SubGear}>⚙</Text></Pressable>:<View style={styles.v2SubBack}/>}</View>}
 function TPResource({label,image,bar,value,sub,accent,index=0,compact=false}){const p=bar?projectBar(bar):null;const edge=compact?(index%2===1):index===3;return <View style={[styles.nResource,compact&&styles.nResourceCompact,edge&&styles.nResourceLast,compact&&index<2&&styles.nResourceTop]}><View style={styles.nResHead}><View style={[styles.nResIcon,{borderColor:accent}]}><Image source={TP_CATEGORY_IMAGES[image]} resizeMode="contain" style={styles.nResImage}/></View><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.nResLabel}>{label}</Text></View><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.nResValue}>{p?(Math.floor(p.projected)+' / '+p.maximum):value}</Text>{p?<View style={styles.nTrack}><View style={[styles.nFill,{width:p.percent+'%',backgroundColor:accent}]}/></View>:<Text style={styles.nResSub}>{sub}</Text>}</View>}
 function TPMini({label,image,value,accent,onPress,index=0,compact=false}){const edge=compact?(index%2===1):index===3;const base=[styles.nMini,compact&&styles.nMiniCompact,edge&&styles.nMiniLast,compact&&index<2&&styles.nMiniTop];const inside=<><View style={[styles.nMiniIcon,{borderColor:accent}]}><Image source={TP_CATEGORY_IMAGES[image]} resizeMode="contain" style={styles.nMiniImage}/></View><View style={styles.nMiniCopy}><Text style={styles.nMiniLabel}>{label}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.nMiniValue,{color:accent}]}>{value}</Text></View></>;return onPress?<Pressable accessibilityRole="link" accessibilityLabel="Open Baldr’s List" onPress={onPress} style={({pressed})=>[base,pressed&&styles.nPressed]}>{inside}</Pressable>:<View style={base}>{inside}</View>}
 function TPBaldrCard({compact=false}){return <Pressable accessibilityRole="link" accessibilityLabel="Open the independent Baldr’s List website" onPress={openBaldrList} style={({pressed})=>[styles.nBaldr,compact&&styles.nBaldrCompact,pressed&&styles.nPressed]}><View style={styles.nBaldrMark}><Image source={TP_CATEGORY_IMAGES.baldr} resizeMode="contain" style={styles.nBaldrImage}/></View><View style={styles.nBaldrCopyWrap}><Text style={styles.nEyebrow}>INDEPENDENT EXTERNAL RESOURCE</Text><Text style={styles.nBaldrTitle}>Baldr’s List</Text><Text style={styles.nBaldrCopy}>TornPulse only opens Baldr’s established target list in your browser.</Text></View><View style={[styles.nBaldrBtn,compact&&styles.nBaldrBtnCompact]}><Text style={styles.nBaldrBtnText}>OPEN  ›</Text></View></Pressable>}
@@ -152,15 +150,15 @@ function tornClockSeconds(ms){return new Date(ms).toLocaleTimeString([],{hour:'2
 function TPV2Header({clock,section='Home',refreshing=false,onRefresh,onSettings}){
   return <View style={styles.v2Header}>
     <View style={styles.v2HeaderTop}>
-      <View style={styles.v2Brand}><Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2HeaderLogo}/><Text numberOfLines={1} style={styles.v2BrandSub}>{section}</Text></View>
+      <View style={styles.v2Brand}><View style={styles.v2BrandMark}><Text style={styles.v2BrandMarkText}>TP</Text></View><View><Text style={styles.v2BrandTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text><Text style={styles.v2BrandSub}>{section}</Text></View></View>
       <View style={styles.v2HeaderActions}>{onRefresh?<Pressable accessibilityRole="button" accessibilityLabel="Refresh Torn data" disabled={refreshing} onPress={onRefresh} style={({pressed})=>[styles.v2HeaderIcon,pressed&&styles.nPressed]}><Text style={styles.v2HeaderIconText}>{refreshing?'…':'↻'}</Text></Pressable>:null}{onSettings?<Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={onSettings} style={({pressed})=>[styles.v2HeaderIcon,pressed&&styles.nPressed]}><Text style={styles.v2HeaderIconText}>⚙</Text></Pressable>:null}</View>
     </View>
     <Text style={styles.v2Clock}>{tornClockSeconds(clock)} <Text style={styles.v2ClockZone}>TCT</Text></Text>
   </View>
 }
 function TPBottomNav({active,onChange,onMarket}){
-  const tabs=[['DASHBOARD','⌂','Home'],['TRAVEL','✈','Travel'],['MARKET','▣','Market'],['ACTIVITY','≡','Activity'],['MORE','•••','More']];
-  return <View style={styles.v2BottomNav}>{tabs.map(([page,icon,label])=>{const selected=active===page;return <Pressable key={page} accessibilityRole="button" accessibilityLabel={label} onPress={()=>page==='MARKET'&&onMarket?onMarket():onChange(page)} style={({pressed})=>[styles.v2NavItem,pressed&&styles.nPressed]}>{selected?<View style={styles.v2NavIndicator}/>:null}<Text style={[styles.v2NavIcon,selected&&styles.v2NavActive]}>{icon}</Text><Text style={[styles.v2NavLabel,selected&&styles.v2NavActive]}>{label}</Text></Pressable>})}</View>
+  const tabs=[['DASHBOARD','⌂','Home'],['TRAVEL','✈','Travel'],['RADAR','⌁','Radar'],['ACTIVITY','≡','Activity'],['MORE','•••','More']];
+  return <View style={styles.v2BottomNav}>{tabs.map(([page,icon,label])=>{const selected=active===page;return <Pressable key={page} accessibilityRole="button" accessibilityLabel={label} onPress={()=>page==='RADAR'&&onMarket?onMarket():onChange(page)} style={({pressed})=>[styles.v2NavItem,pressed&&styles.nPressed]}>{selected?<View style={styles.v2NavIndicator}/>:null}<Text style={[styles.v2NavIcon,selected&&styles.v2NavActive]}>{icon}</Text><Text style={[styles.v2NavLabel,selected&&styles.v2NavActive]}>{label}</Text></Pressable>})}</View>
 }
 function TPV2Card({children,highlight=false,style}){return <View style={[styles.v2Card,highlight&&styles.v2CardHighlight,style]}>{children}</View>}
 function TPVitalV2({label,image,bar,accent,showFull=true}){const p=projectBar(bar);const full=p.percent>=100;return <View style={styles.v2Vital}><View style={styles.v2VitalTop}><Image source={TP_CATEGORY_IMAGES[image]} resizeMode="contain" style={styles.v2VitalIcon}/><View style={{flex:1,minWidth:0}}><Text style={styles.v2VitalLabel}>{label}</Text><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.v2VitalValue}>{Math.floor(p.projected)} <Text style={styles.v2VitalMax}>/ {p.maximum}</Text></Text></View><Text style={[styles.v2VitalPct,{color:accent}]}>{Math.round(p.percent)}%</Text></View><View style={styles.v2Track}><View style={[styles.v2Fill,{width:p.percent+'%',backgroundColor:accent}]}/></View><Text style={styles.v2VitalSub}>{showFull?(full?'Full':`Full in ${timeUntil(p.capMs)}`):'Current value'}</Text></View>}
@@ -168,36 +166,6 @@ function TPCooldownV2({label,image,seconds,accent}){const ready=seconds===0;retu
 function TPQuickV2({icon,label,onPress}){return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({pressed})=>[styles.v2Quick,pressed&&styles.nPressed]}><Text style={styles.v2QuickIcon}>{icon}</Text><Text style={styles.v2QuickLabel}>{label}</Text></Pressable>}
 function TPActivityRowV2({icon,title,detail,time,tone=C.primary}){return <View style={styles.v2ActivityRow}><View style={[styles.v2ActivityIcon,{borderColor:tone}]}><Text style={[styles.v2ActivityIconText,{color:tone}]}>{icon}</Text></View><View style={{flex:1,minWidth:0}}><Text style={styles.v2ActivityTitle}>{title}</Text>{detail?<Text style={styles.v2ActivityDetail}>{detail}</Text>:null}</View>{time?<Text style={styles.v2ActivityTime}>{time}</Text>:null}</View>}
 function TPMenuRowV2({icon,title,detail,onPress,external=false}){return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[styles.v2MenuRow,pressed&&styles.nPressed]}><View style={styles.v2MenuIcon}><Text style={styles.v2MenuIconText}>{icon}</Text></View><View style={{flex:1,minWidth:0}}><Text style={styles.v2MenuTitle}>{title}</Text>{detail?<Text style={styles.v2MenuDetail}>{detail}</Text>:null}</View><Text style={styles.v2MenuArrow}>{external?'↗':'›'}</Text></Pressable>}
-
-async function fetchTornProfileImage(key){
-  if(!key) return null;
-  try{
-    const response=await fetch('https://api.torn.com/v2/user/profile?comment=TornPulse',{
-      headers:{Authorization:`ApiKey ${key}`,Accept:'application/json'},
-    });
-    if(!response.ok) return null;
-    const json=await response.json().catch(()=>null);
-    const raw=json?.profile?.image ?? json?.image ?? json?.profile_image ?? null;
-    const candidate=typeof raw==='string'
-      ? raw
-      : (raw?.url || raw?.large || raw?.medium || raw?.small || raw?.main || null);
-    return typeof candidate==='string' && /^https?:\/\//i.test(candidate) ? candidate : null;
-  }catch(_){
-    return null;
-  }
-}
-
-function TPProfileAvatar({profile}){
-  const imageUrl=typeof profile?.image==='string' ? profile.image : '';
-  const [failed,setFailed]=useState(false);
-  useEffect(()=>setFailed(false),[imageUrl]);
-  const initial=String(profile?.name||'T').trim().charAt(0).toUpperCase()||'T';
-  return <View style={styles.v2Avatar}>
-    {imageUrl&&!failed
-      ? <Image source={{uri:imageUrl}} resizeMode="cover" style={styles.v2AvatarImage} onError={()=>setFailed(true)}/>
-      : <Text style={styles.v2AvatarText}>{initial}</Text>}
-  </View>;
-}
 
 export default function App() {
   const [snapshot, setSnapshot] = useState(null);
@@ -218,6 +186,12 @@ export default function App() {
   const [marketListings, setMarketListings] = useState([]);
   const [marketLoading, setMarketLoading] = useState(false);
   const [marketError, setMarketError] = useState('');
+  const [foreignRows, setForeignRows] = useState([]);
+  const [foreignLoading, setForeignLoading] = useState(false);
+  const [foreignError, setForeignError] = useState('');
+  const [foreignQuery, setForeignQuery] = useState('');
+  const [foreignHideZero, setForeignHideZero] = useState(true);
+  const [foreignFetchedAt, setForeignFetchedAt] = useState(0);
   const {width:screenWidth} = useWindowDimensions();
   const compactScreen = screenWidth < 390;
   const pendingHudStart = useRef(false);
@@ -244,6 +218,41 @@ export default function App() {
     if (!ComfortableOverlay?.resetHudPosition) return;
     await ComfortableOverlay.resetHudPosition().catch(()=>{});
   }
+
+  const foreignCountries=useMemo(()=>{
+    const query=foreignQuery.trim().toLowerCase();
+    const filtered=foreignRows.filter(row=>{
+      if(foreignHideZero&&Number(row.quantity||0)<=0)return false;
+      if(!query)return true;
+      return String(row.name||'').toLowerCase().includes(query)||String(row.country||'').toLowerCase().includes(query)||String(row.city||'').toLowerCase().includes(query);
+    });
+    return groupForeignStock(filtered);
+  },[foreignRows,foreignQuery,foreignHideZero]);
+
+  async function refreshForeignRadar(silent=false){
+    if(!silent)setForeignLoading(true);
+    setForeignError('');
+    try{
+      const result=await fetchForeignStock();
+      setForeignRows(result.rows);
+      setForeignFetchedAt(result.fetchedAt);
+    }catch(e){
+      setForeignError(e?.message||'Could not load foreign stock.');
+    }finally{
+      if(!silent)setForeignLoading(false);
+    }
+  }
+
+  async function openRadarPage(){
+    setActivePage('RADAR');
+    if(!foreignRows.length)await refreshForeignRadar(false);
+  }
+
+  useEffect(()=>{
+    if(activePage!=='RADAR')return undefined;
+    const id=setInterval(()=>refreshForeignRadar(true).catch(()=>{}),15000);
+    return ()=>clearInterval(id);
+  },[activePage]);
 
   const marketMatches=useMemo(()=>{
     const query=marketQuery.trim().toLowerCase();
@@ -288,14 +297,10 @@ export default function App() {
     if (!key) return;
     if (spinner) setRefreshing(true);
     try {
-      const [snap,profileImage]=await Promise.all([
-        fetchSnapshot(key),
-        fetchTornProfileImage(key),
-      ]);
-      const enriched=profileImage?{...snap,profile:{...(snap.profile||{}),image:profileImage}}:snap;
-      setSnapshot(enriched); setError('');
-      await scheduleSnapshotAlerts(enriched, settings);
-      return enriched;
+      const snap = await fetchSnapshot(key);
+      setSnapshot(snap); setError('');
+      await scheduleSnapshotAlerts(snap, settings);
+      return snap;
     } catch (e) {
       setError(e?.message || 'Unable to connect to Torn.');
       throw e;
@@ -366,15 +371,11 @@ export default function App() {
     if (!key) return Alert.alert('API key needed','Enter your restricted Torn API key.');
     setRefreshing(true);
     try {
-      const [snap,profileImage]=await Promise.all([
-        fetchSnapshot(key),
-        fetchTornProfileImage(key),
-      ]);
-      const enriched=profileImage?{...snap,profile:{...(snap.profile||{}),image:profileImage}}:snap;
-      await saveApiKey(key); setSnapshot(enriched); setApiKeyInput(''); setError('');
+      const snap=await fetchSnapshot(key);
+      await saveApiKey(key); setSnapshot(snap); setApiKeyInput(''); setError('');
       await syncHudPrefs(settings);
-      await scheduleSnapshotAlerts(enriched,settings);
-      if (!enriched.attackAccess) Alert.alert('Connected', 'Core TornPulse data is live. Incoming attacker names and attack alerts need a Limited read-only Torn API key.');
+      await scheduleSnapshotAlerts(snap,settings);
+      if (!snap.attackAccess) Alert.alert('Connected', 'Core TornPulse data is live. Incoming attacker names and attack alerts need a Limited read-only Torn API key.');
     } catch(e) { Alert.alert('Could not connect',e?.message||'Check your API key and internet connection.'); }
     finally { setRefreshing(false); setLoading(false); }
   }
@@ -421,14 +422,14 @@ export default function App() {
   async function setWarn(kind,value) { await setSetting(kind,value); }
 
   if (loading) return <SafeAreaView style={styles.center}><StatusBar style="light"/>
-    <Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2BootLogo}/>
-    <Text style={styles.v2BootSub}>YOUR TORN COMPANION</Text><ActivityIndicator size="small" color={C.primary} style={{marginTop:20}}/>
+    <View style={styles.v2BootMark}><Text style={styles.v2BootMarkText}>TP</Text></View>
+    <Text style={styles.v2BootTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text><Text style={styles.v2BootSub}>FOREIGN MARKET INTELLIGENCE</Text><ActivityIndicator size="small" color={C.primary} style={{marginTop:20}}/>
   </SafeAreaView>;
 
   if (!snapshot) return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView contentContainerStyle={styles.setup} keyboardShouldPersistTaps="handled">
-    <View style={styles.v2SetupBrand}><View style={styles.v2SetupLogoWrap}><Image source={TP_BRAND.header} resizeMode="contain" style={styles.v2SetupLogo}/><Text style={styles.v2SetupSub}>Your Torn companion</Text></View><Text style={styles.versionChip}>2.0.0</Text></View>
+    <View style={styles.v2SetupBrand}><View style={styles.v2BrandMarkLarge}><Text style={styles.v2BrandMarkLargeText}>TP</Text></View><View><Text style={styles.v2SetupTitle}>TORN <Text style={styles.v2BrandAccent}>PULSE</Text></Text><Text style={styles.v2SetupSub}>Foreign market intelligence</Text></View><Text style={styles.versionChip}>2.0.0</Text></View>
     <View style={styles.v2BlueRule}/>
-    <Text style={styles.setupTitle}>Your Torn account. One clean pulse.</Text><Text style={styles.setupCopy}>Connect with a restricted Torn API key to see your vitals, cooldowns, travel and activity. Your Torn password is never required.</Text>
+    <Text style={styles.setupTitle}>Your Torn account. One clean pulse.</Text><Text style={styles.setupCopy}>Connect with a restricted Torn API key for your account data. Foreign Stock Radar uses crowdsourced overseas observations so you can see what is available around the world. Your Torn password is never required.</Text>
     <View style={styles.setupPreview}><View style={styles.previewTop}><Text style={styles.previewLabel}>HUD SYSTEM</Text><StatusTag tone="live">READY</StatusTag></View><Text style={styles.previewBig}>FLOAT OVER TORN</Text><Text style={styles.previewCopy}>Read-only Torn data. A Limited key enables incoming attacker names; your Torn password is never needed.</Text></View>
     <Text style={styles.inputLabel}>TORN API KEY • READ-ONLY</Text><TextInput value={apiKeyInput} onChangeText={setApiKeyInput} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder="Paste key" placeholderTextColor="#626B78" style={styles.input}/>
     <Pressable onPress={connect} style={styles.primary}><Text style={styles.primaryText}>{refreshing?'CONNECTING…':'CONNECT TO TORN'}</Text></Pressable>
@@ -468,7 +469,56 @@ export default function App() {
         <TPV2Card><TPMenuRowV2 icon="✈" title="Open YATA" detail="Community travel and utility tools" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.yata)} external/></TPV2Card>
         <Text style={styles.v2FinePrint}>Read-only flight information. TornPulse never starts travel for you.</Text>
       </ScrollView>
-      <TPBottomNav active="TRAVEL" onChange={setActivePage} onMarket={openMarketPage}/>
+      <TPBottomNav active="TRAVEL" onChange={setActivePage} onMarket={openRadarPage}/>
+    </View></SafeAreaView>;
+  }
+
+  if(activePage==='RADAR'){
+    const nextBoundary=nextQuarterHour(clock);
+    const boundarySeconds=Math.max(0,Math.ceil((nextBoundary-clock)/1000));
+    const flightDestination=String(snapshot.travel?.destination||'').toLowerCase();
+    return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
+        <TPV2Header clock={clock} section="Foreign Radar" refreshing={foreignLoading} onRefresh={()=>refreshForeignRadar(false)} onSettings={()=>setActivePage('SETTINGS')}/>
+        <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Foreign Stock Radar</Text><Text style={styles.v2PageCopy}>Crowdsourced overseas stock, freshness by the second and a fast view of what is actually available right now.</Text></View>
+
+        {foreignError?<View style={styles.v2Warning}><Text style={styles.v2WarningIcon}>!</Text><View style={{flex:1}}><Text style={styles.v2WarningTitle}>Radar refresh failed</Text><Text style={styles.v2WarningCopy}>{foreignError}</Text></View></View>:null}
+
+        <TPV2Card highlight>
+          <Text style={styles.v2Kicker}>GLOBAL PULSE</Text>
+          <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-end',gap:12}}>
+            <View style={{flex:1}}><Text style={{fontSize:30,fontWeight:'900',color:C.text}}>{foreignCountries.reduce((n,c)=>n+c.inStockItems,0).toLocaleString()}</Text><Text style={styles.v2MetricLabel}>ITEM LINES IN STOCK</Text></View>
+            <View style={{alignItems:'flex-end'}}><Text style={{fontSize:20,fontWeight:'900',color:C.cyan}}>{formatDuration(boundarySeconds)}</Text><Text style={styles.v2MetricLabel}>NEXT :00 / :15 / :30 / :45</Text></View>
+          </View>
+          <Text style={[styles.v2FinePrint,{marginTop:12}]}>The 15-minute timer is a restock boundary reference, not a guarantee. Stock itself comes from player-observed YATA data.</Text>
+        </TPV2Card>
+
+        <View style={styles.v2SearchWrap}><Text style={styles.v2SearchIcon}>⌕</Text><TextInput value={foreignQuery} onChangeText={setForeignQuery} autoCapitalize="none" autoCorrect={false} placeholder="Search Xanax, Panda, China…" placeholderTextColor="#626B78" style={styles.v2SearchInput}/>{foreignQuery?<Pressable onPress={()=>setForeignQuery('')}><Text style={styles.v2SearchClear}>×</Text></Pressable>:null}</View>
+        <Pressable accessibilityRole="button" onPress={()=>setForeignHideZero(v=>!v)} style={({pressed})=>[styles.v2Primary,pressed&&styles.nPressed,{marginBottom:14}]}><Text style={styles.v2PrimaryText}>{foreignHideZero?'SHOW SOLD OUT ITEMS':'HIDE SOLD OUT ITEMS'}</Text></Pressable>
+
+        {foreignLoading&&!foreignRows.length?<TPV2Card><View style={styles.v2Empty}><ActivityIndicator color={C.primary}/><Text style={[styles.v2EmptyTitle,{marginTop:12}]}>Scanning foreign markets…</Text></View></TPV2Card>:null}
+
+        {!foreignLoading&&foreignCountries.length===0?<TPV2Card><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>⌁</Text><Text style={styles.v2EmptyTitle}>No matching stock</Text><Text style={styles.v2EmptyCopy}>Change your search or show sold-out items.</Text></View></TPV2Card>:null}
+
+        {foreignCountries.map(country=>{
+          const fresh=freshnessState(country.updated,clock);
+          const freshColor=fresh.level==='fresh'?C.green:fresh.level==='recent'?C.amber:C.medical;
+          const isFlightTarget=flightDestination&&String(country.country||'').toLowerCase().includes(flightDestination);
+          return <TPV2Card key={country.countryCode} highlight={Boolean(isFlightTarget)} style={{marginBottom:12}}>
+            <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10}}>
+              <View style={{flexDirection:'row',alignItems:'center',gap:10,flex:1}}><Text style={{fontSize:28}}>{country.flag}</Text><View style={{flex:1}}><Text style={{fontSize:17,fontWeight:'900',color:C.text}}>{country.country}</Text><Text style={styles.v2PageCopy}>{country.city}{country.standardMinutes?` • ${country.standardMinutes}m standard`:''}</Text></View></View>
+              <View style={{alignItems:'flex-end'}}><Text style={{fontSize:12,fontWeight:'900',color:freshColor}}>{fresh.label}</Text><Text style={{fontSize:11,color:C.muted}}>{country.updated?relativeAge(country.updated,clock):'no timestamp'}</Text></View>
+            </View>
+            {isFlightTarget?<View style={[styles.v2Warning,{marginTop:10,marginBottom:0,borderColor:C.cyan}]}><Text style={{color:C.cyan,fontWeight:'900'}}>✈</Text><Text style={[styles.v2WarningCopy,{color:C.text,flex:1}]}>You are currently flying toward this market.</Text></View>:null}
+            <View style={{flexDirection:'row',gap:10,marginTop:12,marginBottom:6}}><View style={{flex:1}}><Text style={styles.v2MetricLabel}>IN-STOCK ITEMS</Text><Text style={{fontSize:20,fontWeight:'900',color:C.green}}>{country.inStockItems}</Text></View><View style={{flex:1}}><Text style={styles.v2MetricLabel}>UNITS REPORTED</Text><Text style={{fontSize:20,fontWeight:'900',color:C.text}}>{country.totalUnits.toLocaleString()}</Text></View></View>
+            {country.items.slice(0,12).map((item,index)=><View key={country.countryCode+'-'+item.id} style={{flexDirection:'row',alignItems:'center',paddingVertical:10,borderTopWidth:index===0?0:StyleSheet.hairlineWidth,borderTopColor:C.line}}><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={{fontSize:14,fontWeight:'800',color:item.quantity>0?C.text:C.muted}}>{item.name}</Text><Text style={{fontSize:11,color:C.muted}}>{foreignMoney(item.cost)} abroad</Text></View><Text style={{fontSize:17,fontWeight:'900',color:item.quantity>0?C.green:C.medical}}>{item.quantity.toLocaleString()}</Text></View>)}
+            {country.items.length>12?<Text style={[styles.v2FinePrint,{marginTop:8}]}>+ {country.items.length-12} more matching items</Text>:null}
+          </TPV2Card>
+        })}
+
+        <Text style={styles.v2FinePrint}>Auto-refresh: every 15 seconds while this screen is open. The freshness clock updates every second. YATA observations can still be stale when no player has recently viewed a foreign shop.</Text>
+      </ScrollView>
+      <TPBottomNav active="RADAR" onChange={setActivePage} onMarket={openRadarPage}/>
     </View></SafeAreaView>;
   }
 
@@ -486,7 +536,7 @@ export default function App() {
       {marketItem&&marketListings.map((listing,index)=><View key={String(listing.id||index)} style={styles.v2Listing}><View><Text style={styles.v2ListingPrice}>{money(listing.price)}</Text><Text style={styles.v2ListingQty}>{Number(listing.amount||1).toLocaleString()} listed</Text></View><Pressable onPress={()=>openMarketPurchase(marketItem)} style={styles.v2ListingOpen}><Text style={styles.v2ListingOpenText}>OPEN IN TORN ↗</Text></Pressable></View>)}
       <Text style={styles.v2SectionTitle}>Community Trading</Text><TPV2Card><TPMenuRowV2 icon="$" title="Torn Exchange" detail="Trader discovery, price lists and trade analytics" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornexchange)} external/><TPMenuRowV2 icon="◫" title="torn.report" detail="Market and bazaar transaction analytics" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.tornreport)} external/></TPV2Card>
     </ScrollView>
-    <TPBottomNav active="MARKET" onChange={setActivePage} onMarket={openMarketPage}/>
+    <TPBottomNav active="MARKET" onChange={setActivePage} onMarket={openRadarPage}/>
   </View></SafeAreaView>;
 
   if(activePage==='ACTIVITY'){
@@ -504,17 +554,15 @@ export default function App() {
         </TPV2Card>:null}
         {!attack&&!travelActive&&cooldownReady.length===0&&statusTone(statusState)==='live'?<TPV2Card highlight><View style={styles.v2Empty}><Text style={styles.v2EmptyIcon}>✓</Text><Text style={styles.v2EmptyTitle}>All clear</Text><Text style={styles.v2EmptyCopy}>No urgent status, travel, attack or cooldown events need your attention.</Text></View></TPV2Card>:null}
       </ScrollView>
-      <TPBottomNav active="ACTIVITY" onChange={setActivePage} onMarket={openMarketPage}/>
+      <TPBottomNav active="ACTIVITY" onChange={setActivePage} onMarket={openRadarPage}/>
     </View></SafeAreaView>;
   }
 
   if(activePage==='TOOLS')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="Community Tools" onSettings={()=>setActivePage('SETTINGS')}/>
-      <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>Community Tools</Text><Text style={styles.v2PageCopy}>A curated launchpad for the Torn resources that are genuinely useful alongside TornPulse.</Text></View>
-      <View style={styles.v2ToolSummary}><View style={styles.v2ToolSummaryItem}><Text style={styles.v2ToolSummaryValue}>7</Text><Text style={styles.v2ToolSummaryLabel}>CURATED TOOLS</Text></View><View style={styles.v2ToolSummaryDivider}/><View style={styles.v2ToolSummaryItem}><Text style={styles.v2ToolSummaryValue}>5</Text><Text style={styles.v2ToolSummaryLabel}>CATEGORIES</Text></View><View style={styles.v2ToolSummaryDivider}/><View style={styles.v2ToolSummaryItem}><Text style={[styles.v2ToolSummaryValue,{color:C.green}]}>LOCAL</Text><Text style={styles.v2ToolSummaryLabel}>TORNPULSE KEY</Text></View></View>
-      <TPV2Card highlight><Text style={styles.v2Kicker}>PRIVACY FIRST</Text><Text style={styles.v2AboutTitle}>Your TornPulse key stays in TornPulse.</Text><Text style={styles.v2AboutCopy}>Every tool below opens independently. TornPulse never forwards your saved API key, password or account data. If a third-party service needs an API key, you connect to that service separately.</Text></TPV2Card>
-      <TPV2Card><Text style={styles.v2Kicker}>SMART SHORTCUTS</Text><Text style={styles.v2AboutTitle}>Tools appear where they make sense.</Text><Text style={styles.v2AboutCopy}>Travel links to YATA. Market links to Torn Exchange and torn.report. Baldr’s List stays one tap away from Home. This hub keeps the full collection together.</Text></TPV2Card>
+      <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>External Tools</Text><Text style={styles.v2PageCopy}>Trusted community resources for targets, stats, wars, travel and trading.</Text></View>
+      <TPV2Card highlight><Text style={styles.v2Kicker}>PRIVACY FIRST</Text><Text style={styles.v2AboutTitle}>Your TornPulse key stays in TornPulse.</Text><Text style={styles.v2AboutCopy}>These buttons only open the selected website. TornPulse never forwards your saved API key, login or account data to a third-party site. If a tool needs access, you connect to that tool separately.</Text></TPV2Card>
 
       <Text style={styles.v2SectionTitle}>Targets & Combat</Text>
       <TPV2Card><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Established leveling-target resource" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.baldr)} external/><TPMenuRowV2 icon="⌖" title="FFScouter" detail="Target finder, fair-fight filters and battle-stat estimates" onPress={()=>openCommunityTool(COMMUNITY_TOOLS.ffscouter)} external/></TPV2Card>
@@ -533,7 +581,7 @@ export default function App() {
 
       <Text style={styles.v2FinePrint}>External sites are independent from TornPulse and Torn. Review each site's own API-key and privacy requirements before connecting.</Text>
     </ScrollView>
-    <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openMarketPage}/>
+    <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openRadarPage}/>
   </View></SafeAreaView>;
 
   if(activePage==='MORE')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
@@ -541,10 +589,10 @@ export default function App() {
       <TPV2Header clock={clock} section="More" onSettings={()=>setActivePage('SETTINGS')}/>
       <View style={styles.v2PageIntro}><Text style={styles.v2PageTitle}>More</Text><Text style={styles.v2PageCopy}>Tools, account controls and advanced settings.</Text></View>
       <Text style={styles.v2SectionTitle}>Controls</Text><TPV2Card><TPMenuRowV2 icon="◉" title="Floating HUD" detail={hudRunning?'Active over other apps':'Configure size, position and alerts'} onPress={()=>setActivePage('SETTINGS')}/><TPMenuRowV2 icon="⚙" title="Notifications & Account" detail="Permissions, warnings and API connection" onPress={()=>setActivePage('SETTINGS')}/></TPV2Card>
-      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="⌘" title="Community Tools" detail="7 curated tools for targets, stats, wars, travel and trading" onPress={()=>setActivePage('TOOLS')}/><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Quick access to the established leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
+      <Text style={styles.v2SectionTitle}>Resources</Text><TPV2Card><TPMenuRowV2 icon="⌘" title="Community Tools" detail="Targets, stats, wars, travel and trading resources" onPress={()=>setActivePage('TOOLS')}/><TPMenuRowV2 icon="◎" title="Baldr’s List" detail="Quick access to the established leveling-target resource" onPress={openBaldrList} external/></TPV2Card>
       <TPV2Card><Text style={styles.v2Kicker}>TORN PULSE 2.0</Text><Text style={styles.v2AboutTitle}>Built to assist, not automate.</Text><Text style={styles.v2AboutCopy}>TornPulse displays read-only Torn data, calculates timers, sends reminders and opens official or independent resources. Gameplay actions remain under your control in Torn.</Text></TPV2Card>
     </ScrollView>
-    <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openMarketPage}/>
+    <TPBottomNav active="MORE" onChange={setActivePage} onMarket={openRadarPage}/>
   </View></SafeAreaView>;
 
   if(activePage==='SETTINGS')return <SafeAreaView style={styles.screen}><StatusBar style="light"/><ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.nPage}>
@@ -568,10 +616,10 @@ export default function App() {
         : {icon:'◉',title:next?.title||'Everything looks good',detail:next?.detail||'No urgent action surfaced right now.',value:'',tone:C.primary};
 
   return <SafeAreaView style={styles.screen}><StatusBar style="light"/><View style={styles.v2Shell}>
-    <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.v2PageScroll,styles.v2HomeScroll]}>
+    <ScrollView showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.v2PageScroll}>
       <TPV2Header clock={clock} section="Your Torn companion" refreshing={refreshing} onRefresh={()=>snapshot.demo?setSnapshot(makeDemo()):sync().catch(()=>{})} onSettings={()=>setActivePage('SETTINGS')}/>
       {error?<View style={styles.v2Warning}><Text style={styles.v2WarningIcon}>!</Text><View style={{flex:1}}><Text style={styles.v2WarningTitle}>Unable to refresh Torn data</Text><Text style={styles.v2WarningCopy}>{error}</Text></View></View>:null}
-      <TPV2Card style={styles.v2PlayerCard}><TPProfileAvatar profile={snapshot.profile}/><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={styles.v2PlayerName}>{snapshot.profile?.name||'Torn Player'}</Text><Text style={styles.v2PlayerMeta}>{snapshot.profile?.id?'ID '+snapshot.profile.id+' • ':''}{travelActive?('Traveling to '+(snapshot.travel.destination||'destination')):'Torn City'}</Text><View style={styles.v2PlayerStatus}><View style={[styles.v2StatusDot,{backgroundColor:statusTone(statusState)==='live'?C.green:statusTone(statusState)==='danger'?C.medical:C.amber}]}/><Text style={styles.v2PlayerStatusText}>{statusState}</Text></View></View><Text style={styles.v2Chevron}>›</Text></TPV2Card>
+      <TPV2Card style={styles.v2PlayerCard}><View style={styles.v2Avatar}><Text style={styles.v2AvatarText}>{String(snapshot.profile?.name||'T').slice(0,1).toUpperCase()}</Text></View><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={styles.v2PlayerName}>{snapshot.profile?.name||'Torn Player'}</Text><Text style={styles.v2PlayerMeta}>{snapshot.profile?.id?'ID '+snapshot.profile.id+' • ':''}{travelActive?('Traveling to '+(snapshot.travel.destination||'destination')):'Torn City'}</Text><View style={styles.v2PlayerStatus}><View style={[styles.v2StatusDot,{backgroundColor:statusTone(statusState)==='live'?C.green:statusTone(statusState)==='danger'?C.medical:C.amber}]}/><Text style={styles.v2PlayerStatusText}>{statusState}</Text></View></View><Text style={styles.v2Chevron}>›</Text></TPV2Card>
 
       <Text style={styles.v2SectionTitle}>Vitals</Text>
       <TPV2Card><View style={styles.v2VitalsGrid}>{snapshot.life?<TPVitalV2 label="HEALTH" image="health" bar={snapshot.life} accent={C.life}/>:null}<TPVitalV2 label="ENERGY" image="energy" bar={snapshot.energy} accent={C.energy}/><TPVitalV2 label="NERVE" image="nerve" bar={snapshot.nerve} accent={C.nerve}/><TPVitalV2 label="HAPPINESS" image="happiness" bar={snapshot.happy||snapshot.happiness} accent={C.happy} showFull={false}/></View></TPV2Card>
@@ -581,12 +629,12 @@ export default function App() {
 
       <TPV2Card highlight><View style={styles.v2Smart}><View style={[styles.v2SmartIcon,{borderColor:smart.tone}]}><Text style={[styles.v2SmartIconText,{color:smart.tone}]}>{smart.icon}</Text></View><View style={{flex:1,minWidth:0}}><Text style={styles.v2SmartTitle}>{smart.title}</Text><Text numberOfLines={2} style={styles.v2SmartDetail}>{smart.detail}</Text></View>{smart.value?<Text style={[styles.v2SmartValue,{color:smart.tone}]}>{smart.value}</Text>:<Text style={styles.v2Chevron}>›</Text>}</View></TPV2Card>
 
-      <View style={styles.v2QuickGrid}><TPQuickV2 icon="✈" label="Travel" onPress={()=>setActivePage('TRAVEL')}/><TPQuickV2 icon="▣" label="Market" onPress={openMarketPage}/><TPQuickV2 icon="◎" label="Baldr’s List" onPress={openBaldrList}/><TPQuickV2 icon="⌘" label="Tools" onPress={()=>setActivePage('TOOLS')}/></View>
+      <View style={styles.v2QuickGrid}><TPQuickV2 icon="✈" label="Travel" onPress={()=>setActivePage('TRAVEL')}/><TPQuickV2 icon="⌁" label="Foreign Radar" onPress={openRadarPage}/><TPQuickV2 icon="◎" label="Baldr’s List" onPress={openBaldrList}/><TPQuickV2 icon="≡" label="Activity" onPress={()=>setActivePage('ACTIVITY')}/></View>
 
       <Pressable accessibilityRole="button" onPress={hudRunning?stopHud:startHud} disabled={hudBusy} style={({pressed})=>[styles.v2HudButton,hudRunning&&styles.v2HudButtonActive,hudBusy&&styles.nDisabled,pressed&&styles.nPressed]}><View style={styles.v2HudButtonIcon}><Text style={styles.v2HudButtonIconText}>◉</Text></View><View style={{flex:1}}><Text style={styles.v2HudButtonTitle}>{hudBusy?'WORKING…':hudRunning?'HUD ACTIVE':'START HUD'}</Text><Text style={styles.v2HudButtonSub}>{hudRunning?'Tap to stop the floating HUD':'Get live Torn stats over other apps'}</Text></View><Text style={styles.v2HudButtonArrow}>›</Text></Pressable>
-      <Text style={styles.v2Sync}>Last sync {relativeAge(Math.floor(Number(snapshot.fetchedAt||0)/1000),clock)} • v2.0.0</Text>
+      <Text style={styles.v2Sync}>Last sync {relativeAge(Math.floor(Number(snapshot.fetchedAt||0)/1000),clock)} • v2.1.0 RADAR</Text>
     </ScrollView>
-    <TPBottomNav active="DASHBOARD" onChange={setActivePage} onMarket={openMarketPage}/>
+    <TPBottomNav active="DASHBOARD" onChange={setActivePage} onMarket={openRadarPage}/>
   </View></SafeAreaView>;
 }
 
@@ -729,23 +777,21 @@ const styles=StyleSheet.create({
 
 ,
   v2Shell:{flex:1,backgroundColor:C.bg},
-  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:48},
-  v2HomeScroll:{paddingBottom:64},
+  v2PageScroll:{paddingHorizontal:16,paddingTop:Platform.OS==='android'?18:4,paddingBottom:40},
   v2Header:{paddingTop:4,paddingBottom:14,marginBottom:4},
   v2HeaderTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
-  v2Brand:{flexDirection:'column',alignItems:'flex-start',justifyContent:'center',flex:1,minWidth:0},
-  v2HeaderLogo:{width:176,height:48,marginLeft:-3},
+  v2Brand:{flexDirection:'row',alignItems:'center',gap:10,flex:1,minWidth:0},
   v2BrandMark:{width:42,height:42,borderRadius:12,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2BrandMarkText:{color:C.cyan,fontSize:18,fontWeight:'900',letterSpacing:-1},
   v2BrandTitle:{color:C.text,fontSize:17,fontWeight:'900',letterSpacing:.9},
   v2BrandAccent:{color:C.primary},
-  v2BrandSub:{color:C.muted,fontSize:9,marginTop:-5,marginLeft:3,letterSpacing:.25},
+  v2BrandSub:{color:C.muted,fontSize:10,marginTop:2},
   v2HeaderActions:{flexDirection:'row',gap:6},
   v2HeaderIcon:{width:40,height:40,borderRadius:12,alignItems:'center',justifyContent:'center',backgroundColor:C.surface,borderWidth:1,borderColor:C.line},
   v2HeaderIconText:{color:C.text,fontSize:18,fontWeight:'800'},
   v2Clock:{color:C.primary,fontSize:28,fontWeight:'900',letterSpacing:1.1,textAlign:'center',marginTop:12,fontVariant:['tabular-nums']},
   v2ClockZone:{color:C.cyan,fontSize:13,fontWeight:'900'},
-  v2BottomNav:{height:Platform.OS==='android'?82:70,backgroundColor:'#0A0E13',borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',paddingHorizontal:4,paddingTop:5,paddingBottom:Platform.OS==='android'?12:2},
+  v2BottomNav:{height:Platform.OS==='android'?78:70,backgroundColor:'#0A0E13',borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',paddingHorizontal:4,paddingTop:3,paddingBottom:Platform.OS==='android'?9:2},
   v2NavItem:{flex:1,alignItems:'center',justifyContent:'center',position:'relative'},
   v2NavIndicator:{position:'absolute',top:0,width:28,height:2,borderRadius:2,backgroundColor:C.primary},
   v2NavIcon:{color:'#647181',fontSize:20,fontWeight:'900',height:25},
@@ -754,8 +800,7 @@ const styles=StyleSheet.create({
   v2Card:{backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:16,padding:14,marginBottom:12},
   v2CardHighlight:{borderColor:'#2878B0',shadowColor:C.primary,shadowOpacity:.12,shadowRadius:10,shadowOffset:{width:0,height:0},elevation:1},
   v2PlayerCard:{flexDirection:'row',alignItems:'center',gap:12,padding:14},
-  v2Avatar:{width:58,height:58,borderRadius:14,backgroundColor:'#172330',borderWidth:1,borderColor:'#35506A',alignItems:'center',justifyContent:'center',overflow:'hidden'},
-  v2AvatarImage:{width:'100%',height:'100%'},
+  v2Avatar:{width:58,height:58,borderRadius:14,backgroundColor:'#172330',borderWidth:1,borderColor:'#35506A',alignItems:'center',justifyContent:'center'},
   v2AvatarText:{color:C.cyan,fontSize:24,fontWeight:'900'},
   v2PlayerName:{color:C.text,fontSize:20,fontWeight:'900'},
   v2PlayerMeta:{color:C.muted,fontSize:11,marginTop:3},
@@ -786,23 +831,18 @@ const styles=StyleSheet.create({
   v2SmartTitle:{color:C.text,fontSize:16,fontWeight:'900'},
   v2SmartDetail:{color:C.muted,fontSize:11,lineHeight:16,marginTop:3},
   v2SmartValue:{fontSize:17,fontWeight:'900',fontVariant:['tabular-nums']},
-  v2QuickGrid:{flexDirection:'row',gap:8,marginTop:2,marginBottom:14},
-  v2Quick:{flex:1,minHeight:74,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:14,alignItems:'center',justifyContent:'center',paddingHorizontal:4},
+  v2QuickGrid:{flexDirection:'row',gap:8,marginBottom:12},
+  v2Quick:{flex:1,minHeight:78,backgroundColor:C.surface,borderWidth:1,borderColor:C.line,borderRadius:14,alignItems:'center',justifyContent:'center',paddingHorizontal:4},
   v2QuickIcon:{color:C.primary,fontSize:23,fontWeight:'900'},
   v2QuickLabel:{color:C.text,fontSize:10,fontWeight:'800',marginTop:7,textAlign:'center'},
-  v2HudButton:{minHeight:74,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:14},
+  v2HudButton:{minHeight:76,borderRadius:16,backgroundColor:C.primary,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:12,marginBottom:12},
   v2HudButtonActive:{backgroundColor:'#126A9F'},
   v2HudButtonIcon:{width:44,height:44,borderRadius:22,borderWidth:2,borderColor:'#DFF5FF',alignItems:'center',justifyContent:'center'},
   v2HudButtonIconText:{color:'#FFFFFF',fontSize:20,fontWeight:'900'},
   v2HudButtonTitle:{color:'#FFFFFF',fontSize:16,fontWeight:'900'},
   v2HudButtonSub:{color:'#E0F2FF',fontSize:10,marginTop:2},
   v2HudButtonArrow:{color:'#FFFFFF',fontSize:28},
-  v2Sync:{color:'#647181',fontSize:9,textAlign:'center',marginTop:1,marginBottom:12},
-  v2ToolSummary:{backgroundColor:'#0D151E',borderWidth:1,borderColor:'#22425B',borderRadius:14,flexDirection:'row',alignItems:'stretch',marginBottom:12,overflow:'hidden'},
-  v2ToolSummaryItem:{flex:1,minHeight:68,alignItems:'center',justifyContent:'center',paddingHorizontal:5},
-  v2ToolSummaryDivider:{width:1,backgroundColor:'#263746',marginVertical:12},
-  v2ToolSummaryValue:{color:C.cyan,fontSize:15,fontWeight:'900',letterSpacing:.3},
-  v2ToolSummaryLabel:{color:'#7F8C9A',fontSize:7,fontWeight:'900',letterSpacing:.8,textAlign:'center',marginTop:4},
+  v2Sync:{color:'#647181',fontSize:9,textAlign:'center',marginBottom:4},
   v2Warning:{backgroundColor:'#21191B',borderWidth:1,borderColor:'#6B343B',borderRadius:14,padding:12,flexDirection:'row',gap:10,alignItems:'center',marginBottom:12},
   v2WarningIcon:{color:C.medical,fontSize:18,fontWeight:'900'},
   v2WarningTitle:{color:C.text,fontSize:11,fontWeight:'900'},
@@ -868,9 +908,7 @@ const styles=StyleSheet.create({
   v2MenuArrow:{color:C.cyan,fontSize:24},
   v2AboutTitle:{color:C.text,fontSize:20,fontWeight:'900',marginTop:5},
   v2AboutCopy:{color:C.muted,fontSize:10,lineHeight:16,marginTop:7},
-  v2SetupBrand:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
-  v2SetupLogoWrap:{flex:1,minWidth:0},
-  v2SetupLogo:{width:226,height:68,marginLeft:-7},
+  v2SetupBrand:{flexDirection:'row',alignItems:'center',gap:12},
   v2BrandMarkLarge:{width:56,height:56,borderRadius:15,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2BrandMarkLargeText:{color:C.cyan,fontSize:22,fontWeight:'900'},
   v2SetupTitle:{color:C.text,fontSize:22,fontWeight:'900'},
@@ -882,17 +920,13 @@ const styles=StyleSheet.create({
   v2SubBack:{width:44,height:44,borderRadius:12,alignItems:'center',justifyContent:'center'},
   v2SubBackText:{color:C.cyan,fontSize:31,fontWeight:'500'},
   v2SubGear:{color:C.text,fontSize:18},
-  v2SubBrand:{flexDirection:'row',alignItems:'center',gap:6},
-  v2SubMark:{width:31,height:31,borderRadius:9,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center',overflow:'hidden'},
-  v2SubMarkImage:{width:29,height:29},
-  v2SubLogo:{width:122,height:36},
+  v2SubBrand:{flexDirection:'row',alignItems:'center',gap:8},
+  v2SubMark:{width:31,height:31,borderRadius:9,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2SubMarkText:{color:C.cyan,fontSize:13,fontWeight:'900'},
   v2SubTitle:{color:C.text,fontSize:14,fontWeight:'900',letterSpacing:.6},
   v2BootMark:{width:112,height:112,borderRadius:30,backgroundColor:'#0E2539',borderWidth:1,borderColor:'#235D86',alignItems:'center',justifyContent:'center'},
   v2BootMarkText:{color:C.cyan,fontSize:42,fontWeight:'900',letterSpacing:-2},
   v2BootTitle:{color:C.text,fontSize:27,fontWeight:'900',letterSpacing:1.5,marginTop:20},
-  v2BootLogo:{width:290,height:96,marginBottom:4},
   v2BootSub:{color:C.muted,fontSize:9,fontWeight:'800',letterSpacing:2.4,marginTop:7}
 
-});// TORNPULSE_PROFILE_IMAGE_V205 — show the player's official Torn profile image with a safe initials fallback.
-
+});
