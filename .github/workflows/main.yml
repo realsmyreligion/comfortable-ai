@@ -1,4 +1,4 @@
-name: Build Torn Pulse Market V1
+name: Build Torn Pulse Travel Market
 
 on:
   workflow_dispatch:
@@ -11,13 +11,12 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-
     env:
       CI: true
       NODE_ENV: production
 
     steps:
-      - name: Checkout project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Node
@@ -31,27 +30,4895 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Verify Market V1 source
+      - name: Replace project with Torn Pulse Travel Market
+        shell: bash
         run: |
-          test -f App.js
-          test -f src/api.js
-          test -f src/marketCore.js
-          test -f src/storage.js
-          test -f scripts/self-test.cjs
+          set -euo pipefail
+
+          rm -rf android src scripts
+          rm -f App.js package.json package-lock.json app.config.js
+
+          cat > package.json <<'PACKAGE_JSON'
+          {
+            "name": "tornpulse-travel-market",
+            "version": "4.0.0",
+            "private": true,
+            "main": "expo/AppEntry.js",
+            "scripts": {
+              "start": "expo start",
+              "android": "expo start --android",
+              "export:android": "expo export --platform android",
+              "prebuild:android": "expo prebuild --platform android --clean"
+            },
+            "dependencies": {
+              "expo": "~57.0.0",
+              "expo-secure-store": "*",
+              "expo-status-bar": "*",
+              "react": "19.2.3",
+              "react-native": "0.86.0"
+            }
+          }
+          PACKAGE_JSON
+
+          cat > app.config.js <<'APP_CONFIG'
+          module.exports = ({ config }) => ({
+            ...config,
+            name: 'Torn Pulse',
+            slug: 'tornpulse-travel-market',
+            version: '4.0.0',
+            orientation: 'portrait',
+            userInterfaceStyle: 'dark',
+            android: {
+              ...(config.android || {}),
+              package: 'com.comfortableai.torncopilot',
+              versionCode: 40
+            },
+            plugins: ['expo-secure-store'],
+            extra: {
+              product: 'Foreign Travel Market',
+              build: 'Travel Market 4.0'
+            }
+          });
+          APP_CONFIG
+
+          cat > App.js <<'APP_JS'
+          import React, {
+            useCallback,
+            useEffect,
+            useMemo,
+            useRef,
+            useState
+          } from 'react';
+
+          import {
+            ActivityIndicator,
+            Alert,
+            FlatList,
+            Keyboard,
+            Pressable,
+            SafeAreaView,
+            ScrollView,
+            StyleSheet,
+            Text,
+            TextInput,
+            View
+          } from 'react-native';
+
+          import { StatusBar } from 'expo-status-bar';
+          import * as SecureStore from 'expo-secure-store';
+
+          const YATA_URL =
+            'https://yata.yt/api/v1/travel/export/';
+
+          const TORN_ITEMS_URL =
+            'https://api.torn.com/v2/torn/items?cat=All&sort=ASC&comment=TornPulseTravel';
+
+          const COUNTRY_ORDER = [
+            'mex',
+            'cay',
+            'can',
+            'haw',
+            'uni',
+            'arg',
+            'swi',
+            'jap',
+            'chi',
+            'uae',
+            'sou'
+          ];
+
+          const COUNTRIES = {
+            mex: {
+              name: 'Mexico',
+              city: 'Ciudad Juárez',
+              flag: '🇲🇽',
+              fare: 6500,
+              times: {
+                standard: 24,
+                airstrip: 17,
+                wlt: 12,
+                business: 7
+              },
+              book: {
+                standard: 18,
+                airstrip: 13,
+                wlt: 9,
+                business: 5
+              }
+            },
+
+            cay: {
+              name: 'Cayman Islands',
+              city: 'George Town',
+              flag: '🇰🇾',
+              fare: 10000,
+              times: {
+                standard: 33,
+                airstrip: 23,
+                wlt: 17,
+                business: 10
+              },
+              book: {
+                standard: 25,
+                airstrip: 17,
+                wlt: 13,
+                business: 8
+              }
+            },
+
+            can: {
+              name: 'Canada',
+              city: 'Toronto',
+              flag: '🇨🇦',
+              fare: 9000,
+              times: {
+                standard: 39,
+                airstrip: 27,
+                wlt: 19,
+                business: 12
+              },
+              book: {
+                standard: 29,
+                airstrip: 20,
+                wlt: 15,
+                business: 9
+              }
+            },
+
+            haw: {
+              name: 'Hawaii',
+              city: 'Honolulu',
+              flag: '🇺🇸',
+              fare: 11000,
+              times: {
+                standard: 127,
+                airstrip: 89,
+                wlt: 63,
+                business: 38
+              },
+              book: {
+                standard: 95,
+                airstrip: 67,
+                wlt: 48,
+                business: 29
+              }
+            },
+
+            uni: {
+              name: 'United Kingdom',
+              city: 'London',
+              flag: '🇬🇧',
+              fare: 18000,
+              times: {
+                standard: 151,
+                airstrip: 106,
+                wlt: 75,
+                business: 45
+              },
+              book: {
+                standard: 113,
+                airstrip: 80,
+                wlt: 57,
+                business: 34
+              }
+            },
+
+            arg: {
+              name: 'Argentina',
+              city: 'Buenos Aires',
+              flag: '🇦🇷',
+              fare: 21000,
+              times: {
+                standard: 158,
+                airstrip: 111,
+                wlt: 79,
+                business: 47
+              },
+              book: {
+                standard: 119,
+                airstrip: 83,
+                wlt: 59,
+                business: 35
+              }
+            },
+
+            swi: {
+              name: 'Switzerland',
+              city: 'Zurich',
+              flag: '🇨🇭',
+              fare: 27000,
+              times: {
+                standard: 166,
+                airstrip: 116,
+                wlt: 83,
+                business: 50
+              },
+              book: {
+                standard: 125,
+                airstrip: 87,
+                wlt: 62,
+                business: 38
+              }
+            },
+
+            jap: {
+              name: 'Japan',
+              city: 'Tokyo',
+              flag: '🇯🇵',
+              fare: 32000,
+              times: {
+                standard: 213,
+                airstrip: 149,
+                wlt: 107,
+                business: 64
+              },
+              book: {
+                standard: 160,
+                airstrip: 112,
+                wlt: 80,
+                business: 48
+              }
+            },
+
+            chi: {
+              name: 'China',
+              city: 'Beijing',
+              flag: '🇨🇳',
+              fare: 35000,
+              times: {
+                standard: 229,
+                airstrip: 160,
+                wlt: 115,
+                business: 69
+              },
+              book: {
+                standard: 172,
+                airstrip: 120,
+                wlt: 86,
+                business: 52
+              }
+            },
+
+            uae: {
+              name: 'United Arab Emirates',
+              city: 'Dubai',
+              flag: '🇦🇪',
+              fare: 32000,
+              times: {
+                standard: 257,
+                airstrip: 180,
+                wlt: 129,
+                business: 77
+              },
+              book: {
+                standard: 193,
+                airstrip: 135,
+                wlt: 97,
+                business: 58
+              }
+            },
+
+            sou: {
+              name: 'South Africa',
+              city: 'Johannesburg',
+              flag: '🇿🇦',
+              fare: 40000,
+              times: {
+                standard: 282,
+                airstrip: 197,
+                wlt: 141,
+                business: 85
+              },
+              book: {
+                standard: 212,
+                airstrip: 148,
+                wlt: 106,
+                business: 64
+              }
+            }
+          };
+
+          const C = {
+            bg: '#05080b',
+            panel: '#0b1116',
+            panel2: '#0e171d',
+            line: '#1d2a33',
+            text: '#f5f7f8',
+            muted: '#8c9aa4',
+            faint: '#53616b',
+            cyan: '#30d5ff',
+            green: '#51e39a',
+            amber: '#ffc15c',
+            red: '#ff6877',
+            blue: '#7d92ff'
+          };
+
+          const DEFAULT_SETTINGS = {
+            baseCapacity: 22,
+            tourismMode: true,
+            flightMode: 'standard',
+            mailingBook: false,
+            refreshSeconds: 15,
+            hideSoldOut: false
+          };
+
+          const KEY_API =
+            'tp_travel_api_v4';
+
+          const KEY_SETTINGS =
+            'tp_travel_settings_v4';
+
+          function n(
+            value,
+            fallback = 0
+          ) {
+            const x = Number(value);
+
+            return Number.isFinite(x)
+              ? x
+              : fallback;
+          }
+
+          function money(value) {
+            const x =
+              Math.round(
+                n(value)
+              );
+
+            const sign =
+              x < 0
+                ? '-'
+                : '';
+
+            return (
+              `${sign}$` +
+              Math.abs(
+                x
+              ).toLocaleString()
+            );
+          }
+
+          function compactMoney(value) {
+            const x =
+              n(value);
+
+            const a =
+              Math.abs(x);
+
+            const sign =
+              x < 0
+                ? '-'
+                : '';
+
+            if (a >= 1e9) {
+              return (
+                `${sign}$` +
+                (a / 1e9).toFixed(1) +
+                'b'
+              );
+            }
+
+            if (a >= 1e6) {
+              return (
+                `${sign}$` +
+                (a / 1e6).toFixed(1) +
+                'm'
+              );
+            }
+
+            if (a >= 1e3) {
+              return (
+                `${sign}$` +
+                (a / 1e3).toFixed(1) +
+                'k'
+              );
+            }
+
+            return money(x);
+          }
+
+          function ageSeconds(
+            ts,
+            now = Date.now()
+          ) {
+            if (!ts) {
+              return Infinity;
+            }
+
+            return Math.max(
+              0,
+              Math.floor(
+                now / 1000
+              ) -
+              Number(ts)
+            );
+          }
+
+          function ageLabel(
+            seconds
+          ) {
+            if (
+              !Number.isFinite(
+                seconds
+              )
+            ) {
+              return 'unknown';
+            }
+
+            if (seconds < 10) {
+              return 'just now';
+            }
+
+            if (seconds < 60) {
+              return `${seconds}s ago`;
+            }
+
+            const m =
+              Math.floor(
+                seconds / 60
+              );
+
+            if (m < 60) {
+              return `${m}m ago`;
+            }
+
+            return (
+              `${Math.floor(
+                m / 60
+              )}h ago`
+            );
+          }
+
+          function freshness(
+            ts,
+            now = Date.now()
+          ) {
+            const age =
+              ageSeconds(
+                ts,
+                now
+              );
+
+            if (age <= 60) {
+              return {
+                label: 'LIVE',
+                color: C.green,
+                age
+              };
+            }
+
+            if (age <= 300) {
+              return {
+                label: 'RECENT',
+                color: C.amber,
+                age
+              };
+            }
+
+            return {
+              label: 'STALE',
+              color: C.red,
+              age
+            };
+          }
+
+          function flightMinutes(
+            code,
+            settings
+          ) {
+            const meta =
+              COUNTRIES[code];
+
+            if (!meta) {
+              return 0;
+            }
+
+            const table =
+              settings.mailingBook
+                ? meta.book
+                : meta.times;
+
+            return n(
+              table[
+                settings.flightMode
+              ],
+              table.standard || 0
+            );
+          }
+
+          function capacity(
+            settings
+          ) {
+            const base =
+              Math.max(
+                1,
+                Math.trunc(
+                  n(
+                    settings.baseCapacity,
+                    22
+                  )
+                )
+              );
+
+            return settings.tourismMode
+              ? base * 2
+              : base;
+          }
+
+          function normalizeForeign(
+            payload
+          ) {
+            const rows = [];
+
+            const root =
+              payload?.stocks;
+
+            if (
+              !root ||
+              typeof root !== 'object'
+            ) {
+              return rows;
+            }
+
+            for (
+              const [
+                code,
+                block
+              ] of Object.entries(
+                root
+              )
+            ) {
+              const meta =
+                COUNTRIES[code] ||
+                {
+                  name:
+                    code.toUpperCase(),
+                  city: '',
+                  flag: '🌐',
+                  fare: 0
+                };
+
+              const updated =
+                n(
+                  block?.update,
+                  0
+                );
+
+              const stocks =
+                Array.isArray(
+                  block?.stocks
+                )
+                  ? block.stocks
+                  : [];
+
+              for (
+                const item of stocks
+              ) {
+                const id =
+                  n(
+                    item?.id,
+                    NaN
+                  );
+
+                if (
+                  !Number.isFinite(id)
+                ) {
+                  continue;
+                }
+
+                rows.push({
+                  key:
+                    `${code}:${id}`,
+
+                  countryCode:
+                    code,
+
+                  country:
+                    meta.name,
+
+                  city:
+                    meta.city,
+
+                  flag:
+                    meta.flag,
+
+                  fare:
+                    meta.fare,
+
+                  id,
+
+                  name:
+                    String(
+                      item?.name ||
+                      `Item #${id}`
+                    ),
+
+                  quantity:
+                    Math.max(
+                      0,
+                      Math.trunc(
+                        n(
+                          item?.quantity,
+                          0
+                        )
+                      )
+                    ),
+
+                  foreignPrice:
+                    Math.max(
+                      0,
+                      n(
+                        item?.cost,
+                        0
+                      )
+                    ),
+
+                  updated
+                });
+              }
+            }
+
+            return rows;
+          }
+
+          async function fetchJson(
+            url,
+            options = {},
+            timeout = 16000
+          ) {
+            const controller =
+              typeof AbortController !==
+              'undefined'
+                ? new AbortController()
+                : null;
+
+            const timer =
+              controller
+                ? setTimeout(
+                    () =>
+                      controller.abort(),
+                    timeout
+                  )
+                : null;
+
+            try {
+              const response =
+                await fetch(
+                  url,
+                  {
+                    ...options,
+                    signal:
+                      controller?.signal
+                  }
+                );
+
+              if (
+                !response.ok
+              ) {
+                throw new Error(
+                  `Request failed (${response.status})`
+                );
+              }
+
+              const data =
+                await response.json();
+
+              if (
+                data?.error
+              ) {
+                throw new Error(
+                  data.error.error ||
+                  data.error.message ||
+                  'API error'
+                );
+              }
+
+              return data;
+            } catch (e) {
+              if (
+                String(
+                  e?.name
+                ) ===
+                'AbortError'
+              ) {
+                throw new Error(
+                  'Request timed out'
+                );
+              }
+
+              throw e;
+            } finally {
+              if (timer) {
+                clearTimeout(timer);
+              }
+            }
+          }
+
+          async function getForeignStock() {
+            const payload =
+              await fetchJson(
+                YATA_URL,
+                {
+                  headers: {
+                    Accept:
+                      'application/json'
+                  }
+                }
+              );
+
+            const rows =
+              normalizeForeign(
+                payload
+              );
+
+            if (!rows.length) {
+              throw new Error(
+                'Foreign stock feed returned no usable data.'
+              );
+            }
+
+            return rows;
+          }
+
+          function extractItems(
+            payload
+          ) {
+            if (
+              Array.isArray(
+                payload?.items
+              )
+            ) {
+              return payload.items;
+            }
+
+            if (
+              payload?.items &&
+              typeof payload.items ===
+              'object'
+            ) {
+              return Object.entries(
+                payload.items
+              ).map(
+                ([id, item]) => ({
+                  id:
+                    Number(
+                      item?.id ||
+                      id
+                    ),
+
+                  ...(item || {})
+                })
+              );
+            }
+
+            return Array.isArray(
+              payload
+            )
+              ? payload
+              : [];
+          }
+
+          async function getTornPrices(
+            apiKey
+          ) {
+            const key =
+              String(
+                apiKey || ''
+              ).trim();
+
+            if (!key) {
+              return {};
+            }
+
+            const payload =
+              await fetchJson(
+                `${TORN_ITEMS_URL}&key=${encodeURIComponent(key)}`,
+                {
+                  headers: {
+                    Accept:
+                      'application/json'
+                  }
+                },
+                20000
+              );
+
+            const map = {};
+
+            for (
+              const item of
+              extractItems(payload)
+            ) {
+              const id =
+                Number(
+                  item?.id
+                );
+
+              if (
+                !Number.isFinite(id)
+              ) {
+                continue;
+              }
+
+              const value =
+                item?.value || {};
+
+              const price =
+                n(
+                  value.market_price ??
+                  item.market_price ??
+                  item.market_value,
+                  0
+                );
+
+              map[
+                String(id)
+              ] = {
+                name:
+                  String(
+                    item?.name ||
+                    `Item #${id}`
+                  ),
+
+                price:
+                  Math.max(
+                    0,
+                    price
+                  )
+              };
+            }
+
+            return map;
+          }
+
+          async function loadStoredSettings() {
+            try {
+              const raw =
+                await SecureStore
+                  .getItemAsync(
+                    KEY_SETTINGS
+                  );
+
+              return raw
+                ? {
+                    ...DEFAULT_SETTINGS,
+                    ...JSON.parse(raw)
+                  }
+                : DEFAULT_SETTINGS;
+            } catch (_) {
+              return DEFAULT_SETTINGS;
+            }
+          }
+
+          async function saveStoredSettings(
+            value
+          ) {
+            await SecureStore
+              .setItemAsync(
+                KEY_SETTINGS,
+                JSON.stringify(
+                  value
+                )
+              );
+          }
+
+          function buildGroups(
+            rows
+          ) {
+            const map =
+              new Map();
+
+            for (
+              const code of
+              COUNTRY_ORDER
+            ) {
+              const meta =
+                COUNTRIES[code];
+
+              map.set(
+                code,
+                {
+                  countryCode:
+                    code,
+
+                  ...meta,
+
+                  updated: 0,
+                  items: []
+                }
+              );
+            }
+
+            for (
+              const row of rows
+            ) {
+              if (
+                !map.has(
+                  row.countryCode
+                )
+              ) {
+                map.set(
+                  row.countryCode,
+                  {
+                    countryCode:
+                      row.countryCode,
+
+                    name:
+                      row.country,
+
+                    city:
+                      row.city,
+
+                    flag:
+                      row.flag,
+
+                    fare:
+                      row.fare,
+
+                    updated: 0,
+                    items: []
+                  }
+                );
+              }
+
+              const group =
+                map.get(
+                  row.countryCode
+                );
+
+              group.updated =
+                Math.max(
+                  group.updated || 0,
+                  row.updated || 0
+                );
+
+              group.items.push(
+                row
+              );
+            }
+
+            return Array.from(
+              map.values()
+            )
+              .filter(
+                group =>
+                  group.items.length
+              )
+              .map(
+                group => ({
+                  ...group,
+
+                  items:
+                    group.items
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          a.name.localeCompare(
+                            b.name
+                          )
+                      )
+                })
+              );
+          }
+
+          function updateVelocity(
+            previous,
+            rows,
+            oldVelocity
+          ) {
+            const nextPrev = {
+              ...previous
+            };
+
+            const nextVel = {
+              ...oldVelocity
+            };
+
+            for (
+              const row of rows
+            ) {
+              const prev =
+                previous[
+                  row.key
+                ];
+
+              if (
+                prev &&
+                row.updated >
+                prev.updated
+              ) {
+                const minutes =
+                  (
+                    row.updated -
+                    prev.updated
+                  ) / 60;
+
+                if (
+                  minutes > 0 &&
+                  row.quantity <
+                  prev.quantity
+                ) {
+                  const observed =
+                    (
+                      prev.quantity -
+                      row.quantity
+                    ) /
+                    minutes;
+
+                  const old =
+                    n(
+                      nextVel[
+                        row.key
+                      ]?.rate,
+                      0
+                    );
+
+                  nextVel[
+                    row.key
+                  ] = {
+                    rate:
+                      old > 0
+                        ? old * 0.5 +
+                          observed * 0.5
+                        : observed
+                  };
+                } else if (
+                  minutes > 0 &&
+                  row.quantity >
+                  prev.quantity
+                ) {
+                  nextVel[
+                    row.key
+                  ] = {
+                    rate: 0
+                  };
+                }
+              }
+
+              nextPrev[
+                row.key
+              ] = {
+                quantity:
+                  row.quantity,
+
+                updated:
+                  row.updated
+              };
+            }
+
+            return {
+              previous:
+                nextPrev,
+
+              velocity:
+                nextVel
+            };
+          }
+
+          function candidate(
+            row,
+            prices,
+            settings,
+            velocity
+          ) {
+            const cap =
+              capacity(
+                settings
+              );
+
+            const marketPrice =
+              n(
+                prices[
+                  String(
+                    row.id
+                  )
+                ]?.price,
+                0
+              );
+
+            const profitEach =
+              marketPrice > 0
+                ? marketPrice -
+                  row.foreignPrice
+                : 0;
+
+            const minutes =
+              flightMinutes(
+                row.countryCode,
+                settings
+              );
+
+            const rate =
+              Math.max(
+                0,
+                n(
+                  velocity[
+                    row.key
+                  ]?.rate,
+                  0
+                )
+              );
+
+            const projectedQty =
+              rate > 0
+                ? Math.max(
+                    0,
+                    Math.floor(
+                      row.quantity -
+                      rate * minutes
+                    )
+                  )
+                : null;
+
+            const currentLoad =
+              Math.min(
+                cap,
+                row.quantity
+              );
+
+            const projectedLoad =
+              projectedQty == null
+                ? currentLoad
+                : Math.min(
+                    cap,
+                    projectedQty
+                  );
+
+            const fare =
+              settings.flightMode ===
+              'standard'
+                ? n(
+                    row.fare,
+                    0
+                  ) * 2
+                : 0;
+
+            const loadProfit =
+              marketPrice > 0
+                ? currentLoad *
+                    profitEach -
+                  fare
+                : null;
+
+            const projectedProfit =
+              marketPrice > 0
+                ? projectedLoad *
+                    profitEach -
+                  fare
+                : null;
+
+            const ppm =
+              projectedProfit != null &&
+              minutes > 0
+                ? projectedProfit /
+                  (
+                    minutes * 2
+                  )
+                : null;
+
+            let arrival =
+              'NO TREND';
+
+            if (
+              row.quantity <= 0
+            ) {
+              arrival =
+                'SOLD OUT';
+            } else if (
+              projectedQty ==
+              null
+            ) {
+              arrival =
+                'NO TREND';
+            } else if (
+              projectedQty >=
+              cap
+            ) {
+              arrival =
+                'LIKELY';
+            } else if (
+              projectedQty > 0
+            ) {
+              arrival =
+                'AT RISK';
+            } else {
+              arrival =
+                'UNLIKELY';
+            }
+
+            return {
+              ...row,
+              marketPrice,
+              profitEach,
+              minutes,
+              rate,
+              projectedQty,
+              projectedLoad,
+              loadProfit,
+              projectedProfit,
+              ppm,
+              arrival
+            };
+          }
+
+          function arrivalColor(
+            value
+          ) {
+            if (
+              value === 'LIKELY'
+            ) {
+              return C.green;
+            }
+
+            if (
+              value ===
+                'AT RISK' ||
+              value ===
+                'NO TREND'
+            ) {
+              return C.amber;
+            }
+
+            return C.red;
+          }
+
+          function Badge({
+            text,
+            color = C.muted
+          }) {
+            return (
+              <View
+                style={[
+                  styles.badge,
+                  {
+                    borderColor:
+                      color + '66'
+                  }
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.badgeText,
+                    { color }
+                  ]}
+                >
+                  {text}
+                </Text>
+              </View>
+            );
+          }
+
+          function Header({
+            tab,
+            syncing,
+            pricesReady,
+            onRefresh
+          }) {
+            return (
+              <View
+                style={
+                  styles.header
+                }
+              >
+                <View
+                  style={
+                    styles.headerRow
+                  }
+                >
+                  <View>
+                    <Text
+                      style={
+                        styles.logo
+                      }
+                    >
+                      TORN{' '}
+                      <Text
+                        style={{
+                          color:
+                            C.cyan
+                        }}
+                      >
+                        PULSE
+                      </Text>
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.subLogo
+                      }
+                    >
+                      FOREIGN TRAVEL
+                      MARKET • {tab}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={
+                      onRefresh
+                    }
+                    disabled={
+                      syncing
+                    }
+                    style={
+                      styles.refreshButton
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.refreshText
+                      }
+                    >
+                      {syncing
+                        ? '•••'
+                        : '↻'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View
+                  style={
+                    styles.badgeRow
+                  }
+                >
+                  <Badge
+                    text="FOREIGN STOCK"
+                    color={
+                      C.green
+                    }
+                  />
+
+                  <Badge
+                    text={
+                      pricesReady
+                        ? 'TORN PRICES ON'
+                        : 'TORN PRICES OFF'
+                    }
+                    color={
+                      pricesReady
+                        ? C.cyan
+                        : C.muted
+                    }
+                  />
+                </View>
+              </View>
+            );
+          }
+
+          function BestCard({
+            best,
+            cap,
+            pricesReady
+          }) {
+            if (!pricesReady) {
+              return (
+                <View
+                  style={
+                    styles.bestCard
+                  }
+                >
+                  <Text
+                    style={
+                      styles.eyebrow
+                    }
+                  >
+                    BEST TRIP
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.bestTitle
+                    }
+                  >
+                    Connect Torn prices
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.copy
+                    }
+                  >
+                    Add your Torn API key
+                    in Settings. Stock and
+                    foreign buy prices work
+                    without it.
+                  </Text>
+                </View>
+              );
+            }
+
+            if (!best) {
+              return (
+                <View
+                  style={
+                    styles.bestCard
+                  }
+                >
+                  <Text
+                    style={
+                      styles.eyebrow
+                    }
+                  >
+                    BEST TRIP
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.bestTitle
+                    }
+                  >
+                    No profitable stocked
+                    run
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.copy
+                    }
+                  >
+                    Nothing in the current
+                    feed has a positive
+                    projected load profit.
+                  </Text>
+                </View>
+              );
+            }
+
+            return (
+              <View
+                style={[
+                  styles.bestCard,
+                  {
+                    borderColor:
+                      C.green +
+                      '66'
+                  }
+                ]}
+              >
+                <View
+                  style={
+                    styles.rowBetween
+                  }
+                >
+                  <Text
+                    style={
+                      styles.eyebrow
+                    }
+                  >
+                    BEST CURRENT RUN
+                  </Text>
+
+                  <Badge
+                    text={
+                      best.arrival
+                    }
+                    color={
+                      arrivalColor(
+                        best.arrival
+                      )
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.bestTitle
+                  }
+                >
+                  {best.flag}{' '}
+                  {best.country}
+                </Text>
+
+                <Text
+                  style={
+                    styles.bestItem
+                  }
+                >
+                  {best.name}
+                </Text>
+
+                <View
+                  style={
+                    styles.metricRow
+                  }
+                >
+                  <View
+                    style={
+                      styles.metric
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.metricLabel
+                      }
+                    >
+                      LOAD
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.metricValue
+                      }
+                    >
+                      {Math.min(
+                        cap,
+                        best.quantity
+                      )}{' '}
+                      / {cap}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.metric
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.metricLabel
+                      }
+                    >
+                      EST. PROFIT
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.metricValue,
+                        {
+                          color:
+                            C.green
+                        }
+                      ]}
+                    >
+                      {compactMoney(
+                        best.projectedProfit ??
+                        best.loadProfit
+                      )}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.metric
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.metricLabel
+                      }
+                    >
+                      ONE WAY
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.metricValue
+                      }
+                    >
+                      {best.minutes}m
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            );
+          }
+
+          function ItemRow({
+            item,
+            prices,
+            settings,
+            velocity,
+            now
+          }) {
+            const c =
+              candidate(
+                item,
+                prices,
+                settings,
+                velocity
+              );
+
+            const fresh =
+              freshness(
+                item.updated,
+                now
+              );
+
+            const available =
+              item.quantity > 0;
+
+            return (
+              <View
+                style={
+                  styles.itemRow
+                }
+              >
+                <View
+                  style={{
+                    flex: 1,
+                    minWidth: 0
+                  }}
+                >
+                  <View
+                    style={
+                      styles.rowBetween
+                    }
+                  >
+                    <Text
+                      numberOfLines={
+                        1
+                      }
+                      style={
+                        styles.itemName
+                      }
+                    >
+                      {item.name}
+                    </Text>
+
+                    <Badge
+                      text={
+                        available
+                          ? 'AVAILABLE'
+                          : 'SOLD OUT'
+                      }
+                      color={
+                        available
+                          ? C.green
+                          : C.red
+                      }
+                    />
+                  </View>
+
+                  <View
+                    style={
+                      styles.itemGrid
+                    }
+                  >
+                    <View>
+                      <Text
+                        style={
+                          styles.smallLabel
+                        }
+                      >
+                        STOCK
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.smallValue,
+                          {
+                            color:
+                              available
+                                ? C.text
+                                : C.red
+                          }
+                        ]}
+                      >
+                        {item.quantity
+                          .toLocaleString()}
+                      </Text>
+                    </View>
+
+                    <View>
+                      <Text
+                        style={
+                          styles.smallLabel
+                        }
+                      >
+                        FOREIGN
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.smallValue
+                        }
+                      >
+                        {money(
+                          item.foreignPrice
+                        )}
+                      </Text>
+                    </View>
+
+                    <View>
+                      <Text
+                        style={
+                          styles.smallLabel
+                        }
+                      >
+                        TORN
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.smallValue
+                        }
+                      >
+                        {c.marketPrice
+                          ? money(
+                              c.marketPrice
+                            )
+                          : '—'}
+                      </Text>
+                    </View>
+
+                    <View>
+                      <Text
+                        style={
+                          styles.smallLabel
+                        }
+                      >
+                        PROFIT EA.
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.smallValue,
+                          {
+                            color:
+                              c.profitEach >
+                              0
+                                ? C.green
+                                : C.muted
+                          }
+                        ]}
+                      >
+                        {c.marketPrice
+                          ? money(
+                              c.profitEach
+                            )
+                          : '—'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={
+                      styles.metaRow
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.meta,
+                        {
+                          color:
+                            fresh.color
+                        }
+                      ]}
+                    >
+                      {fresh.label} •{' '}
+                      {ageLabel(
+                        fresh.age
+                      )}
+                    </Text>
+
+                    {c.marketPrice >
+                      0 &&
+                    available ? (
+                      <Text
+                        style={
+                          styles.meta
+                        }
+                      >
+                        Load{' '}
+                        {compactMoney(
+                          c.loadProfit
+                        )}
+                      </Text>
+                    ) : null}
+
+                    {available ? (
+                      <Text
+                        style={[
+                          styles.meta,
+                          {
+                            color:
+                              arrivalColor(
+                                c.arrival
+                              )
+                          }
+                        ]}
+                      >
+                        {c.arrival}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            );
+          }
+
+          function CountryCard({
+            group,
+            prices,
+            settings,
+            velocity,
+            now
+          }) {
+            const fresh =
+              freshness(
+                group.updated,
+                now
+              );
+
+            const visible =
+              settings.hideSoldOut
+                ? group.items.filter(
+                    x =>
+                      x.quantity > 0
+                  )
+                : group.items;
+
+            const inStock =
+              group.items.filter(
+                x =>
+                  x.quantity > 0
+              ).length;
+
+            return (
+              <View
+                style={
+                  styles.countryCard
+                }
+              >
+                <View
+                  style={
+                    styles.rowBetween
+                  }
+                >
+                  <View
+                    style={
+                      styles.countryIdentity
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.flag
+                      }
+                    >
+                      {group.flag}
+                    </Text>
+
+                    <View>
+                      <Text
+                        style={
+                          styles.countryName
+                        }
+                      >
+                        {group.name}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.city
+                        }
+                      >
+                        {group.city}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={{
+                      alignItems:
+                        'flex-end'
+                    }}
+                  >
+                    <Badge
+                      text={
+                        fresh.label
+                      }
+                      color={
+                        fresh.color
+                      }
+                    />
+
+                    <Text
+                      style={
+                        styles.freshAge
+                      }
+                    >
+                      {ageLabel(
+                        fresh.age
+                      )}
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={
+                    styles.countrySummary
+                  }
+                >
+                  <Text
+                    style={
+                      styles.summaryText
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.summaryStrong
+                      }
+                    >
+                      {inStock}
+                    </Text>{' '}
+                    stocked
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.summaryText
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.summaryStrong
+                      }
+                    >
+                      {flightMinutes(
+                        group.countryCode,
+                        settings
+                      )}m
+                    </Text>{' '}
+                    one way
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.divider
+                  }
+                />
+
+                {visible.map(
+                  item => (
+                    <ItemRow
+                      key={
+                        item.key
+                      }
+                      item={
+                        item
+                      }
+                      prices={
+                        prices
+                      }
+                      settings={
+                        settings
+                      }
+                      velocity={
+                        velocity
+                      }
+                      now={
+                        now
+                      }
+                    />
+                  )
+                )}
+
+                {!visible.length ? (
+                  <Text
+                    style={
+                      styles.emptyInline
+                    }
+                  >
+                    Everything here is
+                    sold out.
+                  </Text>
+                ) : null}
+              </View>
+            );
+          }
+
+          function MarketScreen({
+            groups,
+            best,
+            cap,
+            prices,
+            settings,
+            velocity,
+            now,
+            search,
+            setSearch,
+            syncing,
+            feedAge,
+            error
+          }) {
+            const q =
+              search
+                .trim()
+                .toLowerCase();
+
+            const filtered =
+              groups
+                .map(
+                  group => ({
+                    ...group,
+
+                    items:
+                      group.items.filter(
+                        item =>
+                          !q ||
+                          group.name
+                            .toLowerCase()
+                            .includes(q) ||
+                          group.city
+                            .toLowerCase()
+                            .includes(q) ||
+                          item.name
+                            .toLowerCase()
+                            .includes(q)
+                      )
+                  })
+                )
+                .filter(
+                  group =>
+                    group.items.length
+                );
+
+            const header = (
+              <>
+                <BestCard
+                  best={
+                    best
+                  }
+                  cap={
+                    cap
+                  }
+                  pricesReady={
+                    Object.keys(
+                      prices
+                    ).length > 0
+                  }
+                />
+
+                <View
+                  style={
+                    styles.quickRow
+                  }
+                >
+                  <View
+                    style={
+                      styles.quickBox
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.smallLabel
+                      }
+                    >
+                      CAPACITY
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.quickValue
+                      }
+                    >
+                      {cap}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.quickBox
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.smallLabel
+                      }
+                    >
+                      REFRESH
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.quickValue
+                      }
+                    >
+                      {settings
+                        .refreshSeconds}s
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.quickBox
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.smallLabel
+                      }
+                    >
+                      FEED AGE
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.quickValue
+                      }
+                    >
+                      {feedAge}
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={
+                    styles.searchBox
+                  }
+                >
+                  <Text
+                    style={
+                      styles.searchIcon
+                    }
+                  >
+                    ⌕
+                  </Text>
+
+                  <TextInput
+                    value={
+                      search
+                    }
+                    onChangeText={
+                      setSearch
+                    }
+                    placeholder="Search item or country"
+                    placeholderTextColor={
+                      C.faint
+                    }
+                    style={
+                      styles.searchInput
+                    }
+                  />
+
+                  {search ? (
+                    <Pressable
+                      onPress={
+                        () =>
+                          setSearch(
+                            ''
+                          )
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.clear
+                        }
+                      >
+                        ×
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <View
+                  style={
+                    styles.sectionHead
+                  }
+                >
+                  <View>
+                    <Text
+                      style={
+                        styles.eyebrow
+                      }
+                    >
+                      WORLD STOCK
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.sectionTitle
+                      }
+                    >
+                      Live foreign market
+                    </Text>
+                  </View>
+
+                  {syncing ? (
+                    <ActivityIndicator
+                      color={
+                        C.cyan
+                      }
+                    />
+                  ) : null}
+                </View>
+
+                {error ? (
+                  <View
+                    style={
+                      styles.errorBox
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.errorTitle
+                      }
+                    >
+                      FEED ISSUE
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.errorText
+                      }
+                    >
+                      {error}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <Text
+                  style={
+                    styles.disclaimer
+                  }
+                >
+                  Stock is crowdsourced
+                  foreign-shop data.
+                  “Live” means recently
+                  observed, not a direct
+                  per-second Torn inventory
+                  feed.
+                </Text>
+              </>
+            );
+
+            return (
+              <FlatList
+                data={
+                  filtered
+                }
+                keyExtractor={
+                  item =>
+                    item.countryCode
+                }
+                renderItem={({
+                  item
+                }) => (
+                  <CountryCard
+                    group={
+                      item
+                    }
+                    prices={
+                      prices
+                    }
+                    settings={
+                      settings
+                    }
+                    velocity={
+                      velocity
+                    }
+                    now={
+                      now
+                    }
+                  />
+                )}
+                ListHeaderComponent={
+                  header
+                }
+                contentContainerStyle={
+                  styles.listContent
+                }
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={
+                  4
+                }
+                windowSize={
+                  7
+                }
+                removeClippedSubviews={
+                  false
+                }
+              />
+            );
+          }
+
+          function TripsScreen({
+            trips,
+            cap,
+            settings,
+            pricesReady
+          }) {
+            const header = (
+              <>
+                <View
+                  style={
+                    styles.sectionHead
+                  }
+                >
+                  <View>
+                    <Text
+                      style={
+                        styles.eyebrow
+                      }
+                    >
+                      TRIP ENGINE
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.sectionTitle
+                      }
+                    >
+                      Where to fly
+                    </Text>
+                  </View>
+
+                  <Badge
+                    text={
+                      pricesReady
+                        ? 'PROFIT ON'
+                        : 'STOCK ONLY'
+                    }
+                    color={
+                      pricesReady
+                        ? C.green
+                        : C.amber
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.copy
+                  }
+                >
+                  {pricesReady
+                    ? 'Ranked by projected load profit per round-trip minute using current observed stock.'
+                    : 'Connect your Torn API key in Settings to rank destinations by resale profit.'}
+                </Text>
+
+                <View
+                  style={
+                    styles.profileCard
+                  }
+                >
+                  <Text
+                    style={
+                      styles.smallLabel
+                    }
+                  >
+                    YOUR PROFILE
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.profileValue
+                    }
+                  >
+                    {cap} items •{' '}
+                    {settings
+                      .flightMode
+                      .toUpperCase()}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.copy
+                    }
+                  >
+                    {settings
+                      .tourismMode
+                      ? 'Tourism x2 ON • '
+                      : ''}
+
+                    {settings
+                      .mailingBook
+                      ? 'Mailing Yourself Abroad ON'
+                      : 'Normal travel-time table'}
+                  </Text>
+                </View>
+              </>
+            );
+
+            return (
+              <FlatList
+                data={
+                  trips
+                }
+                keyExtractor={
+                  item =>
+                    item.countryCode
+                }
+                ListHeaderComponent={
+                  header
+                }
+                contentContainerStyle={
+                  styles.listContent
+                }
+                renderItem={({
+                  item,
+                  index
+                }) => (
+                  <View
+                    style={
+                      styles.tripCard
+                    }
+                  >
+                    <View
+                      style={
+                        styles.rank
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.rankText
+                        }
+                      >
+                        {index +
+                          1}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 0
+                      }}
+                    >
+                      <View
+                        style={
+                          styles.rowBetween
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.tripCountry
+                          }
+                        >
+                          {item.flag}{' '}
+                          {item.country}
+                        </Text>
+
+                        <Badge
+                          text={
+                            item.arrival
+                          }
+                          color={
+                            arrivalColor(
+                              item.arrival
+                            )
+                          }
+                        />
+                      </View>
+
+                      <Text
+                        numberOfLines={
+                          1
+                        }
+                        style={
+                          styles.tripItem
+                        }
+                      >
+                        {item.name}
+                      </Text>
+
+                      <View
+                        style={
+                          styles.metaRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.meta
+                          }
+                        >
+                          {item.minutes}m
+                          one way
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.meta
+                          }
+                        >
+                          {Math.min(
+                            cap,
+                            item.quantity
+                          )}{' '}
+                          current load
+                        </Text>
+
+                        {item.projectedProfit !=
+                        null ? (
+                          <Text
+                            style={[
+                              styles.meta,
+                              {
+                                color:
+                                  C.green
+                              }
+                            ]}
+                          >
+                            {compactMoney(
+                              item.projectedProfit
+                            )}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+                )}
+              />
+            );
+          }
+
+          function Toggle({
+            label,
+            detail,
+            value,
+            onPress
+          }) {
+            return (
+              <Pressable
+                onPress={
+                  onPress
+                }
+                style={
+                  styles.settingRow
+                }
+              >
+                <View
+                  style={{
+                    flex: 1
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.settingLabel
+                    }
+                  >
+                    {label}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.settingDetail
+                    }
+                  >
+                    {detail}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.toggle,
+                    value &&
+                      styles.toggleOn
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      value && {
+                        color:
+                          C.green
+                      }
+                    ]}
+                  >
+                    {value
+                      ? 'ON'
+                      : 'OFF'}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }
+
+          function Choice({
+            label,
+            value,
+            options,
+            onChange
+          }) {
+            return (
+              <View
+                style={{
+                  gap: 8
+                }}
+              >
+                <Text
+                  style={
+                    styles.settingLabel
+                  }
+                >
+                  {label}
+                </Text>
+
+                <View
+                  style={
+                    styles.choiceRow
+                  }
+                >
+                  {options.map(
+                    x => (
+                      <Pressable
+                        key={
+                          x.value
+                        }
+                        onPress={
+                          () =>
+                            onChange(
+                              x.value
+                            )
+                        }
+                        style={[
+                          styles.choice,
+                          value ===
+                            x.value &&
+                            styles.choiceOn
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.choiceText,
+                            value ===
+                              x.value && {
+                              color:
+                                C.cyan
+                            }
+                          ]}
+                        >
+                          {x.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  )}
+                </View>
+              </View>
+            );
+          }
+
+          function SettingsScreen({
+            settings,
+            onSettings,
+            apiInput,
+            setApiInput,
+            apiKey,
+            onSaveKey,
+            priceAge,
+            priceSyncing
+          }) {
+            return (
+              <ScrollView
+                contentContainerStyle={
+                  styles.settingsContent
+                }
+                keyboardShouldPersistTaps="handled"
+              >
+                <View>
+                  <Text
+                    style={
+                      styles.eyebrow
+                    }
+                  >
+                    TRAVEL MARKET
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.sectionTitle
+                    }
+                  >
+                    Settings
+                  </Text>
+                </View>
+
+                <Text
+                  style={
+                    styles.groupLabel
+                  }
+                >
+                  TORN MARKET PRICES
+                </Text>
+
+                <View
+                  style={
+                    styles.settingsCard
+                  }
+                >
+                  <Text
+                    style={
+                      styles.settingLabel
+                    }
+                  >
+                    Torn API key
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.settingDetail
+                    }
+                  >
+                    Stored locally on your
+                    phone. Used only for
+                    Torn item market
+                    values.
+                  </Text>
+
+                  <TextInput
+                    value={
+                      apiInput
+                    }
+                    onChangeText={
+                      setApiInput
+                    }
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={
+                      false
+                    }
+                    placeholder="Paste API key"
+                    placeholderTextColor={
+                      C.faint
+                    }
+                    style={
+                      styles.apiInput
+                    }
+                  />
+
+                  <Pressable
+                    onPress={
+                      onSaveKey
+                    }
+                    style={
+                      styles.primaryButton
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.primaryText
+                      }
+                    >
+                      {apiKey
+                        ? 'SAVE & REFRESH PRICES'
+                        : 'CONNECT PRICES'}
+                    </Text>
+                  </Pressable>
+
+                  <Text
+                    style={
+                      styles.settingDetail
+                    }
+                  >
+                    {priceSyncing
+                      ? 'Refreshing prices…'
+                      : priceAge}
+                  </Text>
+                </View>
+
+                <Text
+                  style={
+                    styles.groupLabel
+                  }
+                >
+                  CARRYING CAPACITY
+                </Text>
+
+                <View
+                  style={
+                    styles.settingsCard
+                  }
+                >
+                  <View
+                    style={
+                      styles.settingRow
+                    }
+                  >
+                    <View
+                      style={{
+                        flex: 1
+                      }}
+                    >
+                      <Text
+                        style={
+                          styles.settingLabel
+                        }
+                      >
+                        Normal capacity
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.settingDetail
+                        }
+                      >
+                        Your normal limit
+                        before Tourism x2.
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.numberControl
+                      }
+                    >
+                      <Pressable
+                        onPress={
+                          () =>
+                            onSettings({
+                              baseCapacity:
+                                Math.max(
+                                  1,
+                                  settings
+                                    .baseCapacity -
+                                    1
+                                )
+                            })
+                        }
+                        style={
+                          styles.numberButton
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.numberText
+                          }
+                        >
+                          −
+                        </Text>
+                      </Pressable>
+
+                      <Text
+                        style={
+                          styles.numberValue
+                        }
+                      >
+                        {
+                          settings
+                            .baseCapacity
+                        }
+                      </Text>
+
+                      <Pressable
+                        onPress={
+                          () =>
+                            onSettings({
+                              baseCapacity:
+                                settings
+                                  .baseCapacity +
+                                1
+                            })
+                        }
+                        style={
+                          styles.numberButton
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.numberText
+                          }
+                        >
+                          +
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <Toggle
+                    label="Tourism x2"
+                    detail={
+                      `Current app capacity: ${capacity(settings)}`
+                    }
+                    value={
+                      settings
+                        .tourismMode
+                    }
+                    onPress={
+                      () =>
+                        onSettings({
+                          tourismMode:
+                            !settings
+                              .tourismMode
+                        })
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.groupLabel
+                  }
+                >
+                  TRAVEL
+                </Text>
+
+                <View
+                  style={
+                    styles.settingsCard
+                  }
+                >
+                  <Choice
+                    label="Travel method"
+                    value={
+                      settings
+                        .flightMode
+                    }
+                    onChange={
+                      flightMode =>
+                        onSettings({
+                          flightMode
+                        })
+                    }
+                    options={[
+                      {
+                        value:
+                          'standard',
+                        label:
+                          'Standard'
+                      },
+                      {
+                        value:
+                          'airstrip',
+                        label:
+                          'Airstrip'
+                      },
+                      {
+                        value:
+                          'wlt',
+                        label:
+                          'WLT'
+                      },
+                      {
+                        value:
+                          'business',
+                        label:
+                          'Business'
+                      }
+                    ]}
+                  />
+
+                  <Toggle
+                    label="Mailing Yourself Abroad"
+                    detail="Use the reduced travel-time table."
+                    value={
+                      settings
+                        .mailingBook
+                    }
+                    onPress={
+                      () =>
+                        onSettings({
+                          mailingBook:
+                            !settings
+                              .mailingBook
+                        })
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={
+                    styles.groupLabel
+                  }
+                >
+                  LIVE FEED
+                </Text>
+
+                <View
+                  style={
+                    styles.settingsCard
+                  }
+                >
+                  <Choice
+                    label="Refresh interval"
+                    value={
+                      settings
+                        .refreshSeconds
+                    }
+                    onChange={
+                      refreshSeconds =>
+                        onSettings({
+                          refreshSeconds
+                        })
+                    }
+                    options={[
+                      {
+                        value: 15,
+                        label:
+                          '15 sec'
+                      },
+                      {
+                        value: 30,
+                        label:
+                          '30 sec'
+                      },
+                      {
+                        value: 60,
+                        label:
+                          '60 sec'
+                      }
+                    ]}
+                  />
+
+                  <Toggle
+                    label="Hide sold-out items"
+                    detail="Only show items currently reported in stock."
+                    value={
+                      settings
+                        .hideSoldOut
+                    }
+                    onPress={
+                      () =>
+                        onSettings({
+                          hideSoldOut:
+                            !settings
+                              .hideSoldOut
+                        })
+                    }
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.infoCard
+                  }
+                >
+                  <Text
+                    style={
+                      styles.eyebrow
+                    }
+                  >
+                    DATA
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.copy
+                    }
+                  >
+                    Foreign availability
+                    comes from YATA’s
+                    crowdsourced travel
+                    feed. Torn resale
+                    values come from the
+                    official Torn API when
+                    your key is connected.
+                  </Text>
+                </View>
+              </ScrollView>
+            );
+          }
+
+          function BottomNav({
+            tab,
+            setTab
+          }) {
+            const items = [
+              [
+                'MARKET',
+                '⌁'
+              ],
+              [
+                'TRIPS',
+                '✈'
+              ],
+              [
+                'SETTINGS',
+                '⚙'
+              ]
+            ];
+
+            return (
+              <View
+                style={
+                  styles.nav
+                }
+              >
+                {items.map(
+                  ([
+                    key,
+                    icon
+                  ]) => (
+                    <Pressable
+                      key={
+                        key
+                      }
+                      onPress={
+                        () =>
+                          setTab(
+                            key
+                          )
+                      }
+                      style={
+                        styles.navItem
+                      }
+                    >
+                      {tab ===
+                      key ? (
+                        <View
+                          style={
+                            styles.navLine
+                          }
+                        />
+                      ) : null}
+
+                      <Text
+                        style={[
+                          styles.navIcon,
+                          tab ===
+                            key && {
+                            color:
+                              C.cyan
+                          }
+                        ]}
+                      >
+                        {icon}
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.navLabel,
+                          tab ===
+                            key && {
+                            color:
+                              C.cyan
+                          }
+                        ]}
+                      >
+                        {key}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+              </View>
+            );
+          }
+
+          export default function App() {
+            const [
+              tab,
+              setTab
+            ] =
+              useState(
+                'MARKET'
+              );
+
+            const [
+              rows,
+              setRows
+            ] =
+              useState([]);
+
+            const [
+              prices,
+              setPrices
+            ] =
+              useState({});
+
+            const [
+              settings,
+              setSettings
+            ] =
+              useState(
+                DEFAULT_SETTINGS
+              );
+
+            const [
+              apiKey,
+              setApiKey
+            ] =
+              useState('');
+
+            const [
+              apiInput,
+              setApiInput
+            ] =
+              useState('');
+
+            const [
+              search,
+              setSearch
+            ] =
+              useState('');
+
+            const [
+              syncing,
+              setSyncing
+            ] =
+              useState(true);
+
+            const [
+              priceSyncing,
+              setPriceSyncing
+            ] =
+              useState(false);
+
+            const [
+              error,
+              setError
+            ] =
+              useState('');
+
+            const [
+              feedFetchedAt,
+              setFeedFetchedAt
+            ] =
+              useState(0);
+
+            const [
+              priceFetchedAt,
+              setPriceFetchedAt
+            ] =
+              useState(0);
+
+            const [
+              now,
+              setNow
+            ] =
+              useState(
+                Date.now()
+              );
+
+            const [
+              velocity,
+              setVelocity
+            ] =
+              useState({});
+
+            const previousRef =
+              useRef({});
+
+            const velocityRef =
+              useRef({});
+
+            const mounted =
+              useRef(true);
+
+            const refreshForeign =
+              useCallback(
+                async (
+                  spinner = true
+                ) => {
+                  if (spinner) {
+                    setSyncing(
+                      true
+                    );
+                  }
+
+                  try {
+                    const data =
+                      await getForeignStock();
+
+                    const learned =
+                      updateVelocity(
+                        previousRef
+                          .current,
+                        data,
+                        velocityRef
+                          .current
+                      );
+
+                    previousRef.current =
+                      learned.previous;
+
+                    velocityRef.current =
+                      learned.velocity;
+
+                    if (
+                      mounted.current
+                    ) {
+                      setRows(
+                        data
+                      );
+
+                      setVelocity(
+                        learned.velocity
+                      );
+
+                      setFeedFetchedAt(
+                        Date.now()
+                      );
+
+                      setError(
+                        ''
+                      );
+                    }
+                  } catch (e) {
+                    if (
+                      mounted.current
+                    ) {
+                      setError(
+                        e?.message ||
+                        String(e)
+                      );
+                    }
+                  } finally {
+                    if (
+                      mounted.current &&
+                      spinner
+                    ) {
+                      setSyncing(
+                        false
+                      );
+                    }
+                  }
+                },
+                []
+              );
+
+            const refreshPrices =
+              useCallback(
+                async key => {
+                  const clean =
+                    String(
+                      key || ''
+                    ).trim();
+
+                  if (!clean) {
+                    return;
+                  }
+
+                  setPriceSyncing(
+                    true
+                  );
+
+                  try {
+                    const map =
+                      await getTornPrices(
+                        clean
+                      );
+
+                    if (
+                      mounted.current
+                    ) {
+                      setPrices(
+                        map
+                      );
+
+                      setPriceFetchedAt(
+                        Date.now()
+                      );
+                    }
+                  } catch (e) {
+                    if (
+                      mounted.current
+                    ) {
+                      Alert.alert(
+                        'Torn prices',
+                        e?.message ||
+                        String(e)
+                      );
+                    }
+                  } finally {
+                    if (
+                      mounted.current
+                    ) {
+                      setPriceSyncing(
+                        false
+                      );
+                    }
+                  }
+                },
+                []
+              );
+
+            useEffect(
+              () => {
+                mounted.current =
+                  true;
+
+                (
+                  async () => {
+                    const [
+                      savedSettings,
+                      savedKey
+                    ] =
+                      await Promise.all(
+                        [
+                          loadStoredSettings(),
+                          SecureStore
+                            .getItemAsync(
+                              KEY_API
+                            )
+                        ]
+                      );
+
+                    if (
+                      !mounted.current
+                    ) {
+                      return;
+                    }
+
+                    setSettings(
+                      savedSettings
+                    );
+
+                    setApiKey(
+                      savedKey || ''
+                    );
+
+                    setApiInput(
+                      savedKey || ''
+                    );
+
+                    await refreshForeign(
+                      true
+                    );
+
+                    if (
+                      savedKey
+                    ) {
+                      refreshPrices(
+                        savedKey
+                      );
+                    }
+                  }
+                )();
+
+                return () => {
+                  mounted.current =
+                    false;
+                };
+              },
+              [
+                refreshForeign,
+                refreshPrices
+              ]
+            );
+
+            useEffect(
+              () => {
+                const id =
+                  setInterval(
+                    () =>
+                      setNow(
+                        Date.now()
+                      ),
+                    5000
+                  );
+
+                return () =>
+                  clearInterval(
+                    id
+                  );
+              },
+              []
+            );
+
+            useEffect(
+              () => {
+                const ms =
+                  Math.max(
+                    15,
+                    n(
+                      settings
+                        .refreshSeconds,
+                      15
+                    )
+                  ) *
+                  1000;
+
+                const id =
+                  setInterval(
+                    () =>
+                      refreshForeign(
+                        false
+                      ),
+                    ms
+                  );
+
+                return () =>
+                  clearInterval(
+                    id
+                  );
+              },
+              [
+                settings
+                  .refreshSeconds,
+                refreshForeign
+              ]
+            );
+
+            useEffect(
+              () => {
+                if (!apiKey) {
+                  return;
+                }
+
+                const id =
+                  setInterval(
+                    () =>
+                      refreshPrices(
+                        apiKey
+                      ),
+                    300000
+                  );
+
+                return () =>
+                  clearInterval(
+                    id
+                  );
+              },
+              [
+                apiKey,
+                refreshPrices
+              ]
+            );
+
+            const groups =
+              useMemo(
+                () =>
+                  buildGroups(
+                    rows
+                  ),
+                [
+                  rows
+                ]
+              );
+
+            const cap =
+              capacity(
+                settings
+              );
+
+            const candidates =
+              useMemo(
+                () =>
+                  rows.map(
+                    row =>
+                      candidate(
+                        row,
+                        prices,
+                        settings,
+                        velocity
+                      )
+                  ),
+                [
+                  rows,
+                  prices,
+                  settings,
+                  velocity
+                ]
+              );
+
+            const best =
+              useMemo(
+                () =>
+                  candidates
+                    .filter(
+                      x =>
+                        x.quantity >
+                          0 &&
+                        x.marketPrice >
+                          0 &&
+                        x.profitEach >
+                          0 &&
+                        (
+                          x.projectedProfit ??
+                          x.loadProfit ??
+                          0
+                        ) > 0
+                    )
+                    .sort(
+                      (
+                        a,
+                        b
+                      ) =>
+                        (
+                          b.ppm ??
+                          -Infinity
+                        ) -
+                        (
+                          a.ppm ??
+                          -Infinity
+                        )
+                    )[0] ||
+                  null,
+                [
+                  candidates
+                ]
+              );
+
+            const trips =
+              useMemo(
+                () => {
+                  const map =
+                    new Map();
+
+                  const hasPrices =
+                    Object.keys(
+                      prices
+                    ).length >
+                    0;
+
+                  for (
+                    const c of
+                    candidates
+                  ) {
+                    if (
+                      c.quantity <=
+                      0
+                    ) {
+                      continue;
+                    }
+
+                    const old =
+                      map.get(
+                        c.countryCode
+                      );
+
+                    const score =
+                      hasPrices
+                        ? c.ppm ??
+                          -Infinity
+                        : c.quantity;
+
+                    const oldScore =
+                      old
+                        ? hasPrices
+                          ? old.ppm ??
+                            -Infinity
+                          : old.quantity
+                        : -Infinity;
+
+                    if (
+                      !old ||
+                      score >
+                        oldScore
+                    ) {
+                      map.set(
+                        c.countryCode,
+                        c
+                      );
+                    }
+                  }
+
+                  return Array.from(
+                    map.values()
+                  ).sort(
+                    (
+                      a,
+                      b
+                    ) =>
+                      hasPrices
+                        ? (
+                            b.ppm ??
+                            -Infinity
+                          ) -
+                          (
+                            a.ppm ??
+                            -Infinity
+                          )
+                        : b.quantity -
+                          a.quantity
+                  );
+                },
+                [
+                  candidates,
+                  prices
+                ]
+              );
+
+            async function patchSettings(
+              patch
+            ) {
+              const next = {
+                ...settings,
+                ...patch
+              };
+
+              setSettings(
+                next
+              );
+
+              try {
+                await saveStoredSettings(
+                  next
+                );
+              } catch (_) {}
+            }
+
+            async function saveKey() {
+              Keyboard.dismiss();
+
+              const clean =
+                apiInput
+                  .trim();
+
+              if (clean) {
+                await SecureStore
+                  .setItemAsync(
+                    KEY_API,
+                    clean
+                  );
+              } else {
+                await SecureStore
+                  .deleteItemAsync(
+                    KEY_API
+                  );
+              }
+
+              setApiKey(
+                clean
+              );
+
+              if (!clean) {
+                setPrices(
+                  {}
+                );
+
+                setPriceFetchedAt(
+                  0
+                );
+
+                return;
+              }
+
+              await refreshPrices(
+                clean
+              );
+            }
+
+            const feedAge =
+              feedFetchedAt
+                ? ageLabel(
+                    Math.floor(
+                      (
+                        now -
+                        feedFetchedAt
+                      ) /
+                      1000
+                    )
+                  )
+                : '—';
+
+            const priceAge =
+              priceFetchedAt
+                ? `Prices updated ${ageLabel(
+                    Math.floor(
+                      (
+                        now -
+                        priceFetchedAt
+                      ) /
+                      1000
+                    )
+                  )}`
+                : 'No Torn price sync yet.';
+
+            return (
+              <SafeAreaView
+                style={
+                  styles.safe
+                }
+              >
+                <StatusBar
+                  style="light"
+                  backgroundColor={
+                    C.bg
+                  }
+                />
+
+                <Header
+                  tab={
+                    tab
+                  }
+                  syncing={
+                    syncing
+                  }
+                  pricesReady={
+                    Object.keys(
+                      prices
+                    ).length > 0
+                  }
+                  onRefresh={
+                    () => {
+                      refreshForeign(
+                        true
+                      );
+
+                      if (
+                        apiKey
+                      ) {
+                        refreshPrices(
+                          apiKey
+                        );
+                      }
+                    }
+                  }
+                />
+
+                <View
+                  style={
+                    styles.content
+                  }
+                >
+                  {tab ===
+                  'MARKET' ? (
+                    <MarketScreen
+                      groups={
+                        groups
+                      }
+                      best={
+                        best
+                      }
+                      cap={
+                        cap
+                      }
+                      prices={
+                        prices
+                      }
+                      settings={
+                        settings
+                      }
+                      velocity={
+                        velocity
+                      }
+                      now={
+                        now
+                      }
+                      search={
+                        search
+                      }
+                      setSearch={
+                        setSearch
+                      }
+                      syncing={
+                        syncing
+                      }
+                      feedAge={
+                        feedAge
+                      }
+                      error={
+                        error
+                      }
+                    />
+                  ) : null}
+
+                  {tab ===
+                  'TRIPS' ? (
+                    <TripsScreen
+                      trips={
+                        trips
+                      }
+                      cap={
+                        cap
+                      }
+                      settings={
+                        settings
+                      }
+                      pricesReady={
+                        Object.keys(
+                          prices
+                        ).length >
+                        0
+                      }
+                    />
+                  ) : null}
+
+                  {tab ===
+                  'SETTINGS' ? (
+                    <SettingsScreen
+                      settings={
+                        settings
+                      }
+                      onSettings={
+                        patchSettings
+                      }
+                      apiInput={
+                        apiInput
+                      }
+                      setApiInput={
+                        setApiInput
+                      }
+                      apiKey={
+                        apiKey
+                      }
+                      onSaveKey={
+                        saveKey
+                      }
+                      priceAge={
+                        priceAge
+                      }
+                      priceSyncing={
+                        priceSyncing
+                      }
+                    />
+                  ) : null}
+                </View>
+
+                <BottomNav
+                  tab={
+                    tab
+                  }
+                  setTab={
+                    setTab
+                  }
+                />
+              </SafeAreaView>
+            );
+          }
+
+          const styles =
+            StyleSheet.create({
+              safe: {
+                flex: 1,
+                backgroundColor:
+                  C.bg
+              },
+
+              content: {
+                flex: 1
+              },
+
+              header: {
+                paddingHorizontal:
+                  16,
+                paddingTop:
+                  10,
+                paddingBottom:
+                  10,
+                borderBottomWidth:
+                  1,
+                borderBottomColor:
+                  C.line,
+                backgroundColor:
+                  '#071015'
+              },
+
+              headerRow: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'space-between'
+              },
+
+              logo: {
+                color:
+                  C.text,
+                fontSize:
+                  19,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  1.2
+              },
+
+              subLogo: {
+                color:
+                  C.muted,
+                fontSize:
+                  9,
+                fontWeight:
+                  '800',
+                letterSpacing:
+                  1.1,
+                marginTop:
+                  3
+              },
+
+              refreshButton: {
+                width:
+                  42,
+                height:
+                  42,
+                borderRadius:
+                  12,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                backgroundColor:
+                  C.panel,
+                alignItems:
+                  'center',
+                justifyContent:
+                  'center'
+              },
+
+              refreshText: {
+                color:
+                  C.cyan,
+                fontSize:
+                  23,
+                fontWeight:
+                  '800'
+              },
+
+              badgeRow: {
+                flexDirection:
+                  'row',
+                gap:
+                  7,
+                marginTop:
+                  9
+              },
+
+              badge: {
+                borderWidth:
+                  1,
+                borderRadius:
+                  999,
+                paddingHorizontal:
+                  8,
+                paddingVertical:
+                  4,
+                backgroundColor:
+                  '#081015'
+              },
+
+              badgeText: {
+                fontSize:
+                  8,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  0.8
+              },
+
+              listContent: {
+                paddingHorizontal:
+                  14,
+                paddingTop:
+                  12,
+                paddingBottom:
+                  26,
+                gap:
+                  12
+              },
+
+              bestCard: {
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.cyan +
+                  '44',
+                borderRadius:
+                  18,
+                padding:
+                  16
+              },
+
+              eyebrow: {
+                color:
+                  C.cyan,
+                fontSize:
+                  9,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  1.5
+              },
+
+              bestTitle: {
+                color:
+                  C.text,
+                fontSize:
+                  23,
+                fontWeight:
+                  '900',
+                marginTop:
+                  7
+              },
+
+              bestItem: {
+                color:
+                  C.muted,
+                fontSize:
+                  14,
+                fontWeight:
+                  '700',
+                marginTop:
+                  3
+              },
+
+              copy: {
+                color:
+                  C.muted,
+                fontSize:
+                  11,
+                lineHeight:
+                  17,
+                marginTop:
+                  6
+              },
+
+              rowBetween: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'space-between',
+                gap:
+                  10
+              },
+
+              metricRow: {
+                flexDirection:
+                  'row',
+                gap:
+                  8,
+                marginTop:
+                  14
+              },
+
+              metric: {
+                flex:
+                  1,
+                backgroundColor:
+                  C.panel2,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  12,
+                padding:
+                  10
+              },
+
+              metricLabel: {
+                color:
+                  C.faint,
+                fontSize:
+                  8,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  0.8
+              },
+
+              metricValue: {
+                color:
+                  C.text,
+                fontSize:
+                  14,
+                fontWeight:
+                  '900',
+                marginTop:
+                  5
+              },
+
+              quickRow: {
+                flexDirection:
+                  'row',
+                gap:
+                  8
+              },
+
+              quickBox: {
+                flex:
+                  1,
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  13,
+                padding:
+                  11
+              },
+
+              quickValue: {
+                color:
+                  C.text,
+                fontSize:
+                  16,
+                fontWeight:
+                  '900',
+                marginTop:
+                  4
+              },
+
+              smallLabel: {
+                color:
+                  C.faint,
+                fontSize:
+                  8,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  0.8
+              },
+
+              smallValue: {
+                color:
+                  C.text,
+                fontSize:
+                  11,
+                fontWeight:
+                  '800',
+                marginTop:
+                  4
+              },
+
+              searchBox: {
+                height:
+                  46,
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  13,
+                paddingHorizontal:
+                  12
+              },
+
+              searchIcon: {
+                color:
+                  C.cyan,
+                fontSize:
+                  20,
+                marginRight:
+                  8
+              },
+
+              searchInput: {
+                flex:
+                  1,
+                color:
+                  C.text,
+                fontSize:
+                  14
+              },
+
+              clear: {
+                color:
+                  C.muted,
+                fontSize:
+                  24,
+                paddingLeft:
+                  8
+              },
+
+              sectionHead: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'space-between',
+                marginTop:
+                  2
+              },
+
+              sectionTitle: {
+                color:
+                  C.text,
+                fontSize:
+                  22,
+                fontWeight:
+                  '900',
+                marginTop:
+                  3
+              },
+
+              disclaimer: {
+                color:
+                  C.faint,
+                fontSize:
+                  10,
+                lineHeight:
+                  15
+              },
+
+              errorBox: {
+                backgroundColor:
+                  '#190b10',
+                borderWidth:
+                  1,
+                borderColor:
+                  C.red +
+                  '66',
+                borderRadius:
+                  13,
+                padding:
+                  12
+              },
+
+              errorTitle: {
+                color:
+                  C.red,
+                fontSize:
+                  9,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  1.1
+              },
+
+              errorText: {
+                color:
+                  '#efadb5',
+                fontSize:
+                  11,
+                marginTop:
+                  5
+              },
+
+              countryCard: {
+                backgroundColor:
+                  C.panel,
+                borderRadius:
+                  17,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                padding:
+                  14
+              },
+
+              countryIdentity: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                gap:
+                  10
+              },
+
+              flag: {
+                fontSize:
+                  28
+              },
+
+              countryName: {
+                color:
+                  C.text,
+                fontSize:
+                  17,
+                fontWeight:
+                  '900'
+              },
+
+              city: {
+                color:
+                  C.muted,
+                fontSize:
+                  10,
+                marginTop:
+                  2
+              },
+
+              freshAge: {
+                color:
+                  C.faint,
+                fontSize:
+                  9,
+                marginTop:
+                  4
+              },
+
+              countrySummary: {
+                flexDirection:
+                  'row',
+                gap:
+                  14,
+                marginTop:
+                  12
+              },
+
+              summaryText: {
+                color:
+                  C.muted,
+                fontSize:
+                  10
+              },
+
+              summaryStrong: {
+                color:
+                  C.text,
+                fontWeight:
+                  '900'
+              },
+
+              divider: {
+                height:
+                  1,
+                backgroundColor:
+                  C.line,
+                marginVertical:
+                  10
+              },
+
+              itemRow: {
+                paddingVertical:
+                  10,
+                borderBottomWidth:
+                  1,
+                borderBottomColor:
+                  '#142028'
+              },
+
+              itemName: {
+                flex:
+                  1,
+                color:
+                  C.text,
+                fontSize:
+                  13,
+                fontWeight:
+                  '900'
+              },
+
+              itemGrid: {
+                flexDirection:
+                  'row',
+                justifyContent:
+                  'space-between',
+                gap:
+                  8,
+                marginTop:
+                  10
+              },
+
+              metaRow: {
+                flexDirection:
+                  'row',
+                flexWrap:
+                  'wrap',
+                gap:
+                  10,
+                marginTop:
+                  8
+              },
+
+              meta: {
+                color:
+                  C.muted,
+                fontSize:
+                  9,
+                fontWeight:
+                  '700'
+              },
+
+              emptyInline: {
+                color:
+                  C.faint,
+                fontSize:
+                  11,
+                textAlign:
+                  'center',
+                paddingVertical:
+                  12
+              },
+
+              profileCard: {
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.cyan +
+                  '44',
+                borderRadius:
+                  15,
+                padding:
+                  14
+              },
+
+              profileValue: {
+                color:
+                  C.text,
+                fontSize:
+                  18,
+                fontWeight:
+                  '900',
+                marginTop:
+                  5
+              },
+
+              tripCard: {
+                flexDirection:
+                  'row',
+                gap:
+                  11,
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  15,
+                padding:
+                  13,
+                alignItems:
+                  'center'
+              },
+
+              rank: {
+                width:
+                  30,
+                height:
+                  30,
+                borderRadius:
+                  9,
+                backgroundColor:
+                  '#0b1c24',
+                borderWidth:
+                  1,
+                borderColor:
+                  C.cyan +
+                  '55',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'center'
+              },
+
+              rankText: {
+                color:
+                  C.cyan,
+                fontWeight:
+                  '900'
+              },
+
+              tripCountry: {
+                flex:
+                  1,
+                color:
+                  C.text,
+                fontSize:
+                  14,
+                fontWeight:
+                  '900'
+              },
+
+              tripItem: {
+                color:
+                  C.muted,
+                fontSize:
+                  11,
+                marginTop:
+                  4
+              },
+
+              settingsContent: {
+                paddingHorizontal:
+                  14,
+                paddingTop:
+                  14,
+                paddingBottom:
+                  28,
+                gap:
+                  12
+              },
+
+              groupLabel: {
+                color:
+                  C.cyan,
+                fontSize:
+                  9,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  1.4,
+                marginTop:
+                  4
+              },
+
+              settingsCard: {
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  16,
+                padding:
+                  14,
+                gap:
+                  12
+              },
+
+              settingRow: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                gap:
+                  12
+              },
+
+              settingLabel: {
+                color:
+                  C.text,
+                fontSize:
+                  13,
+                fontWeight:
+                  '900'
+              },
+
+              settingDetail: {
+                color:
+                  C.muted,
+                fontSize:
+                  10,
+                lineHeight:
+                  15,
+                marginTop:
+                  4
+              },
+
+              apiInput: {
+                height:
+                  44,
+                borderRadius:
+                  11,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                backgroundColor:
+                  '#071015',
+                paddingHorizontal:
+                  12,
+                color:
+                  C.text,
+                fontSize:
+                  12
+              },
+
+              primaryButton: {
+                height:
+                  43,
+                borderRadius:
+                  11,
+                backgroundColor:
+                  C.cyan,
+                alignItems:
+                  'center',
+                justifyContent:
+                  'center'
+              },
+
+              primaryText: {
+                color:
+                  '#001219',
+                fontSize:
+                  10,
+                fontWeight:
+                  '900',
+                letterSpacing:
+                  0.7
+              },
+
+              toggle: {
+                width:
+                  48,
+                height:
+                  28,
+                borderRadius:
+                  14,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                backgroundColor:
+                  '#071015',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'center'
+              },
+
+              toggleOn: {
+                backgroundColor:
+                  '#0c3026',
+                borderColor:
+                  C.green +
+                  '77'
+              },
+
+              toggleText: {
+                color:
+                  C.faint,
+                fontSize:
+                  8,
+                fontWeight:
+                  '900'
+              },
+
+              numberControl: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  10,
+                overflow:
+                  'hidden'
+              },
+
+              numberButton: {
+                width:
+                  34,
+                height:
+                  34,
+                alignItems:
+                  'center',
+                justifyContent:
+                  'center',
+                backgroundColor:
+                  '#071015'
+              },
+
+              numberText: {
+                color:
+                  C.cyan,
+                fontSize:
+                  20,
+                fontWeight:
+                  '800'
+              },
+
+              numberValue: {
+                minWidth:
+                  40,
+                textAlign:
+                  'center',
+                color:
+                  C.text,
+                fontWeight:
+                  '900'
+              },
+
+              choiceRow: {
+                flexDirection:
+                  'row',
+                flexWrap:
+                  'wrap',
+                gap:
+                  7
+              },
+
+              choice: {
+                paddingHorizontal:
+                  11,
+                paddingVertical:
+                  8,
+                borderRadius:
+                  10,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                backgroundColor:
+                  '#071015'
+              },
+
+              choiceOn: {
+                borderColor:
+                  C.cyan +
+                  '88',
+                backgroundColor:
+                  '#0b1c24'
+              },
+
+              choiceText: {
+                color:
+                  C.muted,
+                fontSize:
+                  9,
+                fontWeight:
+                  '800'
+              },
+
+              infoCard: {
+                backgroundColor:
+                  '#091116',
+                borderWidth:
+                  1,
+                borderColor:
+                  C.blue +
+                  '44',
+                borderRadius:
+                  15,
+                padding:
+                  14
+              },
+
+              nav: {
+                height:
+                  68,
+                flexDirection:
+                  'row',
+                borderTopWidth:
+                  1,
+                borderTopColor:
+                  C.line,
+                backgroundColor:
+                  '#071015'
+              },
+
+              navItem: {
+                flex:
+                  1,
+                alignItems:
+                  'center',
+                justifyContent:
+                  'center',
+                position:
+                  'relative'
+              },
+
+              navLine: {
+                position:
+                  'absolute',
+                top:
+                  0,
+                width:
+                  30,
+                height:
+                  2,
+                borderRadius:
+                  2,
+                backgroundColor:
+                  C.cyan
+              },
+
+              navIcon: {
+                color:
+                  C.muted,
+                fontSize:
+                  18,
+                fontWeight:
+                  '900'
+              },
+
+              navLabel: {
+                color:
+                  C.muted,
+                fontSize:
+                  9,
+                fontWeight:
+                  '900',
+                marginTop:
+                  3,
+                letterSpacing:
+                  0.5
+              }
+            });
+          APP_JS
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - name: Run market self-test
-        run: npm run selftest
+      - name: Validate Expo bundle
+        run: npx expo export --platform android --output-dir /tmp/tornpulse-export
 
-      - name: Validate JavaScript bundle
-        run: npx expo export --platform android
-
-      - name: Generate Android project
+      - name: Generate clean Android project
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Build ARM64 release APK
+      - name: Build ARM64 APK
         working-directory: android
         run: |
           chmod +x gradlew
@@ -68,6 +4935,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: torn-pulse-market-v1-arm64-apk
+          name: torn-pulse-travel-market-v4-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
