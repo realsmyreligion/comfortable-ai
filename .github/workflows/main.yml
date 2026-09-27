@@ -1,4 +1,4 @@
-name: Build Torn Pulse Travel Market
+name: Build Torn Pulse Travel Market 4.2
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
+
     env:
       CI: true
       NODE_ENV: production
@@ -30,25 +31,23 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Replace project with Torn Pulse Travel Market
+      - name: Build Torn Pulse Travel Market source
         shell: bash
         run: |
           set -euo pipefail
 
-          rm -rf android src scripts
+          rm -rf android
           rm -f App.js package.json package-lock.json app.config.js
 
           cat > package.json <<'PACKAGE_JSON'
           {
             "name": "tornpulse-travel-market",
-            "version": "4.0.0",
+            "version": "4.2.0",
             "private": true,
             "main": "expo/AppEntry.js",
             "scripts": {
               "start": "expo start",
-              "android": "expo start --android",
-              "export:android": "expo export --platform android",
-              "prebuild:android": "expo prebuild --platform android --clean"
+              "android": "expo start --android"
             },
             "dependencies": {
               "expo": "~57.0.0",
@@ -65,18 +64,21 @@ jobs:
             ...config,
             name: 'Torn Pulse',
             slug: 'tornpulse-travel-market',
-            version: '4.0.0',
+            version: '4.2.0',
             orientation: 'portrait',
             userInterfaceStyle: 'dark',
+
             android: {
               ...(config.android || {}),
               package: 'com.comfortableai.torncopilot',
-              versionCode: 40
+              versionCode: 42
             },
+
             plugins: ['expo-secure-store'],
+
             extra: {
               product: 'Foreign Travel Market',
-              build: 'Travel Market 4.0'
+              build: 'Travel Market 4.2 Accordion'
             }
           });
           APP_CONFIG
@@ -112,6 +114,26 @@ jobs:
 
           const TORN_ITEMS_URL =
             'https://api.torn.com/v2/torn/items?cat=All&sort=ASC&comment=TornPulseTravel';
+
+          const API_KEY_STORAGE =
+            'tp_travel_api_v4';
+
+          const SETTINGS_STORAGE =
+            'tp_travel_settings_v4';
+
+          const C = {
+            bg: '#05080b',
+            panel: '#0b1116',
+            panel2: '#101920',
+            line: '#1d2a33',
+            text: '#f5f7f8',
+            muted: '#8c9aa4',
+            faint: '#53616b',
+            cyan: '#30d5ff',
+            green: '#51e39a',
+            amber: '#ffc15c',
+            red: '#ff6877'
+          };
 
           const COUNTRY_ORDER = [
             'mex',
@@ -338,21 +360,6 @@ jobs:
             }
           };
 
-          const C = {
-            bg: '#05080b',
-            panel: '#0b1116',
-            panel2: '#0e171d',
-            line: '#1d2a33',
-            text: '#f5f7f8',
-            muted: '#8c9aa4',
-            faint: '#53616b',
-            cyan: '#30d5ff',
-            green: '#51e39a',
-            amber: '#ffc15c',
-            red: '#ff6877',
-            blue: '#7d92ff'
-          };
-
           const DEFAULT_SETTINGS = {
             baseCapacity: 22,
             tourismMode: true,
@@ -362,86 +369,98 @@ jobs:
             hideSoldOut: false
           };
 
-          const KEY_API =
-            'tp_travel_api_v4';
-
-          const KEY_SETTINGS =
-            'tp_travel_settings_v4';
-
-          function n(
+          function number(
             value,
             fallback = 0
           ) {
-            const x = Number(value);
+            const result =
+              Number(value);
 
-            return Number.isFinite(x)
-              ? x
+            return Number.isFinite(
+              result
+            )
+              ? result
               : fallback;
           }
 
           function money(value) {
-            const x =
+            const amount =
               Math.round(
-                n(value)
+                number(value)
               );
 
             const sign =
-              x < 0
+              amount < 0
                 ? '-'
                 : '';
 
             return (
-              `${sign}$` +
+              sign +
+              '$' +
               Math.abs(
-                x
+                amount
               ).toLocaleString()
             );
           }
 
-          function compactMoney(value) {
-            const x =
-              n(value);
+          function shortMoney(
+            value
+          ) {
+            const amount =
+              number(value);
 
-            const a =
-              Math.abs(x);
+            const abs =
+              Math.abs(amount);
 
             const sign =
-              x < 0
+              amount < 0
                 ? '-'
                 : '';
 
-            if (a >= 1e9) {
+            if (abs >= 1000000000) {
               return (
-                `${sign}$` +
-                (a / 1e9).toFixed(1) +
+                sign +
+                '$' +
+                (
+                  abs /
+                  1000000000
+                ).toFixed(1) +
                 'b'
               );
             }
 
-            if (a >= 1e6) {
+            if (abs >= 1000000) {
               return (
-                `${sign}$` +
-                (a / 1e6).toFixed(1) +
+                sign +
+                '$' +
+                (
+                  abs /
+                  1000000
+                ).toFixed(1) +
                 'm'
               );
             }
 
-            if (a >= 1e3) {
+            if (abs >= 1000) {
               return (
-                `${sign}$` +
-                (a / 1e3).toFixed(1) +
+                sign +
+                '$' +
+                (
+                  abs /
+                  1000
+                ).toFixed(1) +
                 'k'
               );
             }
 
-            return money(x);
+            return money(amount);
           }
 
           function ageSeconds(
-            ts,
-            now = Date.now()
+            timestamp,
+            now
           ) {
-            if (!ts) {
+            if (!timestamp) {
               return Infinity;
             }
 
@@ -450,7 +469,7 @@ jobs:
               Math.floor(
                 now / 1000
               ) -
-              Number(ts)
+              timestamp
             );
           }
 
@@ -466,36 +485,45 @@ jobs:
             }
 
             if (seconds < 10) {
-              return 'just now';
+              return 'now';
             }
 
             if (seconds < 60) {
-              return `${seconds}s ago`;
+              return (
+                seconds +
+                's'
+              );
             }
 
-            const m =
+            const minutes =
               Math.floor(
                 seconds / 60
               );
 
-            if (m < 60) {
-              return `${m}m ago`;
+            if (
+              minutes < 60
+            ) {
+              return (
+                minutes +
+                'm'
+              );
             }
 
             return (
-              `${Math.floor(
-                m / 60
-              )}h ago`
+              Math.floor(
+                minutes / 60
+              ) +
+              'h'
             );
           }
 
           function freshness(
-            ts,
-            now = Date.now()
+            timestamp,
+            now
           ) {
             const age =
               ageSeconds(
-                ts,
+                timestamp,
                 now
               );
 
@@ -522,50 +550,121 @@ jobs:
             };
           }
 
-          function flightMinutes(
-            code,
-            settings
-          ) {
-            const meta =
-              COUNTRIES[code];
-
-            if (!meta) {
-              return 0;
-            }
-
-            const table =
-              settings.mailingBook
-                ? meta.book
-                : meta.times;
-
-            return n(
-              table[
-                settings.flightMode
-              ],
-              table.standard || 0
-            );
-          }
-
-          function capacity(
+          function getCapacity(
             settings
           ) {
             const base =
               Math.max(
                 1,
                 Math.trunc(
-                  n(
+                  number(
                     settings.baseCapacity,
                     22
                   )
                 )
               );
 
-            return settings.tourismMode
+            return settings
+              .tourismMode
               ? base * 2
               : base;
           }
 
-          function normalizeForeign(
+          function getFlightMinutes(
+            code,
+            settings
+          ) {
+            const country =
+              COUNTRIES[code];
+
+            if (!country) {
+              return 0;
+            }
+
+            const table =
+              settings.mailingBook
+                ? country.book
+                : country.times;
+
+            return number(
+              table[
+                settings.flightMode
+              ],
+              table.standard
+            );
+          }
+
+          async function fetchJson(
+            url,
+            timeout = 16000
+          ) {
+            const controller =
+              new AbortController();
+
+            const timer =
+              setTimeout(
+                () =>
+                  controller.abort(),
+                timeout
+              );
+
+            try {
+              const response =
+                await fetch(
+                  url,
+                  {
+                    signal:
+                      controller.signal,
+                    headers: {
+                      Accept:
+                        'application/json'
+                    }
+                  }
+                );
+
+              if (
+                !response.ok
+              ) {
+                throw new Error(
+                  'Request failed (' +
+                  response.status +
+                  ')'
+                );
+              }
+
+              const data =
+                await response.json();
+
+              if (
+                data?.error
+              ) {
+                throw new Error(
+                  data.error.error ||
+                  data.error.message ||
+                  'API error'
+                );
+              }
+
+              return data;
+            } catch (error) {
+              if (
+                error?.name ===
+                'AbortError'
+              ) {
+                throw new Error(
+                  'Request timed out'
+                );
+              }
+
+              throw error;
+            } finally {
+              clearTimeout(
+                timer
+              );
+            }
+          }
+
+          function normalizeStock(
             payload
           ) {
             const rows = [];
@@ -575,33 +674,31 @@ jobs:
 
             if (
               !root ||
-              typeof root !== 'object'
+              typeof root !==
+                'object'
             ) {
               return rows;
             }
 
             for (
               const [
-                code,
+                countryCode,
                 block
-              ] of Object.entries(
-                root
-              )
+              ] of
+              Object.entries(root)
             ) {
               const meta =
-                COUNTRIES[code] ||
-                {
-                  name:
-                    code.toUpperCase(),
-                  city: '',
-                  flag: '🌐',
-                  fare: 0
-                };
+                COUNTRIES[
+                  countryCode
+                ];
+
+              if (!meta) {
+                continue;
+              }
 
               const updated =
-                n(
-                  block?.update,
-                  0
+                number(
+                  block?.update
                 );
 
               const stocks =
@@ -612,26 +709,29 @@ jobs:
                   : [];
 
               for (
-                const item of stocks
+                const item
+                of stocks
               ) {
                 const id =
-                  n(
-                    item?.id,
-                    NaN
+                  Number(
+                    item?.id
                   );
 
                 if (
-                  !Number.isFinite(id)
+                  !Number.isFinite(
+                    id
+                  )
                 ) {
                   continue;
                 }
 
                 rows.push({
                   key:
-                    `${code}:${id}`,
+                    countryCode +
+                    ':' +
+                    id,
 
-                  countryCode:
-                    code,
+                  countryCode,
 
                   country:
                     meta.name,
@@ -650,16 +750,17 @@ jobs:
                   name:
                     String(
                       item?.name ||
-                      `Item #${id}`
+                      'Item #' +
+                        id
                     ),
 
                   quantity:
                     Math.max(
                       0,
                       Math.trunc(
-                        n(
-                          item?.quantity,
-                          0
+                        number(
+                          item
+                            ?.quantity
                         )
                       )
                     ),
@@ -667,9 +768,8 @@ jobs:
                   foreignPrice:
                     Math.max(
                       0,
-                      n(
-                        item?.cost,
-                        0
+                      number(
+                        item?.cost
                       )
                     ),
 
@@ -681,99 +781,20 @@ jobs:
             return rows;
           }
 
-          async function fetchJson(
-            url,
-            options = {},
-            timeout = 16000
-          ) {
-            const controller =
-              typeof AbortController !==
-              'undefined'
-                ? new AbortController()
-                : null;
-
-            const timer =
-              controller
-                ? setTimeout(
-                    () =>
-                      controller.abort(),
-                    timeout
-                  )
-                : null;
-
-            try {
-              const response =
-                await fetch(
-                  url,
-                  {
-                    ...options,
-                    signal:
-                      controller?.signal
-                  }
-                );
-
-              if (
-                !response.ok
-              ) {
-                throw new Error(
-                  `Request failed (${response.status})`
-                );
-              }
-
-              const data =
-                await response.json();
-
-              if (
-                data?.error
-              ) {
-                throw new Error(
-                  data.error.error ||
-                  data.error.message ||
-                  'API error'
-                );
-              }
-
-              return data;
-            } catch (e) {
-              if (
-                String(
-                  e?.name
-                ) ===
-                'AbortError'
-              ) {
-                throw new Error(
-                  'Request timed out'
-                );
-              }
-
-              throw e;
-            } finally {
-              if (timer) {
-                clearTimeout(timer);
-              }
-            }
-          }
-
-          async function getForeignStock() {
-            const payload =
+          async function fetchStock() {
+            const data =
               await fetchJson(
-                YATA_URL,
-                {
-                  headers: {
-                    Accept:
-                      'application/json'
-                  }
-                }
+                YATA_URL
               );
 
             const rows =
-              normalizeForeign(
-                payload
+              normalizeStock(
+                data
               );
 
             if (!rows.length) {
               throw new Error(
-                'Foreign stock feed returned no usable data.'
+                'No usable foreign stock data returned.'
               );
             }
 
@@ -794,12 +815,15 @@ jobs:
             if (
               payload?.items &&
               typeof payload.items ===
-              'object'
+                'object'
             ) {
               return Object.entries(
                 payload.items
               ).map(
-                ([id, item]) => ({
+                ([
+                  id,
+                  item
+                ]) => ({
                   id:
                     Number(
                       item?.id ||
@@ -811,14 +835,10 @@ jobs:
               );
             }
 
-            return Array.isArray(
-              payload
-            )
-              ? payload
-              : [];
+            return [];
           }
 
-          async function getTornPrices(
+          async function fetchPrices(
             apiKey
           ) {
             const key =
@@ -830,23 +850,26 @@ jobs:
               return {};
             }
 
+            const url =
+              TORN_ITEMS_URL +
+              '&key=' +
+              encodeURIComponent(
+                key
+              );
+
             const payload =
               await fetchJson(
-                `${TORN_ITEMS_URL}&key=${encodeURIComponent(key)}`,
-                {
-                  headers: {
-                    Accept:
-                      'application/json'
-                  }
-                },
+                url,
                 20000
               );
 
-            const map = {};
+            const result = {};
 
             for (
-              const item of
-              extractItems(payload)
+              const item
+              of extractItems(
+                payload
+              )
             ) {
               const id =
                 Number(
@@ -854,30 +877,30 @@ jobs:
                 );
 
               if (
-                !Number.isFinite(id)
+                !Number.isFinite(
+                  id
+                )
               ) {
                 continue;
               }
 
-              const value =
-                item?.value || {};
-
               const price =
-                n(
-                  value.market_price ??
-                  item.market_price ??
-                  item.market_value,
-                  0
+                number(
+                  item?.value
+                    ?.market_price ??
+                  item
+                    ?.market_price ??
+                  item
+                    ?.market_value
                 );
 
-              map[
+              result[
                 String(id)
               ] = {
                 name:
-                  String(
-                    item?.name ||
-                    `Item #${id}`
-                  ),
+                  item?.name ||
+                  'Item #' +
+                    id,
 
                 price:
                   Math.max(
@@ -887,38 +910,7 @@ jobs:
               };
             }
 
-            return map;
-          }
-
-          async function loadStoredSettings() {
-            try {
-              const raw =
-                await SecureStore
-                  .getItemAsync(
-                    KEY_SETTINGS
-                  );
-
-              return raw
-                ? {
-                    ...DEFAULT_SETTINGS,
-                    ...JSON.parse(raw)
-                  }
-                : DEFAULT_SETTINGS;
-            } catch (_) {
-              return DEFAULT_SETTINGS;
-            }
-          }
-
-          async function saveStoredSettings(
-            value
-          ) {
-            await SecureStore
-              .setItemAsync(
-                KEY_SETTINGS,
-                JSON.stringify(
-                  value
-                )
-              );
+            return result;
           }
 
           function buildGroups(
@@ -928,8 +920,8 @@ jobs:
               new Map();
 
             for (
-              const code of
-              COUNTRY_ORDER
+              const code
+              of COUNTRY_ORDER
             ) {
               const meta =
                 COUNTRIES[code];
@@ -940,55 +932,42 @@ jobs:
                   countryCode:
                     code,
 
-                  ...meta,
+                  name:
+                    meta.name,
+
+                  city:
+                    meta.city,
+
+                  flag:
+                    meta.flag,
+
+                  fare:
+                    meta.fare,
 
                   updated: 0,
+
                   items: []
                 }
               );
             }
 
             for (
-              const row of rows
+              const row
+              of rows
             ) {
-              if (
-                !map.has(
-                  row.countryCode
-                )
-              ) {
-                map.set(
-                  row.countryCode,
-                  {
-                    countryCode:
-                      row.countryCode,
-
-                    name:
-                      row.country,
-
-                    city:
-                      row.city,
-
-                    flag:
-                      row.flag,
-
-                    fare:
-                      row.fare,
-
-                    updated: 0,
-                    items: []
-                  }
-                );
-              }
-
               const group =
                 map.get(
                   row.countryCode
                 );
 
+              if (!group) {
+                continue;
+              }
+
               group.updated =
                 Math.max(
-                  group.updated || 0,
-                  row.updated || 0
+                  group.updated,
+                  row.updated
                 );
 
               group.items.push(
@@ -998,95 +977,85 @@ jobs:
 
             return Array.from(
               map.values()
-            )
-              .filter(
-                group =>
-                  group.items.length
-              )
-              .map(
-                group => ({
-                  ...group,
-
-                  items:
-                    group.items
-                      .slice()
-                      .sort(
-                        (a, b) =>
-                          a.name.localeCompare(
-                            b.name
-                          )
-                      )
-                })
-              );
+            ).filter(
+              group =>
+                group.items.length >
+                0
+            );
           }
 
           function updateVelocity(
             previous,
             rows,
-            oldVelocity
+            velocity
           ) {
-            const nextPrev = {
+            const nextPrevious = {
               ...previous
             };
 
-            const nextVel = {
-              ...oldVelocity
+            const nextVelocity = {
+              ...velocity
             };
 
             for (
-              const row of rows
+              const row
+              of rows
             ) {
-              const prev =
+              const before =
                 previous[
                   row.key
                 ];
 
               if (
-                prev &&
+                before &&
                 row.updated >
-                prev.updated
+                  before.updated
               ) {
                 const minutes =
                   (
                     row.updated -
-                    prev.updated
-                  ) / 60;
+                    before.updated
+                  ) /
+                  60;
 
                 if (
                   minutes > 0 &&
                   row.quantity <
-                  prev.quantity
+                    before.quantity
                 ) {
                   const observed =
                     (
-                      prev.quantity -
+                      before.quantity -
                       row.quantity
                     ) /
                     minutes;
 
-                  const old =
-                    n(
-                      nextVel[
+                  const oldRate =
+                    number(
+                      nextVelocity[
                         row.key
-                      ]?.rate,
-                      0
+                      ]?.rate
                     );
 
-                  nextVel[
+                  nextVelocity[
                     row.key
                   ] = {
                     rate:
-                      old > 0
-                        ? old * 0.5 +
-                          observed * 0.5
+                      oldRate > 0
+                        ? (
+                            oldRate +
+                            observed
+                          ) /
+                          2
                         : observed
                   };
-                } else if (
-                  minutes > 0 &&
+                }
+
+                if (
                   row.quantity >
-                  prev.quantity
+                  before.quantity
                 ) {
-                  nextVel[
+                  nextVelocity[
                     row.key
                   ] = {
                     rate: 0
@@ -1094,7 +1063,7 @@ jobs:
                 }
               }
 
-              nextPrev[
+              nextPrevious[
                 row.key
               ] = {
                 quantity:
@@ -1107,32 +1076,31 @@ jobs:
 
             return {
               previous:
-                nextPrev,
+                nextPrevious,
 
               velocity:
-                nextVel
+                nextVelocity
             };
           }
 
-          function candidate(
+          function getCandidate(
             row,
             prices,
             settings,
             velocity
           ) {
             const cap =
-              capacity(
+              getCapacity(
                 settings
               );
 
             const marketPrice =
-              n(
+              number(
                 prices[
                   String(
                     row.id
                   )
-                ]?.price,
-                0
+                ]?.price
               );
 
             const profitEach =
@@ -1142,7 +1110,7 @@ jobs:
                 : 0;
 
             const minutes =
-              flightMinutes(
+              getFlightMinutes(
                 row.countryCode,
                 settings
               );
@@ -1150,11 +1118,10 @@ jobs:
             const rate =
               Math.max(
                 0,
-                n(
+                number(
                   velocity[
                     row.key
-                  ]?.rate,
-                  0
+                  ]?.rate
                 )
               );
 
@@ -1164,7 +1131,8 @@ jobs:
                     0,
                     Math.floor(
                       row.quantity -
-                      rate * minutes
+                      rate *
+                        minutes
                     )
                   )
                 : null;
@@ -1176,7 +1144,8 @@ jobs:
               );
 
             const projectedLoad =
-              projectedQty == null
+              projectedQty ===
+              null
                 ? currentLoad
                 : Math.min(
                     cap,
@@ -1184,12 +1153,10 @@ jobs:
                   );
 
             const fare =
-              settings.flightMode ===
+              settings
+                .flightMode ===
               'standard'
-                ? n(
-                    row.fare,
-                    0
-                  ) * 2
+                ? row.fare * 2
                 : 0;
 
             const loadProfit =
@@ -1207,7 +1174,8 @@ jobs:
                 : null;
 
             const ppm =
-              projectedProfit != null &&
+              projectedProfit !==
+                null &&
               minutes > 0
                 ? projectedProfit /
                   (
@@ -1224,7 +1192,7 @@ jobs:
               arrival =
                 'SOLD OUT';
             } else if (
-              projectedQty ==
+              projectedQty ===
               null
             ) {
               arrival =
@@ -1250,7 +1218,6 @@ jobs:
               marketPrice,
               profitEach,
               minutes,
-              rate,
               projectedQty,
               projectedLoad,
               loadProfit,
@@ -1260,30 +1227,9 @@ jobs:
             };
           }
 
-          function arrivalColor(
-            value
-          ) {
-            if (
-              value === 'LIKELY'
-            ) {
-              return C.green;
-            }
-
-            if (
-              value ===
-                'AT RISK' ||
-              value ===
-                'NO TREND'
-            ) {
-              return C.amber;
-            }
-
-            return C.red;
-          }
-
           function Badge({
-            text,
-            color = C.muted
+            children,
+            color
           }) {
             return (
               <View
@@ -1291,17 +1237,20 @@ jobs:
                   styles.badge,
                   {
                     borderColor:
-                      color + '66'
+                      color +
+                      '66'
                   }
                 ]}
               >
                 <Text
                   style={[
                     styles.badgeText,
-                    { color }
+                    {
+                      color
+                    }
                   ]}
                 >
-                  {text}
+                  {children}
                 </Text>
               </View>
             );
@@ -1310,7 +1259,7 @@ jobs:
           function Header({
             tab,
             syncing,
-            pricesReady,
+            priceReady,
             onRefresh
           }) {
             return (
@@ -1321,7 +1270,7 @@ jobs:
               >
                 <View
                   style={
-                    styles.headerRow
+                    styles.headerTop
                   }
                 >
                   <View>
@@ -1343,11 +1292,11 @@ jobs:
 
                     <Text
                       style={
-                        styles.subLogo
+                        styles.logoSub
                       }
                     >
-                      FOREIGN TRAVEL
-                      MARKET • {tab}
+                      TRAVEL MARKET •{' '}
+                      {tab}
                     </Text>
                   </View>
 
@@ -1355,11 +1304,8 @@ jobs:
                     onPress={
                       onRefresh
                     }
-                    disabled={
-                      syncing
-                    }
                     style={
-                      styles.refreshButton
+                      styles.refresh
                     }
                   >
                     <Text
@@ -1376,39 +1322,39 @@ jobs:
 
                 <View
                   style={
-                    styles.badgeRow
+                    styles.headerBadges
                   }
                 >
                   <Badge
-                    text="FOREIGN STOCK"
                     color={
                       C.green
                     }
-                  />
+                  >
+                    FOREIGN STOCK
+                  </Badge>
 
                   <Badge
-                    text={
-                      pricesReady
-                        ? 'TORN PRICES ON'
-                        : 'TORN PRICES OFF'
-                    }
                     color={
-                      pricesReady
+                      priceReady
                         ? C.cyan
                         : C.muted
                     }
-                  />
+                  >
+                    {priceReady
+                      ? 'TORN PRICES'
+                      : 'PRICES OFF'}
+                  </Badge>
                 </View>
               </View>
             );
           }
 
           function BestCard({
-            best,
-            cap,
-            pricesReady
+            item,
+            capacityValue,
+            priceReady
           }) {
-            if (!pricesReady) {
+            if (!priceReady) {
               return (
                 <View
                   style={
@@ -1420,7 +1366,7 @@ jobs:
                       styles.eyebrow
                     }
                   >
-                    BEST TRIP
+                    BEST CURRENT RUN
                   </Text>
 
                   <Text
@@ -1436,16 +1382,17 @@ jobs:
                       styles.copy
                     }
                   >
-                    Add your Torn API key
-                    in Settings. Stock and
-                    foreign buy prices work
-                    without it.
+                    Foreign stock works
+                    without an API key.
+                    Add your Torn key in
+                    Settings for resale
+                    prices and profit.
                   </Text>
                 </View>
               );
             }
 
-            if (!best) {
+            if (!item) {
               return (
                 <View
                   style={
@@ -1457,7 +1404,7 @@ jobs:
                       styles.eyebrow
                     }
                   >
-                    BEST TRIP
+                    BEST CURRENT RUN
                   </Text>
 
                   <Text
@@ -1467,16 +1414,6 @@ jobs:
                   >
                     No profitable stocked
                     run
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.copy
-                    }
-                  >
-                    Nothing in the current
-                    feed has a positive
-                    projected load profit.
                   </Text>
                 </View>
               );
@@ -1489,13 +1426,13 @@ jobs:
                   {
                     borderColor:
                       C.green +
-                      '66'
+                      '55'
                   }
                 ]}
               >
                 <View
                   style={
-                    styles.rowBetween
+                    styles.between
                   }
                 >
                   <Text
@@ -1507,15 +1444,15 @@ jobs:
                   </Text>
 
                   <Badge
-                    text={
-                      best.arrival
-                    }
                     color={
-                      arrivalColor(
-                        best.arrival
-                      )
+                      item.arrival ===
+                      'LIKELY'
+                        ? C.green
+                        : C.amber
                     }
-                  />
+                  >
+                    {item.arrival}
+                  </Badge>
                 </View>
 
                 <Text
@@ -1523,8 +1460,8 @@ jobs:
                     styles.bestTitle
                   }
                 >
-                  {best.flag}{' '}
-                  {best.country}
+                  {item.flag}{' '}
+                  {item.country}
                 </Text>
 
                 <Text
@@ -1532,12 +1469,12 @@ jobs:
                     styles.bestItem
                   }
                 >
-                  {best.name}
+                  {item.name}
                 </Text>
 
                 <View
                   style={
-                    styles.metricRow
+                    styles.bestMetrics
                   }
                 >
                   <View
@@ -1559,10 +1496,11 @@ jobs:
                       }
                     >
                       {Math.min(
-                        cap,
-                        best.quantity
-                      )}{' '}
-                      / {cap}
+                        capacityValue,
+                        item.quantity
+                      )}
+                      /
+                      {capacityValue}
                     </Text>
                   </View>
 
@@ -1576,7 +1514,7 @@ jobs:
                         styles.metricLabel
                       }
                     >
-                      EST. PROFIT
+                      PROFIT
                     </Text>
 
                     <Text
@@ -1588,9 +1526,11 @@ jobs:
                         }
                       ]}
                     >
-                      {compactMoney(
-                        best.projectedProfit ??
-                        best.loadProfit
+                      {shortMoney(
+                        item
+                          .projectedProfit ??
+                        item
+                          .loadProfit
                       )}
                     </Text>
                   </View>
@@ -1605,7 +1545,7 @@ jobs:
                         styles.metricLabel
                       }
                     >
-                      ONE WAY
+                      FLIGHT
                     </Text>
 
                     <Text
@@ -1613,7 +1553,7 @@ jobs:
                         styles.metricValue
                       }
                     >
-                      {best.minutes}m
+                      {item.minutes}m
                     </Text>
                   </View>
                 </View>
@@ -1626,17 +1566,19 @@ jobs:
             prices,
             settings,
             velocity,
-            now
+            now,
+            expanded,
+            onToggle
           }) {
-            const c =
-              candidate(
+            const result =
+              getCandidate(
                 item,
                 prices,
                 settings,
                 velocity
               );
 
-            const fresh =
+            const feed =
               freshness(
                 item.updated,
                 now
@@ -1648,62 +1590,59 @@ jobs:
             return (
               <View
                 style={
-                  styles.itemRow
+                  styles.item
                 }
               >
-                <View
-                  style={{
-                    flex: 1,
-                    minWidth: 0
-                  }}
+                <Pressable
+                  onPress={
+                    onToggle
+                  }
+                  style={
+                    styles.itemButton
+                  }
                 >
                   <View
                     style={
-                      styles.rowBetween
+                      styles.itemTop
                     }
                   >
-                    <Text
-                      numberOfLines={
-                        1
-                      }
+                    <View
                       style={
-                        styles.itemName
+                        styles.itemNameWrap
                       }
                     >
-                      {item.name}
-                    </Text>
+                      <View
+                        style={[
+                          styles.dot,
+                          {
+                            backgroundColor:
+                              available
+                                ? C.green
+                                : C.red
+                          }
+                        ]}
+                      />
 
-                    <Badge
-                      text={
-                        available
-                          ? 'AVAILABLE'
-                          : 'SOLD OUT'
-                      }
-                      color={
-                        available
-                          ? C.green
-                          : C.red
-                      }
-                    />
-                  </View>
-
-                  <View
-                    style={
-                      styles.itemGrid
-                    }
-                  >
-                    <View>
                       <Text
+                        numberOfLines={
+                          1
+                        }
                         style={
-                          styles.smallLabel
+                          styles.itemName
                         }
                       >
-                        STOCK
+                        {item.name}
                       </Text>
+                    </View>
 
+                    <View
+                      style={
+                        styles.itemStockWrap
+                      }
+                    >
                       <Text
                         style={[
-                          styles.smallValue,
+                          styles.stock,
                           {
                             color:
                               available
@@ -1712,135 +1651,207 @@ jobs:
                           }
                         ]}
                       >
-                        {item.quantity
-                          .toLocaleString()}
-                      </Text>
-                    </View>
-
-                    <View>
-                      <Text
-                        style={
-                          styles.smallLabel
-                        }
-                      >
-                        FOREIGN
+                        {available
+                          ? item.quantity.toLocaleString()
+                          : 'OUT'}
                       </Text>
 
                       <Text
                         style={
-                          styles.smallValue
+                          styles.arrow
                         }
                       >
-                        {money(
-                          item.foreignPrice
-                        )}
-                      </Text>
-                    </View>
-
-                    <View>
-                      <Text
-                        style={
-                          styles.smallLabel
-                        }
-                      >
-                        TORN
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.smallValue
-                        }
-                      >
-                        {c.marketPrice
-                          ? money(
-                              c.marketPrice
-                            )
-                          : '—'}
-                      </Text>
-                    </View>
-
-                    <View>
-                      <Text
-                        style={
-                          styles.smallLabel
-                        }
-                      >
-                        PROFIT EA.
-                      </Text>
-
-                      <Text
-                        style={[
-                          styles.smallValue,
-                          {
-                            color:
-                              c.profitEach >
-                              0
-                                ? C.green
-                                : C.muted
-                          }
-                        ]}
-                      >
-                        {c.marketPrice
-                          ? money(
-                              c.profitEach
-                            )
-                          : '—'}
+                        {expanded
+                          ? '▲'
+                          : '▼'}
                       </Text>
                     </View>
                   </View>
 
                   <View
                     style={
-                      styles.metaRow
+                      styles.priceRow
                     }
                   >
                     <Text
-                      style={[
-                        styles.meta,
-                        {
-                          color:
-                            fresh.color
-                        }
-                      ]}
+                      style={
+                        styles.price
+                      }
                     >
-                      {fresh.label} •{' '}
-                      {ageLabel(
-                        fresh.age
+                      Buy{' '}
+                      {money(
+                        item.foreignPrice
                       )}
                     </Text>
 
-                    {c.marketPrice >
-                      0 &&
-                    available ? (
+                    <Text
+                      style={
+                        styles.price
+                      }
+                    >
+                      Torn{' '}
+                      {result
+                        .marketPrice
+                        ? money(
+                            result
+                              .marketPrice
+                          )
+                        : '—'}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.price,
+                        result
+                            .profitEach >
+                          0 && {
+                          color:
+                            C.green
+                        }
+                      ]}
+                    >
+                      {result
+                        .marketPrice
+                        ? (
+                            result
+                              .profitEach >=
+                            0
+                              ? '+'
+                              : ''
+                          ) +
+                          money(
+                            result
+                              .profitEach
+                          ) +
+                          '/ea'
+                        : 'Profit —'}
+                    </Text>
+                  </View>
+                </Pressable>
+
+                {expanded ? (
+                  <View
+                    style={
+                      styles.itemDetails
+                    }
+                  >
+                    <View
+                      style={
+                        styles.detail
+                      }
+                    >
                       <Text
                         style={
-                          styles.meta
+                          styles.detailLabel
                         }
                       >
-                        Load{' '}
-                        {compactMoney(
-                          c.loadProfit
-                        )}
+                        LOAD PROFIT
                       </Text>
-                    ) : null}
 
-                    {available ? (
                       <Text
                         style={[
-                          styles.meta,
-                          {
+                          styles.detailValue,
+                          result
+                              .loadProfit >
+                            0 && {
                             color:
-                              arrivalColor(
-                                c.arrival
-                              )
+                              C.green
                           }
                         ]}
                       >
-                        {c.arrival}
+                        {result
+                          .marketPrice
+                          ? shortMoney(
+                              result
+                                .loadProfit
+                            )
+                          : '—'}
                       </Text>
-                    ) : null}
+                    </View>
+
+                    <View
+                      style={
+                        styles.detail
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.detailLabel
+                        }
+                      >
+                        ONE WAY
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.detailValue
+                        }
+                      >
+                        {result.minutes}m
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.detail
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.detailLabel
+                        }
+                      >
+                        ARRIVAL
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.detailValue,
+                          {
+                            color:
+                              result.arrival ===
+                              'LIKELY'
+                                ? C.green
+                                : result.arrival ===
+                                    'SOLD OUT' ||
+                                  result.arrival ===
+                                    'UNLIKELY'
+                                ? C.red
+                                : C.amber
+                          }
+                        ]}
+                      >
+                        {result.arrival}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.detail
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.detailLabel
+                        }
+                      >
+                        FEED
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.detailValue,
+                          {
+                            color:
+                              feed.color
+                          }
+                        ]}
+                      >
+                        {feed.label}
+                      </Text>
+                    </View>
                   </View>
-                </View>
+                ) : null}
               </View>
             );
           }
@@ -1850,42 +1861,63 @@ jobs:
             prices,
             settings,
             velocity,
-            now
+            now,
+            expanded,
+            onToggle,
+            expandedItems,
+            setExpandedItems
           }) {
-            const fresh =
+            const feed =
               freshness(
                 group.updated,
                 now
               );
 
             const visible =
-              settings.hideSoldOut
+              settings
+                .hideSoldOut
                 ? group.items.filter(
-                    x =>
-                      x.quantity > 0
+                    item =>
+                      item.quantity >
+                      0
                   )
                 : group.items;
 
-            const inStock =
+            const stocked =
               group.items.filter(
-                x =>
-                  x.quantity > 0
+                item =>
+                  item.quantity >
+                  0
               ).length;
+
+            const units =
+              group.items.reduce(
+                (
+                  total,
+                  item
+                ) =>
+                  total +
+                  item.quantity,
+                0
+              );
 
             return (
               <View
                 style={
-                  styles.countryCard
+                  styles.country
                 }
               >
-                <View
+                <Pressable
+                  onPress={
+                    onToggle
+                  }
                   style={
-                    styles.rowBetween
+                    styles.countryHeader
                   }
                 >
                   <View
                     style={
-                      styles.countryIdentity
+                      styles.countryLeft
                     }
                   >
                     <Text
@@ -1896,10 +1928,18 @@ jobs:
                       {group.flag}
                     </Text>
 
-                    <View>
+                    <View
+                      style={{
+                        flex: 1,
+                        minWidth: 0
+                      }}
+                    >
                       <Text
                         style={
                           styles.countryName
+                        }
+                        numberOfLines={
+                          1
                         }
                       >
                         {group.name}
@@ -1907,120 +1947,129 @@ jobs:
 
                       <Text
                         style={
-                          styles.city
+                          styles.countrySub
+                        }
+                        numberOfLines={
+                          1
                         }
                       >
                         {group.city}
+                        {' • '}
+                        {stocked} stocked
+                        {' • '}
+                        {units.toLocaleString()}
+                        {' units'}
                       </Text>
                     </View>
                   </View>
 
                   <View
-                    style={{
-                      alignItems:
-                        'flex-end'
-                    }}
+                    style={
+                      styles.countryRight
+                    }
                   >
-                    <Badge
-                      text={
-                        fresh.label
+                    <Text
+                      style={
+                        styles.flightTime
                       }
-                      color={
-                        fresh.color
-                      }
-                    />
+                    >
+                      {getFlightMinutes(
+                        group
+                          .countryCode,
+                        settings
+                      )}
+                      m
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.feedStatus,
+                        {
+                          color:
+                            feed.color
+                        }
+                      ]}
+                    >
+                      {feed.label}
+                    </Text>
 
                     <Text
                       style={
-                        styles.freshAge
+                        styles.arrow
                       }
                     >
-                      {ageLabel(
-                        fresh.age
-                      )}
+                      {expanded
+                        ? '▲'
+                        : '▼'}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
 
-                <View
-                  style={
-                    styles.countrySummary
-                  }
-                >
-                  <Text
+                {expanded ? (
+                  <View
                     style={
-                      styles.summaryText
+                      styles.countryItems
                     }
                   >
-                    <Text
-                      style={
-                        styles.summaryStrong
-                      }
-                    >
-                      {inStock}
-                    </Text>{' '}
-                    stocked
-                  </Text>
+                    {visible.map(
+                      item => (
+                        <ItemRow
+                          key={
+                            item.key
+                          }
+                          item={
+                            item
+                          }
+                          prices={
+                            prices
+                          }
+                          settings={
+                            settings
+                          }
+                          velocity={
+                            velocity
+                          }
+                          now={
+                            now
+                          }
+                          expanded={
+                            Boolean(
+                              expandedItems[
+                                item
+                                  .key
+                              ]
+                            )
+                          }
+                          onToggle={
+                            () =>
+                              setExpandedItems(
+                                current => ({
+                                  ...current,
 
-                  <Text
-                    style={
-                      styles.summaryText
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.summaryStrong
-                      }
-                    >
-                      {flightMinutes(
-                        group.countryCode,
-                        settings
-                      )}m
-                    </Text>{' '}
-                    one way
-                  </Text>
-                </View>
+                                  [item
+                                    .key]:
+                                    !current[
+                                      item
+                                        .key
+                                    ]
+                                })
+                              )
+                          }
+                        />
+                      )
+                    )}
 
-                <View
-                  style={
-                    styles.divider
-                  }
-                />
-
-                {visible.map(
-                  item => (
-                    <ItemRow
-                      key={
-                        item.key
-                      }
-                      item={
-                        item
-                      }
-                      prices={
-                        prices
-                      }
-                      settings={
-                        settings
-                      }
-                      velocity={
-                        velocity
-                      }
-                      now={
-                        now
-                      }
-                    />
-                  )
-                )}
-
-                {!visible.length ? (
-                  <Text
-                    style={
-                      styles.emptyInline
-                    }
-                  >
-                    Everything here is
-                    sold out.
-                  </Text>
+                    {!visible.length ? (
+                      <Text
+                        style={
+                          styles.empty
+                        }
+                      >
+                        All items currently
+                        sold out.
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
             );
@@ -2029,7 +2078,7 @@ jobs:
           function MarketScreen({
             groups,
             best,
-            cap,
+            capacityValue,
             prices,
             settings,
             velocity,
@@ -2037,10 +2086,13 @@ jobs:
             search,
             setSearch,
             syncing,
-            feedAge,
-            error
+            error,
+            expandedCountries,
+            setExpandedCountries,
+            expandedItems,
+            setExpandedItems
           }) {
-            const q =
+            const query =
               search
                 .trim()
                 .toLowerCase();
@@ -2054,34 +2106,71 @@ jobs:
                     items:
                       group.items.filter(
                         item =>
-                          !q ||
+                          !query ||
                           group.name
                             .toLowerCase()
-                            .includes(q) ||
+                            .includes(
+                              query
+                            ) ||
                           group.city
                             .toLowerCase()
-                            .includes(q) ||
+                            .includes(
+                              query
+                            ) ||
                           item.name
                             .toLowerCase()
-                            .includes(q)
+                            .includes(
+                              query
+                            )
                       )
                   })
                 )
                 .filter(
                   group =>
-                    group.items.length
+                    group.items.length >
+                    0
                 );
+
+            const expandAll =
+              () => {
+                const next = {};
+
+                for (
+                  const group
+                  of filtered
+                ) {
+                  next[
+                    group
+                      .countryCode
+                  ] = true;
+                }
+
+                setExpandedCountries(
+                  next
+                );
+              };
+
+            const collapseAll =
+              () => {
+                setExpandedCountries(
+                  {}
+                );
+
+                setExpandedItems(
+                  {}
+                );
+              };
 
             const header = (
               <>
                 <BestCard
-                  best={
+                  item={
                     best
                   }
-                  cap={
-                    cap
+                  capacityValue={
+                    capacityValue
                   }
-                  pricesReady={
+                  priceReady={
                     Object.keys(
                       prices
                     ).length > 0
@@ -2090,80 +2179,7 @@ jobs:
 
                 <View
                   style={
-                    styles.quickRow
-                  }
-                >
-                  <View
-                    style={
-                      styles.quickBox
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.smallLabel
-                      }
-                    >
-                      CAPACITY
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.quickValue
-                      }
-                    >
-                      {cap}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.quickBox
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.smallLabel
-                      }
-                    >
-                      REFRESH
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.quickValue
-                      }
-                    >
-                      {settings
-                        .refreshSeconds}s
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.quickBox
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.smallLabel
-                      }
-                    >
-                      FEED AGE
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.quickValue
-                      }
-                    >
-                      {feedAge}
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={
-                    styles.searchBox
+                    styles.search
                   }
                 >
                   <Text
@@ -2181,7 +2197,7 @@ jobs:
                     onChangeText={
                       setSearch
                     }
-                    placeholder="Search item or country"
+                    placeholder="Search country or item"
                     placeholderTextColor={
                       C.faint
                     }
@@ -2212,7 +2228,7 @@ jobs:
 
                 <View
                   style={
-                    styles.sectionHead
+                    styles.marketHeading
                   }
                 >
                   <View>
@@ -2229,7 +2245,7 @@ jobs:
                         styles.sectionTitle
                       }
                     >
-                      Live foreign market
+                      Foreign market
                     </Text>
                   </View>
 
@@ -2242,10 +2258,65 @@ jobs:
                   ) : null}
                 </View>
 
+                <View
+                  style={
+                    styles.toolbar
+                  }
+                >
+                  <Text
+                    style={
+                      styles.toolbarInfo
+                    }
+                  >
+                    {filtered.length}{' '}
+                    destinations
+                  </Text>
+
+                  <View
+                    style={
+                      styles.toolbarActions
+                    }
+                  >
+                    <Pressable
+                      onPress={
+                        expandAll
+                      }
+                      style={
+                        styles.toolbarButton
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.toolbarText
+                        }
+                      >
+                        EXPAND ALL
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={
+                        collapseAll
+                      }
+                      style={
+                        styles.toolbarButton
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.toolbarText
+                        }
+                      >
+                        COLLAPSE
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
                 {error ? (
                   <View
                     style={
-                      styles.errorBox
+                      styles.error
                     }
                   >
                     <Text
@@ -2265,19 +2336,6 @@ jobs:
                     </Text>
                   </View>
                 ) : null}
-
-                <Text
-                  style={
-                    styles.disclaimer
-                  }
-                >
-                  Stock is crowdsourced
-                  foreign-shop data.
-                  “Live” means recently
-                  observed, not a direct
-                  per-second Torn inventory
-                  feed.
-                </Text>
               </>
             );
 
@@ -2290,143 +2348,123 @@ jobs:
                   item =>
                     item.countryCode
                 }
-                renderItem={({
-                  item
-                }) => (
-                  <CountryCard
-                    group={
-                      item
-                    }
-                    prices={
-                      prices
-                    }
-                    settings={
-                      settings
-                    }
-                    velocity={
-                      velocity
-                    }
-                    now={
-                      now
-                    }
-                  />
-                )}
                 ListHeaderComponent={
                   header
                 }
+                renderItem={({
+                  item
+                }) => {
+                  const expanded =
+                    Boolean(
+                      query
+                    ) ||
+                    Boolean(
+                      expandedCountries[
+                        item
+                          .countryCode
+                      ]
+                    );
+
+                  return (
+                    <CountryCard
+                      group={
+                        item
+                      }
+                      prices={
+                        prices
+                      }
+                      settings={
+                        settings
+                      }
+                      velocity={
+                        velocity
+                      }
+                      now={
+                        now
+                      }
+                      expanded={
+                        expanded
+                      }
+                      onToggle={
+                        () =>
+                          setExpandedCountries(
+                            current => ({
+                              ...current,
+
+                              [item
+                                .countryCode]:
+                                !current[
+                                  item
+                                    .countryCode
+                                ]
+                            })
+                          )
+                      }
+                      expandedItems={
+                        expandedItems
+                      }
+                      setExpandedItems={
+                        setExpandedItems
+                      }
+                    />
+                  );
+                }}
                 contentContainerStyle={
-                  styles.listContent
+                  styles.list
                 }
                 keyboardShouldPersistTaps="handled"
                 initialNumToRender={
-                  4
+                  8
                 }
                 windowSize={
-                  7
+                  9
                 }
                 removeClippedSubviews={
                   false
                 }
+                extraData={{
+                  expandedCountries,
+                  expandedItems,
+                  prices,
+                  now
+                }}
               />
             );
           }
 
           function TripsScreen({
             trips,
-            cap,
-            settings,
-            pricesReady
+            capacityValue,
+            priceReady
           }) {
             const header = (
-              <>
-                <View
+              <View>
+                <Text
                   style={
-                    styles.sectionHead
+                    styles.eyebrow
                   }
                 >
-                  <View>
-                    <Text
-                      style={
-                        styles.eyebrow
-                      }
-                    >
-                      TRIP ENGINE
-                    </Text>
+                  TRIP RANKING
+                </Text>
 
-                    <Text
-                      style={
-                        styles.sectionTitle
-                      }
-                    >
-                      Where to fly
-                    </Text>
-                  </View>
-
-                  <Badge
-                    text={
-                      pricesReady
-                        ? 'PROFIT ON'
-                        : 'STOCK ONLY'
-                    }
-                    color={
-                      pricesReady
-                        ? C.green
-                        : C.amber
-                    }
-                  />
-                </View>
+                <Text
+                  style={
+                    styles.sectionTitle
+                  }
+                >
+                  Best destinations
+                </Text>
 
                 <Text
                   style={
                     styles.copy
                   }
                 >
-                  {pricesReady
-                    ? 'Ranked by projected load profit per round-trip minute using current observed stock.'
-                    : 'Connect your Torn API key in Settings to rank destinations by resale profit.'}
+                  {priceReady
+                    ? 'Ranked using projected load profit per travel minute.'
+                    : 'Connect Torn prices to enable profit ranking.'}
                 </Text>
-
-                <View
-                  style={
-                    styles.profileCard
-                  }
-                >
-                  <Text
-                    style={
-                      styles.smallLabel
-                    }
-                  >
-                    YOUR PROFILE
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.profileValue
-                    }
-                  >
-                    {cap} items •{' '}
-                    {settings
-                      .flightMode
-                      .toUpperCase()}
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.copy
-                    }
-                  >
-                    {settings
-                      .tourismMode
-                      ? 'Tourism x2 ON • '
-                      : ''}
-
-                    {settings
-                      .mailingBook
-                      ? 'Mailing Yourself Abroad ON'
-                      : 'Normal travel-time table'}
-                  </Text>
-                </View>
-              </>
+              </View>
             );
 
             return (
@@ -2442,7 +2480,7 @@ jobs:
                   header
                 }
                 contentContainerStyle={
-                  styles.listContent
+                  styles.list
                 }
                 renderItem={({
                   item,
@@ -2450,7 +2488,7 @@ jobs:
                 }) => (
                   <View
                     style={
-                      styles.tripCard
+                      styles.trip
                     }
                   >
                     <View
@@ -2463,20 +2501,18 @@ jobs:
                           styles.rankText
                         }
                       >
-                        {index +
-                          1}
+                        {index + 1}
                       </Text>
                     </View>
 
                     <View
                       style={{
-                        flex: 1,
-                        minWidth: 0
+                        flex: 1
                       }}
                     >
                       <View
                         style={
-                          styles.rowBetween
+                          styles.between
                         }
                       >
                         <Text
@@ -2488,24 +2524,28 @@ jobs:
                           {item.country}
                         </Text>
 
-                        <Badge
-                          text={
-                            item.arrival
-                          }
-                          color={
-                            arrivalColor(
-                              item.arrival
-                            )
-                          }
-                        />
+                        <Text
+                          style={[
+                            styles.arrival,
+                            {
+                              color:
+                                item.arrival ===
+                                'LIKELY'
+                                  ? C.green
+                                  : C.amber
+                            }
+                          ]}
+                        >
+                          {item.arrival}
+                        </Text>
                       </View>
 
                       <Text
-                        numberOfLines={
-                          1
-                        }
                         style={
                           styles.tripItem
+                        }
+                        numberOfLines={
+                          1
                         }
                       >
                         {item.name}
@@ -2513,43 +2553,44 @@ jobs:
 
                       <View
                         style={
-                          styles.metaRow
+                          styles.tripBottom
                         }
                       >
                         <Text
                           style={
-                            styles.meta
+                            styles.tripMeta
                           }
                         >
                           {item.minutes}m
-                          one way
                         </Text>
 
                         <Text
                           style={
-                            styles.meta
+                            styles.tripMeta
                           }
                         >
                           {Math.min(
-                            cap,
+                            capacityValue,
                             item.quantity
                           )}{' '}
-                          current load
+                          items
                         </Text>
 
-                        {item.projectedProfit !=
+                        {item
+                          .projectedProfit !==
                         null ? (
                           <Text
                             style={[
-                              styles.meta,
+                              styles.tripMeta,
                               {
                                 color:
                                   C.green
                               }
                             ]}
                           >
-                            {compactMoney(
-                              item.projectedProfit
+                            {shortMoney(
+                              item
+                                .projectedProfit
                             )}
                           </Text>
                         ) : null}
@@ -2563,7 +2604,7 @@ jobs:
 
           function Toggle({
             label,
-            detail,
+            description,
             value,
             onPress
           }) {
@@ -2583,7 +2624,7 @@ jobs:
                 >
                   <Text
                     style={
-                      styles.settingLabel
+                      styles.settingName
                     }
                   >
                     {label}
@@ -2591,10 +2632,10 @@ jobs:
 
                   <Text
                     style={
-                      styles.settingDetail
+                      styles.settingDescription
                     }
                   >
-                    {detail}
+                    {description}
                   </Text>
                 </View>
 
@@ -2624,107 +2665,89 @@ jobs:
           }
 
           function Choice({
-            label,
             value,
             options,
             onChange
           }) {
             return (
               <View
-                style={{
-                  gap: 8
-                }}
+                style={
+                  styles.choices
+                }
               >
-                <Text
-                  style={
-                    styles.settingLabel
-                  }
-                >
-                  {label}
-                </Text>
-
-                <View
-                  style={
-                    styles.choiceRow
-                  }
-                >
-                  {options.map(
-                    x => (
-                      <Pressable
-                        key={
-                          x.value
-                        }
-                        onPress={
-                          () =>
-                            onChange(
-                              x.value
-                            )
-                        }
+                {options.map(
+                  option => (
+                    <Pressable
+                      key={
+                        option.value
+                      }
+                      onPress={
+                        () =>
+                          onChange(
+                            option.value
+                          )
+                      }
+                      style={[
+                        styles.choice,
+                        value ===
+                          option.value &&
+                          styles.choiceOn
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.choice,
+                          styles.choiceText,
                           value ===
-                            x.value &&
-                            styles.choiceOn
+                            option.value && {
+                            color:
+                              C.cyan
+                          }
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.choiceText,
-                            value ===
-                              x.value && {
-                              color:
-                                C.cyan
-                            }
-                          ]}
-                        >
-                          {x.label}
-                        </Text>
-                      </Pressable>
-                    )
-                  )}
-                </View>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
               </View>
             );
           }
 
           function SettingsScreen({
             settings,
-            onSettings,
+            updateSettings,
             apiInput,
             setApiInput,
             apiKey,
-            onSaveKey,
-            priceAge,
+            saveApiKey,
             priceSyncing
           }) {
             return (
               <ScrollView
                 contentContainerStyle={
-                  styles.settingsContent
+                  styles.settings
                 }
                 keyboardShouldPersistTaps="handled"
               >
-                <View>
-                  <Text
-                    style={
-                      styles.eyebrow
-                    }
-                  >
-                    TRAVEL MARKET
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.sectionTitle
-                    }
-                  >
-                    Settings
-                  </Text>
-                </View>
+                <Text
+                  style={
+                    styles.eyebrow
+                  }
+                >
+                  TRAVEL PROFILE
+                </Text>
 
                 <Text
                   style={
-                    styles.groupLabel
+                    styles.sectionTitle
+                  }
+                >
+                  Settings
+                </Text>
+
+                <Text
+                  style={
+                    styles.groupTitle
                   }
                 >
                   TORN MARKET PRICES
@@ -2737,21 +2760,10 @@ jobs:
                 >
                   <Text
                     style={
-                      styles.settingLabel
+                      styles.settingName
                     }
                   >
                     Torn API key
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.settingDetail
-                    }
-                  >
-                    Stored locally on your
-                    phone. Used only for
-                    Torn item market
-                    values.
                   </Text>
 
                   <TextInput
@@ -2761,14 +2773,14 @@ jobs:
                     onChangeText={
                       setApiInput
                     }
+                    placeholder="Paste API key"
+                    placeholderTextColor={
+                      C.faint
+                    }
                     secureTextEntry
                     autoCapitalize="none"
                     autoCorrect={
                       false
-                    }
-                    placeholder="Paste API key"
-                    placeholderTextColor={
-                      C.faint
                     }
                     style={
                       styles.apiInput
@@ -2777,40 +2789,32 @@ jobs:
 
                   <Pressable
                     onPress={
-                      onSaveKey
+                      saveApiKey
                     }
                     style={
-                      styles.primaryButton
+                      styles.saveButton
                     }
                   >
                     <Text
                       style={
-                        styles.primaryText
+                        styles.saveText
                       }
                     >
-                      {apiKey
-                        ? 'SAVE & REFRESH PRICES'
+                      {priceSyncing
+                        ? 'SYNCING...'
+                        : apiKey
+                        ? 'SAVE & SYNC'
                         : 'CONNECT PRICES'}
                     </Text>
                   </Pressable>
-
-                  <Text
-                    style={
-                      styles.settingDetail
-                    }
-                  >
-                    {priceSyncing
-                      ? 'Refreshing prices…'
-                      : priceAge}
-                  </Text>
                 </View>
 
                 <Text
                   style={
-                    styles.groupLabel
+                    styles.groupTitle
                   }
                 >
-                  CARRYING CAPACITY
+                  CAPACITY
                 </Text>
 
                 <View
@@ -2830,7 +2834,7 @@ jobs:
                     >
                       <Text
                         style={
-                          styles.settingLabel
+                          styles.settingName
                         }
                       >
                         Normal capacity
@@ -2838,11 +2842,10 @@ jobs:
 
                       <Text
                         style={
-                          styles.settingDetail
+                          styles.settingDescription
                         }
                       >
-                        Your normal limit
-                        before Tourism x2.
+                        Base carrying limit
                       </Text>
                     </View>
 
@@ -2854,7 +2857,7 @@ jobs:
                       <Pressable
                         onPress={
                           () =>
-                            onSettings({
+                            updateSettings({
                               baseCapacity:
                                 Math.max(
                                   1,
@@ -2870,7 +2873,7 @@ jobs:
                       >
                         <Text
                           style={
-                            styles.numberText
+                            styles.numberButtonText
                           }
                         >
                           −
@@ -2891,7 +2894,7 @@ jobs:
                       <Pressable
                         onPress={
                           () =>
-                            onSettings({
+                            updateSettings({
                               baseCapacity:
                                 settings
                                   .baseCapacity +
@@ -2904,7 +2907,7 @@ jobs:
                       >
                         <Text
                           style={
-                            styles.numberText
+                            styles.numberButtonText
                           }
                         >
                           +
@@ -2915,8 +2918,11 @@ jobs:
 
                   <Toggle
                     label="Tourism x2"
-                    detail={
-                      `Current app capacity: ${capacity(settings)}`
+                    description={
+                      'Effective capacity: ' +
+                      getCapacity(
+                        settings
+                      )
                     }
                     value={
                       settings
@@ -2924,7 +2930,7 @@ jobs:
                     }
                     onPress={
                       () =>
-                        onSettings({
+                        updateSettings({
                           tourismMode:
                             !settings
                               .tourismMode
@@ -2935,10 +2941,10 @@ jobs:
 
                 <Text
                   style={
-                    styles.groupLabel
+                    styles.groupTitle
                   }
                 >
-                  TRAVEL
+                  FLIGHT METHOD
                 </Text>
 
                 <View
@@ -2947,14 +2953,13 @@ jobs:
                   }
                 >
                   <Choice
-                    label="Travel method"
                     value={
                       settings
                         .flightMode
                     }
                     onChange={
                       flightMode =>
-                        onSettings({
+                        updateSettings({
                           flightMode
                         })
                     }
@@ -2988,14 +2993,14 @@ jobs:
 
                   <Toggle
                     label="Mailing Yourself Abroad"
-                    detail="Use the reduced travel-time table."
+                    description="Use reduced travel times"
                     value={
                       settings
                         .mailingBook
                     }
                     onPress={
                       () =>
-                        onSettings({
+                        updateSettings({
                           mailingBook:
                             !settings
                               .mailingBook
@@ -3006,10 +3011,10 @@ jobs:
 
                 <Text
                   style={
-                    styles.groupLabel
+                    styles.groupTitle
                   }
                 >
-                  LIVE FEED
+                  MARKET DISPLAY
                 </Text>
 
                 <View
@@ -3017,15 +3022,39 @@ jobs:
                     styles.settingsCard
                   }
                 >
+                  <Toggle
+                    label="Hide sold-out items"
+                    description="Only show currently available stock"
+                    value={
+                      settings
+                        .hideSoldOut
+                    }
+                    onPress={
+                      () =>
+                        updateSettings({
+                          hideSoldOut:
+                            !settings
+                              .hideSoldOut
+                        })
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.settingName
+                    }
+                  >
+                    Refresh speed
+                  </Text>
+
                   <Choice
-                    label="Refresh interval"
                     value={
                       settings
                         .refreshSeconds
                     }
                     onChange={
                       refreshSeconds =>
-                        onSettings({
+                        updateSettings({
                           refreshSeconds
                         })
                     }
@@ -3047,51 +3076,6 @@ jobs:
                       }
                     ]}
                   />
-
-                  <Toggle
-                    label="Hide sold-out items"
-                    detail="Only show items currently reported in stock."
-                    value={
-                      settings
-                        .hideSoldOut
-                    }
-                    onPress={
-                      () =>
-                        onSettings({
-                          hideSoldOut:
-                            !settings
-                              .hideSoldOut
-                        })
-                    }
-                  />
-                </View>
-
-                <View
-                  style={
-                    styles.infoCard
-                  }
-                >
-                  <Text
-                    style={
-                      styles.eyebrow
-                    }
-                  >
-                    DATA
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.copy
-                    }
-                  >
-                    Foreign availability
-                    comes from YATA’s
-                    crowdsourced travel
-                    feed. Torn resale
-                    values come from the
-                    official Torn API when
-                    your key is connected.
-                  </Text>
                 </View>
               </ScrollView>
             );
@@ -3101,7 +3085,7 @@ jobs:
             tab,
             setTab
           }) {
-            const items = [
+            const tabs = [
               [
                 'MARKET',
                 '⌁'
@@ -3122,19 +3106,19 @@ jobs:
                   styles.nav
                 }
               >
-                {items.map(
+                {tabs.map(
                   ([
-                    key,
+                    name,
                     icon
                   ]) => (
                     <Pressable
                       key={
-                        key
+                        name
                       }
                       onPress={
                         () =>
                           setTab(
-                            key
+                            name
                           )
                       }
                       style={
@@ -3142,7 +3126,7 @@ jobs:
                       }
                     >
                       {tab ===
-                      key ? (
+                      name ? (
                         <View
                           style={
                             styles.navLine
@@ -3154,7 +3138,7 @@ jobs:
                         style={[
                           styles.navIcon,
                           tab ===
-                            key && {
+                            name && {
                             color:
                               C.cyan
                           }
@@ -3165,15 +3149,15 @@ jobs:
 
                       <Text
                         style={[
-                          styles.navLabel,
+                          styles.navText,
                           tab ===
-                            key && {
+                            name && {
                             color:
                               C.cyan
                           }
                         ]}
                       >
-                        {key}
+                        {name}
                       </Text>
                     </Pressable>
                   )
@@ -3230,6 +3214,18 @@ jobs:
               useState('');
 
             const [
+              expandedCountries,
+              setExpandedCountries
+            ] =
+              useState({});
+
+            const [
+              expandedItems,
+              setExpandedItems
+            ] =
+              useState({});
+
+            const [
               syncing,
               setSyncing
             ] =
@@ -3246,18 +3242,6 @@ jobs:
               setError
             ] =
               useState('');
-
-            const [
-              feedFetchedAt,
-              setFeedFetchedAt
-            ] =
-              useState(0);
-
-            const [
-              priceFetchedAt,
-              setPriceFetchedAt
-            ] =
-              useState(0);
 
             const [
               now,
@@ -3279,7 +3263,7 @@ jobs:
             const velocityRef =
               useRef({});
 
-            const mounted =
+            const mountedRef =
               useRef(true);
 
             const refreshForeign =
@@ -3295,9 +3279,9 @@ jobs:
 
                   try {
                     const data =
-                      await getForeignStock();
+                      await fetchStock();
 
-                    const learned =
+                    const update =
                       updateVelocity(
                         previousRef
                           .current,
@@ -3307,43 +3291,39 @@ jobs:
                       );
 
                     previousRef.current =
-                      learned.previous;
+                      update.previous;
 
                     velocityRef.current =
-                      learned.velocity;
+                      update.velocity;
 
                     if (
-                      mounted.current
+                      mountedRef.current
                     ) {
                       setRows(
                         data
                       );
 
                       setVelocity(
-                        learned.velocity
-                      );
-
-                      setFeedFetchedAt(
-                        Date.now()
+                        update.velocity
                       );
 
                       setError(
                         ''
                       );
                     }
-                  } catch (e) {
+                  } catch (err) {
                     if (
-                      mounted.current
+                      mountedRef.current
                     ) {
                       setError(
-                        e?.message ||
-                        String(e)
+                        err?.message ||
+                        String(err)
                       );
                     }
                   } finally {
                     if (
-                      mounted.current &&
-                      spinner
+                      spinner &&
+                      mountedRef.current
                     ) {
                       setSyncing(
                         false
@@ -3371,35 +3351,31 @@ jobs:
                   );
 
                   try {
-                    const map =
-                      await getTornPrices(
+                    const result =
+                      await fetchPrices(
                         clean
                       );
 
                     if (
-                      mounted.current
+                      mountedRef.current
                     ) {
                       setPrices(
-                        map
-                      );
-
-                      setPriceFetchedAt(
-                        Date.now()
+                        result
                       );
                     }
-                  } catch (e) {
+                  } catch (err) {
                     if (
-                      mounted.current
+                      mountedRef.current
                     ) {
                       Alert.alert(
-                        'Torn prices',
-                        e?.message ||
-                        String(e)
+                        'Price sync',
+                        err?.message ||
+                        String(err)
                       );
                     }
                   } finally {
                     if (
-                      mounted.current
+                      mountedRef.current
                     ) {
                       setPriceSyncing(
                         false
@@ -3412,59 +3388,68 @@ jobs:
 
             useEffect(
               () => {
-                mounted.current =
+                mountedRef.current =
                   true;
 
                 (
                   async () => {
-                    const [
-                      savedSettings,
-                      savedKey
-                    ] =
-                      await Promise.all(
-                        [
-                          loadStoredSettings(),
-                          SecureStore
-                            .getItemAsync(
-                              KEY_API
-                            )
-                        ]
+                    try {
+                      const savedSettings =
+                        await SecureStore
+                          .getItemAsync(
+                            SETTINGS_STORAGE
+                          );
+
+                      const savedKey =
+                        await SecureStore
+                          .getItemAsync(
+                            API_KEY_STORAGE
+                          );
+
+                      if (
+                        savedSettings
+                      ) {
+                        setSettings({
+                          ...DEFAULT_SETTINGS,
+                          ...JSON.parse(
+                            savedSettings
+                          )
+                        });
+                      }
+
+                      if (
+                        savedKey
+                      ) {
+                        setApiKey(
+                          savedKey
+                        );
+
+                        setApiInput(
+                          savedKey
+                        );
+                      }
+
+                      await refreshForeign(
+                        true
                       );
 
-                    if (
-                      !mounted.current
-                    ) {
-                      return;
-                    }
-
-                    setSettings(
-                      savedSettings
-                    );
-
-                    setApiKey(
-                      savedKey || ''
-                    );
-
-                    setApiInput(
-                      savedKey || ''
-                    );
-
-                    await refreshForeign(
-                      true
-                    );
-
-                    if (
-                      savedKey
-                    ) {
-                      refreshPrices(
+                      if (
                         savedKey
+                      ) {
+                        refreshPrices(
+                          savedKey
+                        );
+                      }
+                    } catch (_) {
+                      refreshForeign(
+                        true
                       );
                     }
                   }
                 )();
 
                 return () => {
-                  mounted.current =
+                  mountedRef.current =
                     false;
                 };
               },
@@ -3476,7 +3461,7 @@ jobs:
 
             useEffect(
               () => {
-                const id =
+                const timer =
                   setInterval(
                     () =>
                       setNow(
@@ -3487,7 +3472,7 @@ jobs:
 
                 return () =>
                   clearInterval(
-                    id
+                    timer
                   );
               },
               []
@@ -3495,29 +3480,29 @@ jobs:
 
             useEffect(
               () => {
-                const ms =
+                const seconds =
                   Math.max(
                     15,
-                    n(
+                    number(
                       settings
                         .refreshSeconds,
                       15
                     )
-                  ) *
-                  1000;
+                  );
 
-                const id =
+                const timer =
                   setInterval(
                     () =>
                       refreshForeign(
                         false
                       ),
-                    ms
+                    seconds *
+                      1000
                   );
 
                 return () =>
                   clearInterval(
-                    id
+                    timer
                   );
               },
               [
@@ -3533,7 +3518,7 @@ jobs:
                   return;
                 }
 
-                const id =
+                const timer =
                   setInterval(
                     () =>
                       refreshPrices(
@@ -3544,7 +3529,7 @@ jobs:
 
                 return () =>
                   clearInterval(
-                    id
+                    timer
                   );
               },
               [
@@ -3564,8 +3549,8 @@ jobs:
                 ]
               );
 
-            const cap =
-              capacity(
+            const capacityValue =
+              getCapacity(
                 settings
               );
 
@@ -3573,9 +3558,9 @@ jobs:
               useMemo(
                 () =>
                   rows.map(
-                    row =>
-                      candidate(
-                        row,
+                    item =>
+                      getCandidate(
+                        item,
                         prices,
                         settings,
                         velocity
@@ -3594,16 +3579,20 @@ jobs:
                 () =>
                   candidates
                     .filter(
-                      x =>
-                        x.quantity >
+                      item =>
+                        item.quantity >
                           0 &&
-                        x.marketPrice >
+                        item
+                          .marketPrice >
                           0 &&
-                        x.profitEach >
+                        item
+                          .profitEach >
                           0 &&
                         (
-                          x.projectedProfit ??
-                          x.loadProfit ??
+                          item
+                            .projectedProfit ??
+                          item
+                            .loadProfit ??
                           0
                         ) > 0
                     )
@@ -3630,40 +3619,41 @@ jobs:
             const trips =
               useMemo(
                 () => {
-                  const map =
+                  const result =
                     new Map();
 
-                  const hasPrices =
+                  const priceReady =
                     Object.keys(
                       prices
                     ).length >
                     0;
 
                   for (
-                    const c of
-                    candidates
+                    const item
+                    of candidates
                   ) {
                     if (
-                      c.quantity <=
+                      item.quantity <=
                       0
                     ) {
                       continue;
                     }
 
                     const old =
-                      map.get(
-                        c.countryCode
+                      result.get(
+                        item
+                          .countryCode
                       );
 
                     const score =
-                      hasPrices
-                        ? c.ppm ??
+                      priceReady
+                        ? item.ppm ??
                           -Infinity
-                        : c.quantity;
+                        : item.quantity;
 
                     const oldScore =
                       old
-                        ? hasPrices
+                        ? priceReady
                           ? old.ppm ??
                             -Infinity
                           : old.quantity
@@ -3674,21 +3664,22 @@ jobs:
                       score >
                         oldScore
                     ) {
-                      map.set(
-                        c.countryCode,
-                        c
+                      result.set(
+                        item
+                          .countryCode,
+                        item
                       );
                     }
                   }
 
                   return Array.from(
-                    map.values()
+                    result.values()
                   ).sort(
                     (
                       a,
                       b
                     ) =>
-                      hasPrices
+                      priceReady
                         ? (
                             b.ppm ??
                             -Infinity
@@ -3707,7 +3698,7 @@ jobs:
                 ]
               );
 
-            async function patchSettings(
+            async function updateSettings(
               patch
             ) {
               const next = {
@@ -3720,9 +3711,13 @@ jobs:
               );
 
               try {
-                await saveStoredSettings(
-                  next
-                );
+                await SecureStore
+                  .setItemAsync(
+                    SETTINGS_STORAGE,
+                    JSON.stringify(
+                      next
+                    )
+                  );
               } catch (_) {}
             }
 
@@ -3730,19 +3725,18 @@ jobs:
               Keyboard.dismiss();
 
               const clean =
-                apiInput
-                  .trim();
+                apiInput.trim();
 
               if (clean) {
                 await SecureStore
                   .setItemAsync(
-                    KEY_API,
+                    API_KEY_STORAGE,
                     clean
                   );
               } else {
                 await SecureStore
                   .deleteItemAsync(
-                    KEY_API
+                    API_KEY_STORAGE
                   );
               }
 
@@ -3755,10 +3749,6 @@ jobs:
                   {}
                 );
 
-                setPriceFetchedAt(
-                  0
-                );
-
                 return;
               }
 
@@ -3767,31 +3757,10 @@ jobs:
               );
             }
 
-            const feedAge =
-              feedFetchedAt
-                ? ageLabel(
-                    Math.floor(
-                      (
-                        now -
-                        feedFetchedAt
-                      ) /
-                      1000
-                    )
-                  )
-                : '—';
-
-            const priceAge =
-              priceFetchedAt
-                ? `Prices updated ${ageLabel(
-                    Math.floor(
-                      (
-                        now -
-                        priceFetchedAt
-                      ) /
-                      1000
-                    )
-                  )}`
-                : 'No Torn price sync yet.';
+            const priceReady =
+              Object.keys(
+                prices
+              ).length > 0;
 
             return (
               <SafeAreaView
@@ -3813,10 +3782,8 @@ jobs:
                   syncing={
                     syncing
                   }
-                  pricesReady={
-                    Object.keys(
-                      prices
-                    ).length > 0
+                  priceReady={
+                    priceReady
                   }
                   onRefresh={
                     () => {
@@ -3849,8 +3816,8 @@ jobs:
                       best={
                         best
                       }
-                      cap={
-                        cap
+                      capacityValue={
+                        capacityValue
                       }
                       prices={
                         prices
@@ -3873,11 +3840,20 @@ jobs:
                       syncing={
                         syncing
                       }
-                      feedAge={
-                        feedAge
-                      }
                       error={
                         error
+                      }
+                      expandedCountries={
+                        expandedCountries
+                      }
+                      setExpandedCountries={
+                        setExpandedCountries
+                      }
+                      expandedItems={
+                        expandedItems
+                      }
+                      setExpandedItems={
+                        setExpandedItems
                       }
                     />
                   ) : null}
@@ -3888,17 +3864,11 @@ jobs:
                       trips={
                         trips
                       }
-                      cap={
-                        cap
+                      capacityValue={
+                        capacityValue
                       }
-                      settings={
-                        settings
-                      }
-                      pricesReady={
-                        Object.keys(
-                          prices
-                        ).length >
-                        0
+                      priceReady={
+                        priceReady
                       }
                     />
                   ) : null}
@@ -3909,8 +3879,8 @@ jobs:
                       settings={
                         settings
                       }
-                      onSettings={
-                        patchSettings
+                      updateSettings={
+                        updateSettings
                       }
                       apiInput={
                         apiInput
@@ -3921,11 +3891,8 @@ jobs:
                       apiKey={
                         apiKey
                       }
-                      onSaveKey={
+                      saveApiKey={
                         saveKey
-                      }
-                      priceAge={
-                        priceAge
                       }
                       priceSyncing={
                         priceSyncing
@@ -3960,11 +3927,11 @@ jobs:
 
               header: {
                 paddingHorizontal:
-                  16,
+                  15,
                 paddingTop:
-                  10,
+                  9,
                 paddingBottom:
-                  10,
+                  9,
                 borderBottomWidth:
                   1,
                 borderBottomColor:
@@ -3973,7 +3940,7 @@ jobs:
                   '#071015'
               },
 
-              headerRow: {
+              headerTop: {
                 flexDirection:
                   'row',
                 alignItems:
@@ -3986,39 +3953,44 @@ jobs:
                 color:
                   C.text,
                 fontSize:
-                  19,
+                  18,
                 fontWeight:
-                  '900',
-                letterSpacing:
-                  1.2
+                  '900'
               },
 
-              subLogo: {
+              logoSub: {
                 color:
                   C.muted,
                 fontSize:
                   9,
                 fontWeight:
                   '800',
-                letterSpacing:
-                  1.1,
                 marginTop:
-                  3
+                  2
               },
 
-              refreshButton: {
+              headerBadges: {
+                flexDirection:
+                  'row',
+                gap:
+                  6,
+                marginTop:
+                  7
+              },
+
+              refresh: {
                 width:
-                  42,
+                  40,
                 height:
-                  42,
+                  40,
                 borderRadius:
-                  12,
+                  11,
+                backgroundColor:
+                  C.panel,
                 borderWidth:
                   1,
                 borderColor:
                   C.line,
-                backgroundColor:
-                  C.panel,
                 alignItems:
                   'center',
                 justifyContent:
@@ -4029,18 +4001,7 @@ jobs:
                 color:
                   C.cyan,
                 fontSize:
-                  23,
-                fontWeight:
-                  '800'
-              },
-
-              badgeRow: {
-                flexDirection:
-                  'row',
-                gap:
-                  7,
-                marginTop:
-                  9
+                  22
               },
 
               badge: {
@@ -4049,9 +4010,9 @@ jobs:
                 borderRadius:
                   999,
                 paddingHorizontal:
-                  8,
+                  7,
                 paddingVertical:
-                  4,
+                  3,
                 backgroundColor:
                   '#081015'
               },
@@ -4060,20 +4021,16 @@ jobs:
                 fontSize:
                   8,
                 fontWeight:
-                  '900',
-                letterSpacing:
-                  0.8
+                  '900'
               },
 
-              listContent: {
-                paddingHorizontal:
-                  14,
-                paddingTop:
+              list: {
+                padding:
                   12,
                 paddingBottom:
-                  26,
+                  28,
                 gap:
-                  12
+                  8
               },
 
               bestCard: {
@@ -4085,40 +4042,38 @@ jobs:
                   C.cyan +
                   '44',
                 borderRadius:
-                  18,
+                  15,
                 padding:
-                  16
+                  14
               },
 
               eyebrow: {
                 color:
                   C.cyan,
                 fontSize:
-                  9,
+                  8,
                 fontWeight:
                   '900',
                 letterSpacing:
-                  1.5
+                  1.3
               },
 
               bestTitle: {
                 color:
                   C.text,
                 fontSize:
-                  23,
+                  21,
                 fontWeight:
                   '900',
                 marginTop:
-                  7
+                  6
               },
 
               bestItem: {
                 color:
                   C.muted,
                 fontSize:
-                  14,
-                fontWeight:
-                  '700',
+                  12,
                 marginTop:
                   3
               },
@@ -4127,14 +4082,14 @@ jobs:
                 color:
                   C.muted,
                 fontSize:
-                  11,
+                  10,
                 lineHeight:
-                  17,
+                  15,
                 marginTop:
                   6
               },
 
-              rowBetween: {
+              between: {
                 flexDirection:
                   'row',
                 alignItems:
@@ -4142,65 +4097,451 @@ jobs:
                 justifyContent:
                   'space-between',
                 gap:
-                  10
+                  8
               },
 
-              metricRow: {
+              bestMetrics: {
                 flexDirection:
                   'row',
                 gap:
-                  8,
+                  7,
                 marginTop:
-                  14
+                  11
               },
 
               metric: {
                 flex:
                   1,
-                backgroundColor:
-                  C.panel2,
-                borderWidth:
-                  1,
-                borderColor:
-                  C.line,
-                borderRadius:
-                  12,
                 padding:
-                  10
+                  8,
+                borderRadius:
+                  10,
+                backgroundColor:
+                  C.panel2
               },
 
               metricLabel: {
                 color:
                   C.faint,
                 fontSize:
-                  8,
+                  7,
                 fontWeight:
-                  '900',
-                letterSpacing:
-                  0.8
+                  '900'
               },
 
               metricValue: {
                 color:
                   C.text,
                 fontSize:
-                  14,
+                  13,
                 fontWeight:
                   '900',
                 marginTop:
+                  4
+              },
+
+              search: {
+                height:
+                  43,
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  12,
+                paddingHorizontal:
+                  11
+              },
+
+              searchIcon: {
+                color:
+                  C.cyan,
+                fontSize:
+                  18,
+                marginRight:
+                  7
+              },
+
+              searchInput: {
+                flex:
+                  1,
+                color:
+                  C.text,
+                fontSize:
+                  13
+              },
+
+              clear: {
+                color:
+                  C.muted,
+                fontSize:
+                  22
+              },
+
+              marketHeading: {
+                flexDirection:
+                  'row',
+                justifyContent:
+                  'space-between',
+                alignItems:
+                  'center'
+              },
+
+              sectionTitle: {
+                color:
+                  C.text,
+                fontSize:
+                  20,
+                fontWeight:
+                  '900',
+                marginTop:
+                  2
+              },
+
+              toolbar: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'space-between'
+              },
+
+              toolbarInfo: {
+                color:
+                  C.faint,
+                fontSize:
+                  9
+              },
+
+              toolbarActions: {
+                flexDirection:
+                  'row',
+                gap:
                   5
               },
 
-              quickRow: {
+              toolbarButton: {
+                paddingHorizontal:
+                  8,
+                paddingVertical:
+                  6,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  8,
+                backgroundColor:
+                  C.panel
+              },
+
+              toolbarText: {
+                color:
+                  C.cyan,
+                fontSize:
+                  7,
+                fontWeight:
+                  '900'
+              },
+
+              country: {
+                backgroundColor:
+                  C.panel,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  13,
+                overflow:
+                  'hidden'
+              },
+
+              countryHeader: {
+                minHeight:
+                  59,
+                paddingHorizontal:
+                  11,
+                paddingVertical:
+                  8,
                 flexDirection:
                   'row',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'space-between',
                 gap:
                   8
               },
 
-              quickBox: {
+              countryLeft: {
                 flex:
                   1,
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                gap:
+                  8
+              },
+
+              flag: {
+                fontSize:
+                  22
+              },
+
+              countryName: {
+                color:
+                  C.text,
+                fontSize:
+                  14,
+                fontWeight:
+                  '900'
+              },
+
+              countrySub: {
+                color:
+                  C.muted,
+                fontSize:
+                  8,
+                marginTop:
+                  3
+              },
+
+              countryRight: {
+                alignItems:
+                  'flex-end',
+                minWidth:
+                  53
+              },
+
+              flightTime: {
+                color:
+                  C.text,
+                fontSize:
+                  11,
+                fontWeight:
+                  '900'
+              },
+
+              feedStatus: {
+                fontSize:
+                  7,
+                fontWeight:
+                  '900',
+                marginTop:
+                  2
+              },
+
+              arrow: {
+                color:
+                  C.cyan,
+                fontSize:
+                  8,
+                marginTop:
+                  3
+              },
+
+              countryItems: {
+                paddingHorizontal:
+                  10,
+                borderTopWidth:
+                  1,
+                borderTopColor:
+                  C.line
+              },
+
+              item: {
+                borderBottomWidth:
+                  1,
+                borderBottomColor:
+                  '#142028'
+              },
+
+              itemButton: {
+                paddingVertical:
+                  8
+              },
+
+              itemTop: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                justifyContent:
+                  'space-between'
+              },
+
+              itemNameWrap: {
+                flex:
+                  1,
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                gap:
+                  6
+              },
+
+              dot: {
+                width:
+                  7,
+                height:
+                  7,
+                borderRadius:
+                  4
+              },
+
+              itemName: {
+                flex:
+                  1,
+                color:
+                  C.text,
+                fontSize:
+                  11,
+                fontWeight:
+                  '800'
+              },
+
+              itemStockWrap: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                gap:
+                  7
+              },
+
+              stock: {
+                fontSize:
+                  10,
+                fontWeight:
+                  '900'
+              },
+
+              priceRow: {
+                flexDirection:
+                  'row',
+                flexWrap:
+                  'wrap',
+                gap:
+                  9,
+                marginTop:
+                  5,
+                paddingLeft:
+                  13
+              },
+
+              price: {
+                color:
+                  C.muted,
+                fontSize:
+                  8,
+                fontWeight:
+                  '700'
+              },
+
+              itemDetails: {
+                flexDirection:
+                  'row',
+                flexWrap:
+                  'wrap',
+                gap:
+                  15,
+                padding:
+                  10,
+                marginHorizontal:
+                  -10,
+                backgroundColor:
+                  C.panel2,
+                borderTopWidth:
+                  1,
+                borderTopColor:
+                  C.line
+              },
+
+              detail: {
+                minWidth:
+                  62
+              },
+
+              detailLabel: {
+                color:
+                  C.faint,
+                fontSize:
+                  7,
+                fontWeight:
+                  '900'
+              },
+
+              detailValue: {
+                color:
+                  C.text,
+                fontSize:
+                  10,
+                fontWeight:
+                  '900',
+                marginTop:
+                  3
+              },
+
+              empty: {
+                color:
+                  C.faint,
+                textAlign:
+                  'center',
+                fontSize:
+                  10,
+                padding:
+                  12
+              },
+
+              error: {
+                borderWidth:
+                  1,
+                borderColor:
+                  C.red +
+                  '66',
+                backgroundColor:
+                  '#190b10',
+                borderRadius:
+                  11,
+                padding:
+                  10
+              },
+
+              errorTitle: {
+                color:
+                  C.red,
+                fontSize:
+                  8,
+                fontWeight:
+                  '900'
+              },
+
+              errorText: {
+                color:
+                  '#efadb5',
+                fontSize:
+                  10,
+                marginTop:
+                  4
+              },
+
+              trip: {
+                flexDirection:
+                  'row',
+                alignItems:
+                  'center',
+                gap:
+                  9,
                 backgroundColor:
                   C.panel,
                 borderWidth:
@@ -4213,356 +4554,15 @@ jobs:
                   11
               },
 
-              quickValue: {
-                color:
-                  C.text,
-                fontSize:
-                  16,
-                fontWeight:
-                  '900',
-                marginTop:
-                  4
-              },
-
-              smallLabel: {
-                color:
-                  C.faint,
-                fontSize:
-                  8,
-                fontWeight:
-                  '900',
-                letterSpacing:
-                  0.8
-              },
-
-              smallValue: {
-                color:
-                  C.text,
-                fontSize:
-                  11,
-                fontWeight:
-                  '800',
-                marginTop:
-                  4
-              },
-
-              searchBox: {
-                height:
-                  46,
-                flexDirection:
-                  'row',
-                alignItems:
-                  'center',
-                backgroundColor:
-                  C.panel,
-                borderWidth:
-                  1,
-                borderColor:
-                  C.line,
-                borderRadius:
-                  13,
-                paddingHorizontal:
-                  12
-              },
-
-              searchIcon: {
-                color:
-                  C.cyan,
-                fontSize:
-                  20,
-                marginRight:
-                  8
-              },
-
-              searchInput: {
-                flex:
-                  1,
-                color:
-                  C.text,
-                fontSize:
-                  14
-              },
-
-              clear: {
-                color:
-                  C.muted,
-                fontSize:
-                  24,
-                paddingLeft:
-                  8
-              },
-
-              sectionHead: {
-                flexDirection:
-                  'row',
-                alignItems:
-                  'center',
-                justifyContent:
-                  'space-between',
-                marginTop:
-                  2
-              },
-
-              sectionTitle: {
-                color:
-                  C.text,
-                fontSize:
-                  22,
-                fontWeight:
-                  '900',
-                marginTop:
-                  3
-              },
-
-              disclaimer: {
-                color:
-                  C.faint,
-                fontSize:
-                  10,
-                lineHeight:
-                  15
-              },
-
-              errorBox: {
-                backgroundColor:
-                  '#190b10',
-                borderWidth:
-                  1,
-                borderColor:
-                  C.red +
-                  '66',
-                borderRadius:
-                  13,
-                padding:
-                  12
-              },
-
-              errorTitle: {
-                color:
-                  C.red,
-                fontSize:
-                  9,
-                fontWeight:
-                  '900',
-                letterSpacing:
-                  1.1
-              },
-
-              errorText: {
-                color:
-                  '#efadb5',
-                fontSize:
-                  11,
-                marginTop:
-                  5
-              },
-
-              countryCard: {
-                backgroundColor:
-                  C.panel,
-                borderRadius:
-                  17,
-                borderWidth:
-                  1,
-                borderColor:
-                  C.line,
-                padding:
-                  14
-              },
-
-              countryIdentity: {
-                flexDirection:
-                  'row',
-                alignItems:
-                  'center',
-                gap:
-                  10
-              },
-
-              flag: {
-                fontSize:
-                  28
-              },
-
-              countryName: {
-                color:
-                  C.text,
-                fontSize:
-                  17,
-                fontWeight:
-                  '900'
-              },
-
-              city: {
-                color:
-                  C.muted,
-                fontSize:
-                  10,
-                marginTop:
-                  2
-              },
-
-              freshAge: {
-                color:
-                  C.faint,
-                fontSize:
-                  9,
-                marginTop:
-                  4
-              },
-
-              countrySummary: {
-                flexDirection:
-                  'row',
-                gap:
-                  14,
-                marginTop:
-                  12
-              },
-
-              summaryText: {
-                color:
-                  C.muted,
-                fontSize:
-                  10
-              },
-
-              summaryStrong: {
-                color:
-                  C.text,
-                fontWeight:
-                  '900'
-              },
-
-              divider: {
-                height:
-                  1,
-                backgroundColor:
-                  C.line,
-                marginVertical:
-                  10
-              },
-
-              itemRow: {
-                paddingVertical:
-                  10,
-                borderBottomWidth:
-                  1,
-                borderBottomColor:
-                  '#142028'
-              },
-
-              itemName: {
-                flex:
-                  1,
-                color:
-                  C.text,
-                fontSize:
-                  13,
-                fontWeight:
-                  '900'
-              },
-
-              itemGrid: {
-                flexDirection:
-                  'row',
-                justifyContent:
-                  'space-between',
-                gap:
-                  8,
-                marginTop:
-                  10
-              },
-
-              metaRow: {
-                flexDirection:
-                  'row',
-                flexWrap:
-                  'wrap',
-                gap:
-                  10,
-                marginTop:
-                  8
-              },
-
-              meta: {
-                color:
-                  C.muted,
-                fontSize:
-                  9,
-                fontWeight:
-                  '700'
-              },
-
-              emptyInline: {
-                color:
-                  C.faint,
-                fontSize:
-                  11,
-                textAlign:
-                  'center',
-                paddingVertical:
-                  12
-              },
-
-              profileCard: {
-                backgroundColor:
-                  C.panel,
-                borderWidth:
-                  1,
-                borderColor:
-                  C.cyan +
-                  '44',
-                borderRadius:
-                  15,
-                padding:
-                  14
-              },
-
-              profileValue: {
-                color:
-                  C.text,
-                fontSize:
-                  18,
-                fontWeight:
-                  '900',
-                marginTop:
-                  5
-              },
-
-              tripCard: {
-                flexDirection:
-                  'row',
-                gap:
-                  11,
-                backgroundColor:
-                  C.panel,
-                borderWidth:
-                  1,
-                borderColor:
-                  C.line,
-                borderRadius:
-                  15,
-                padding:
-                  13,
-                alignItems:
-                  'center'
-              },
-
               rank: {
                 width:
-                  30,
+                  28,
                 height:
-                  30,
+                  28,
                 borderRadius:
-                  9,
+                  8,
                 backgroundColor:
-                  '#0b1c24',
-                borderWidth:
-                  1,
-                borderColor:
-                  C.cyan +
-                  '55',
+                  C.panel2,
                 alignItems:
                   'center',
                 justifyContent:
@@ -4577,12 +4577,17 @@ jobs:
               },
 
               tripCountry: {
-                flex:
-                  1,
                 color:
                   C.text,
                 fontSize:
-                  14,
+                  13,
+                fontWeight:
+                  '900'
+              },
+
+              arrival: {
+                fontSize:
+                  8,
                 fontWeight:
                   '900'
               },
@@ -4591,31 +4596,45 @@ jobs:
                 color:
                   C.muted,
                 fontSize:
-                  11,
+                  10,
                 marginTop:
-                  4
+                  3
               },
 
-              settingsContent: {
-                paddingHorizontal:
-                  14,
-                paddingTop:
-                  14,
-                paddingBottom:
-                  28,
+              tripBottom: {
+                flexDirection:
+                  'row',
                 gap:
-                  12
+                  10,
+                marginTop:
+                  5
               },
 
-              groupLabel: {
+              tripMeta: {
                 color:
-                  C.cyan,
+                  C.muted,
                 fontSize:
                   9,
                 fontWeight:
+                  '700'
+              },
+
+              settings: {
+                padding:
+                  13,
+                paddingBottom:
+                  30,
+                gap:
+                  11
+              },
+
+              groupTitle: {
+                color:
+                  C.cyan,
+                fontSize:
+                  8,
+                fontWeight:
                   '900',
-                letterSpacing:
-                  1.4,
                 marginTop:
                   4
               },
@@ -4628,11 +4647,11 @@ jobs:
                 borderColor:
                   C.line,
                 borderRadius:
-                  16,
+                  13,
                 padding:
-                  14,
+                  12,
                 gap:
-                  12
+                  11
               },
 
               settingRow: {
@@ -4641,85 +4660,77 @@ jobs:
                 alignItems:
                   'center',
                 gap:
-                  12
+                  10
               },
 
-              settingLabel: {
+              settingName: {
                 color:
                   C.text,
                 fontSize:
-                  13,
+                  12,
                 fontWeight:
                   '900'
               },
 
-              settingDetail: {
+              settingDescription: {
                 color:
                   C.muted,
                 fontSize:
-                  10,
-                lineHeight:
-                  15,
+                  9,
                 marginTop:
-                  4
+                  3
               },
 
               apiInput: {
                 height:
-                  44,
-                borderRadius:
-                  11,
+                  42,
                 borderWidth:
                   1,
                 borderColor:
                   C.line,
                 backgroundColor:
                   '#071015',
+                borderRadius:
+                  10,
                 paddingHorizontal:
-                  12,
+                  11,
                 color:
-                  C.text,
-                fontSize:
-                  12
+                  C.text
               },
 
-              primaryButton: {
+              saveButton: {
                 height:
-                  43,
-                borderRadius:
-                  11,
+                  41,
                 backgroundColor:
                   C.cyan,
+                borderRadius:
+                  10,
                 alignItems:
                   'center',
                 justifyContent:
                   'center'
               },
 
-              primaryText: {
+              saveText: {
                 color:
-                  '#001219',
+                  '#00141a',
                 fontSize:
-                  10,
+                  9,
                 fontWeight:
-                  '900',
-                letterSpacing:
-                  0.7
+                  '900'
               },
 
               toggle: {
                 width:
-                  48,
+                  46,
                 height:
-                  28,
+                  27,
                 borderRadius:
                   14,
                 borderWidth:
                   1,
                 borderColor:
                   C.line,
-                backgroundColor:
-                  '#071015',
                 alignItems:
                   'center',
                 justifyContent:
@@ -4727,20 +4738,57 @@ jobs:
               },
 
               toggleOn: {
-                backgroundColor:
-                  '#0c3026',
                 borderColor:
-                  C.green +
-                  '77'
+                  C.green,
+                backgroundColor:
+                  '#0d3028'
               },
 
               toggleText: {
                 color:
                   C.faint,
                 fontSize:
-                  8,
+                  7,
                 fontWeight:
                   '900'
+              },
+
+              choices: {
+                flexDirection:
+                  'row',
+                flexWrap:
+                  'wrap',
+                gap:
+                  6
+              },
+
+              choice: {
+                paddingHorizontal:
+                  10,
+                paddingVertical:
+                  7,
+                borderWidth:
+                  1,
+                borderColor:
+                  C.line,
+                borderRadius:
+                  9
+              },
+
+              choiceOn: {
+                borderColor:
+                  C.cyan,
+                backgroundColor:
+                  '#0b1c24'
+              },
+
+              choiceText: {
+                color:
+                  C.muted,
+                fontSize:
+                  8,
+                fontWeight:
+                  '800'
               },
 
               numberControl: {
@@ -4753,36 +4801,32 @@ jobs:
                 borderColor:
                   C.line,
                 borderRadius:
-                  10,
+                  9,
                 overflow:
                   'hidden'
               },
 
               numberButton: {
                 width:
-                  34,
+                  32,
                 height:
-                  34,
+                  32,
                 alignItems:
                   'center',
                 justifyContent:
-                  'center',
-                backgroundColor:
-                  '#071015'
+                  'center'
               },
 
-              numberText: {
+              numberButtonText: {
                 color:
                   C.cyan,
                 fontSize:
-                  20,
-                fontWeight:
-                  '800'
+                  18
               },
 
               numberValue: {
                 minWidth:
-                  40,
+                  38,
                 textAlign:
                   'center',
                 color:
@@ -4791,72 +4835,17 @@ jobs:
                   '900'
               },
 
-              choiceRow: {
-                flexDirection:
-                  'row',
-                flexWrap:
-                  'wrap',
-                gap:
-                  7
-              },
-
-              choice: {
-                paddingHorizontal:
-                  11,
-                paddingVertical:
-                  8,
-                borderRadius:
-                  10,
-                borderWidth:
-                  1,
-                borderColor:
-                  C.line,
-                backgroundColor:
-                  '#071015'
-              },
-
-              choiceOn: {
-                borderColor:
-                  C.cyan +
-                  '88',
-                backgroundColor:
-                  '#0b1c24'
-              },
-
-              choiceText: {
-                color:
-                  C.muted,
-                fontSize:
-                  9,
-                fontWeight:
-                  '800'
-              },
-
-              infoCard: {
-                backgroundColor:
-                  '#091116',
-                borderWidth:
-                  1,
-                borderColor:
-                  C.blue +
-                  '44',
-                borderRadius:
-                  15,
-                padding:
-                  14
-              },
-
               nav: {
                 height:
-                  68,
+                  64,
                 flexDirection:
                   'row',
+                backgroundColor:
+                  '#071015',
                 borderTopWidth:
                   1,
                 borderTopColor:
-                  C.line,
-                backgroundColor:
-                  '#071015'
+                  C.line
               },
 
               navItem: {
@@ -4875,12 +4864,10 @@ jobs:
                   'absolute',
                 top:
                   0,
-                width:
-                  30,
                 height:
                   2,
-                borderRadius:
-                  2,
+                width:
+                  27,
                 backgroundColor:
                   C.cyan
               },
@@ -4889,22 +4876,18 @@ jobs:
                 color:
                   C.muted,
                 fontSize:
-                  18,
-                fontWeight:
-                  '900'
+                  17
               },
 
-              navLabel: {
+              navText: {
                 color:
                   C.muted,
                 fontSize:
-                  9,
+                  8,
                 fontWeight:
                   '900',
                 marginTop:
-                  3,
-                letterSpacing:
-                  0.5
+                  3
               }
             });
           APP_JS
@@ -4912,13 +4895,13 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - name: Validate Expo bundle
-        run: npx expo export --platform android --output-dir /tmp/tornpulse-export
+      - name: Validate app
+        run: npx expo export --platform android --output-dir /tmp/tornpulse-check
 
-      - name: Generate clean Android project
+      - name: Generate Android project
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Build ARM64 APK
+      - name: Build ARM64 release APK
         working-directory: android
         run: |
           chmod +x gradlew
@@ -4935,6 +4918,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: torn-pulse-travel-market-v4-arm64-apk
+          name: torn-pulse-travel-market-v4-2-arm64-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
